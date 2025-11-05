@@ -1,0 +1,26 @@
+# Ignore vim files:
+*~
+*.swp
+*.swo
+*.swl
+*.swm
+*.swn
+
+
+# compose
+compose/.testnet.yaml
+\#*
+
+# haskell
+dist-newstyle
+
+# dotfiles
+.direnv
+.vscode
+cli/.vscode
+
+# locals
+cli/tmp
+cli/result
+.aider*
+docs/yarn.lock
