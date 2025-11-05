@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
      inputs:
        test:
-        description: 'Test configuration to run (a directory in compose/testnets)'
+        description: 'Test configuration to run (a directory in testnets)'
         required: true
         default: cardano_node_master
         type: string
@@ -84,7 +84,7 @@ jobs:
       run: printf '%s' "${{ secrets.MOOG_REQUESTER_WALLET }}" | base64 --decode > $MOOG_WALLET_FILE
 
     - name: 🏗 Publish config image
-      working-directory: compose
+      working-directory: components
       run: |
         make publish-test-config-image testnet=${{ inputs.test || env.TESTNET }} registry=${{ env.REGISTRY }}
 
@@ -95,7 +95,7 @@ jobs:
         TRY=$(moog facts test-runs --whose cfhal | jq 'map(select(.key.commitId == "${{ github.sha }}")) | length')
         TRY=$(($TRY + 1)) # start with try=1
         echo "TRY=$TRY"
-        RESULT=$(moog requester create-test -d "compose/testnets/$TESTNET" -c ${{ github.sha }} -r "$GITHUB_REPOSITORY" --try $TRY -t $DURATION)
+        RESULT=$(moog requester create-test -d "testnets/$TESTNET" -c ${{ github.sha }} -r "$GITHUB_REPOSITORY" --try $TRY -t $DURATION)
         echo $RESULT
 
         # Passing -e and -r in separate jq calls ensures we both unwrap
