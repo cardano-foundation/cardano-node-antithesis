@@ -5,7 +5,8 @@
 This repository contains material to test a cardano network of cardano nodes on Antithesis platform.
 
 It is maintained by the Cardano Foundation as part of the [Moog project][Moog].
-Documentation available at [Dcumentation][Docs]
+
+Documentation available at [Documentation][Docs]
 
 
 ## See Also
