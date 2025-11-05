@@ -106,4 +106,4 @@ jobs:
         echo "txHash=$TXID" >> "$GITHUB_OUTPUT"
 
     - name: Wait for results
-      run: timeout $((($DURATION + 1) * 3600)) ./cli/scripts/wait-for-test.sh "${{ steps.request.outputs.id }}"
+      run: timeout $((($DURATION + 1) * 3600)) ./scripts/wait-for-test.sh "${{ steps.request.outputs.id }}"
