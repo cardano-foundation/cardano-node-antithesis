@@ -3,10 +3,10 @@
 
 module App
     ( main
+    , tailJsonLinesFromTracerLogDir
     )
 where
 
-import Cardano.Antithesis.LogMessage
 import Cardano.Antithesis.Sdk
 import Cardano.Antithesis.Sidecar
 
@@ -14,24 +14,28 @@ import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
 
 import Control.Concurrent
-    ( forkIO
-    , modifyMVar_
+    ( modifyMVar_
     , newMVar
     , threadDelay
     )
+import Control.Concurrent.Async (async, link, wait)
 import Control.Monad
     ( filterM
+    , forM
     , forM_
     , forever
-    , unless
+    , (<=<)
     )
 import Data.Aeson
-    ( ToJSON (toJSON)
+    ( FromJSON
     , eitherDecode
     )
+import Data.Foldable (traverse_)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import System.Directory
-    ( doesFileExist
-    , listDirectory
+    ( listDirectory
+    , pathIsSymbolicLink
     )
 import System.Environment
     ( getArgs
@@ -41,8 +45,8 @@ import System.FilePath
     ( (</>)
     )
 import System.IO
-    ( BufferMode (LineBuffering, NoBuffering)
-    , IOMode (ReadMode)
+    ( BufferMode (LineBuffering)
+    , IOMode (..)
     , hIsEOF
     , hSetBuffering
     , stdout
@@ -66,67 +70,63 @@ main = do
 
     writeSdkJsonl $ sometimesTracesDeclaration "finds all node log files"
 
-    files <- waitFor (nodeLogFiles dir) $ \files -> do
-        threadDelay 2000000 -- allow log files to be created
-        putStrLn
-            $ unlines
-            $ ( "Looking for "
-                    <> show nPools
-                    <> " log files, found "
-                    <> show (length files)
-                    <> ":"
-              )
-                : map ("- " <>) files
-        let details = toJSON files
-        let cond = length files == nPools
-        unless cond
-            $ writeSdkJsonl
-            $ sometimesFailed "finds all node log files" details
-        return cond
-
-    writeSdkJsonl $ sometimesTracesReached "finds all node log files"
-
-    putStrLn $ "Observing .json files: " <> show files
+    nodeDirs <- fmap (dir </>) <$> listDirectory dir
 
     let spec = mkSpec nPools
+
     mvar <- newMVar =<< initialStateIO spec
-    forM_ files $ \file ->
-        forkIO
-            $ tailJsonLines file (modifyMVar_ mvar . flip (processMessageIO spec))
-    forever $ threadDelay maxBound
+
+    threads <- forM nodeDirs $ \nodeDir ->
+        async
+            $ tailJsonLinesFromTracerLogDir
+                nodeDir
+                (modifyMVar_ mvar . flip (processMessageIO spec))
+    traverse_ wait threads
+
+-- | Tails json lines from each file in a directory,
+-- one at a time respecting their lexical order
+-- and waiting for new files to appear forever.
+-- We rely on the invariant that the filename order reflects the order of arrival
+-- in the directory
+tailJsonLinesFromTracerLogDir
+    :: FromJSON a
+    => FilePath -- directory to watch
+    -> (a -> IO ()) -- action on each decoded log message
+    -> IO ()
+tailJsonLinesFromTracerLogDir dir action = go mempty
   where
-    waitFor :: Monad m => m a -> (a -> m Bool) -> m a
-    waitFor act cond = do
-        a <- act
-        c <- cond a
-        if c then return a else waitFor act cond
-
--- utils -----------------------------------------------------------------------
-
-nodeLogFiles :: FilePath -> IO [FilePath]
-nodeLogFiles dir = do
-    entries <- listDirectory dir
-    let paths = map (\node -> dir </> node </> "node.json") entries
-    filterM doesFileExist paths
-
-tailJsonLines :: FilePath -> (LogMessage -> IO ()) -> IO ()
-tailJsonLines path action = tailLines path $ \bs ->
-    case eitherDecode $ BL.fromStrict bs of
+    callback bs = case eitherDecode $ BL.fromStrict bs of
         Right msg -> action msg
         Left _e -> pure () -- putStrLn $ "warning: unrecognized line: " <> B8.unpack bs <> " " <> show e
+    go
+        :: Set FilePath
+        -> IO ()
+    go seen = do
+        let sample = do
+                newSet <- nodeLogFiles
+                let newFiles = newSet `Set.difference` seen
+                if null newFiles
+                    then do
+                        threadDelay 10000
+                        sample
+                    else return newFiles
+        newFiles <- sample
+        forM_ newFiles $ \path -> link <=< async $ do
+            withFile path ReadMode $ \h -> do
+                forever $ do
+                    eof <- hIsEOF h
+                    if eof
+                        then do
+                            threadDelay 10000
+                        else do
+                            l <- B8.hGetLine h
+                            callback l
+        go (seen <> newFiles)
+      where
+        -- switch to unbuffered mode and follow new data
 
-tailLines :: FilePath -> (B8.ByteString -> IO ()) -> IO ()
-tailLines path callback = withFile path ReadMode $ \h -> do
-    -- read up to current EOF without closing the handle
-    let drain = do
-            eof <- hIsEOF h
-            unless eof $ B8.hGetLine h >>= callback >> drain
-    drain
-
-    -- switch to unbuffered mode and follow new data
-    hSetBuffering h NoBuffering
-    forever $ do
-        eof <- hIsEOF h
-        if eof
-            then threadDelay 100000
-            else B8.hGetLine h >>= callback
+        nodeLogFiles :: IO (Set FilePath)
+        nodeLogFiles = do
+            entries <- fmap (dir </>) <$> listDirectory dir
+            logFiles <- filterM (fmap not . pathIsSymbolicLink) entries
+            pure $ Set.fromList logFiles

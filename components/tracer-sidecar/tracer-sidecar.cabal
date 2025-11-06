@@ -39,6 +39,7 @@ library
   build-depends:
     , aeson
     , aeson-qq
+    , async
     , base
     , bytestring
     , containers
@@ -59,12 +60,17 @@ test-suite test
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test
   main-is:            Main.hs
+  ghc-options:        -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson
+    , async
     , base
     , bytestring
+    , filepath
     , hspec
     , hspec-golden
+    , process
+    , temporary
     , tracer-sidecar
 
   build-tool-depends: hspec-discover:hspec-discover
