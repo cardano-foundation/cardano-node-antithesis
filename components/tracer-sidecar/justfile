@@ -15,9 +15,15 @@ build:
     #!/usr/bin/env bash
     cabal build all --enable-tests --enable-benchmarks
 
-test:
+test args='':
   #!/usr/bin/env bash
-  cabal test --enable-tests --enable-benchmarks
+  # shellcheck disable=SC2157
+  if [ -n "{{ args }}" ]; then
+    cabal test --test-show-details=streaming --test-options="--match" \
+    --test-options="{{args}}"
+  else
+    cabal test --test-show-details=streaming
+  fi
 
 CI:
   #!/usr/bin/env bash
