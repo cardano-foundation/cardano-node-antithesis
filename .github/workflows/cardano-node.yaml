@@ -83,11 +83,6 @@ jobs:
     - name: Configure moog wallet
       run: printf '%s' "${{ secrets.MOOG_REQUESTER_WALLET }}" | base64 --decode > $MOOG_WALLET_FILE
 
-    - name: 🏗 Publish config image
-      working-directory: components
-      run: |
-        make publish-test-config-image testnet=${{ inputs.test || env.TESTNET }} registry=${{ env.REGISTRY }}
-
     - name: Submit test
       id: request
       run: |
