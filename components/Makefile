@@ -55,14 +55,18 @@ push-config: TESTNET ## Push config container image
 
 up: TESTNET ## Start Run local Docker Compose
 	export INTERNAL_NETWORK=true ; \
-	cd testnets/${testnet} ; docker compose up --detach
+	cd ../testnets/${testnet} ; docker compose up --detach
 
 down: TESTNET ## Stop local Docker Compose
 	export INTERNAL_NETWORK=true ; \
-	cd testnets/${testnet} ; docker compose down --volumes
+	cd ../testnets/${testnet} ; docker compose down --volumes
+
+logs: TESTNET ## Tail logs of all containers
+	export INTERNAL_NETWORK=true ; \
+	cd ../testnets/${testnet} ; docker compose logs --follow --tail=100
 
 query: TESTNET ## Query tip of all pools
-	pools="$$(awk '/poolCount: /{ print $$2 }' testnets/${testnet}/testnet.yaml)" ; \
+	pools="$$(awk '/poolCount: /{ print $$2 }' ../testnets/${testnet}/testnet.yaml)" ; \
 	for i in $$(seq 1 $${pools}) ; do docker exec -ti p$${i} \
 		timeout 0.05 cardano-cli ping --magic 42 --host 127.0.0.1 --port 3001 --tip --quiet -c1; \
 	done ; \
