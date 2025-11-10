@@ -18,6 +18,11 @@ on:
         required: false
         default: 3
         type: number
+       no-faults:
+        description: 'Run the test without injecting faults'
+        required: false
+        default: true
+        type: boolean
   schedule:
     # run every 6 hours
     - cron:  '5 1,7,13,19 * * *'
@@ -90,7 +95,17 @@ jobs:
         TRY=$(moog facts test-runs --whose cfhal | jq 'map(select(.key.commitId == "${{ github.sha }}")) | length')
         TRY=$(($TRY + 1)) # start with try=1
         echo "TRY=$TRY"
-        RESULT=$(moog requester create-test -d "testnets/$TESTNET" -c ${{ github.sha }} -r "$GITHUB_REPOSITORY" --try $TRY -t $DURATION --no-faults)
+        if [ "${{ inputs.no-faults }}" = "true" ]; then
+          render_no_faults="--no-faults"
+        else
+          render_no_faults=""
+        fi
+        RESULT=$(moog requester create-test -d "testnets/$TESTNET" \
+          -c ${{ github.sha }} \
+          -r "$GITHUB_REPOSITORY" \
+          --try $TRY \
+          -t $DURATION \
+          $render_no_faults)
         echo $RESULT
 
         # Passing -e and -r in separate jq calls ensures we both unwrap
