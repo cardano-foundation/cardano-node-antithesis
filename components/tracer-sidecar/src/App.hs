@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module App
     ( main
@@ -8,11 +9,14 @@ module App
 where
 
 import Cardano.Antithesis.Sdk
+    ( sometimesTracesDeclaration
+    , writeSdkJsonl
+    )
 import Cardano.Antithesis.Sidecar
-
-import qualified Data.ByteString.Char8 as B8
-import qualified Data.ByteString.Lazy as BL
-
+    ( initialStateIO
+    , mkSpec
+    , processMessageIO
+    )
 import Control.Concurrent
     ( modifyMVar_
     , newMVar
@@ -21,36 +25,39 @@ import Control.Concurrent
 import Control.Concurrent.Async (async, link, wait)
 import Control.Exception (SomeException, try)
 import Control.Monad
-    ( filterM
-    , forM
+    ( forM
     , forM_
     , forever
+    , guard
     , (<=<)
     )
 import Data.Aeson
     ( FromJSON
     , eitherDecode
     )
+import qualified Data.ByteString.Char8 as B8
+import qualified Data.ByteString.Lazy as BL
 import Data.Foldable (traverse_)
+import Data.List (isPrefixOf)
+import Data.Maybe (isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Time (UTCTime, defaultTimeLocale, parseTimeM)
 import System.Directory
     ( listDirectory
-    , pathIsSymbolicLink
     )
 import System.Environment
     ( getArgs
     , getEnv
     )
 import System.FilePath
-    ( (</>)
+    ( takeFileName
+    , (</>)
     )
 import System.IO
     ( BufferMode (LineBuffering)
     , IOMode (..)
-    , SeekMode (..)
     , hIsEOF
-    , hSeek
     , hSetBuffering
     , stdout
     , withFile
@@ -100,7 +107,9 @@ tailJsonLinesFromTracerLogDir dir action = go mempty
   where
     callback bs = case eitherDecode $ BL.fromStrict bs of
         Right msg -> action msg
-        Left _e -> pure () -- putStrLn $ "warning: unrecognized line: " <> B8.unpack bs <> " " <> show e
+        Left e ->
+            putStrLn
+                $ "warning: unrecognized line: " <> B8.unpack bs <> " " <> show e
     go
         :: Set FilePath
         -> IO ()
@@ -115,11 +124,10 @@ tailJsonLinesFromTracerLogDir dir action = go mempty
                     else return newFiles
         newFiles <- sample
         forM_ newFiles $ \path -> link <=< async $ do
-            print $ "Tailing file: " <> path
+            putStrLn $ "Tailing file: " <> path
             exited <- try
                 $ withFile path ReadMode
                 $ \h -> do
-                    hSeek h SeekFromEnd 0
                     hSetBuffering h LineBuffering
                     forever $ do
                         eof <- hIsEOF h
@@ -144,5 +152,16 @@ tailJsonLinesFromTracerLogDir dir action = go mempty
         nodeLogFiles :: IO (Set FilePath)
         nodeLogFiles = do
             entries <- fmap (dir </>) <$> listDirectory dir
-            logFiles <- filterM (fmap not . pathIsSymbolicLink) entries
+            let logFiles = filter parsingNodeLogFile entries
             pure $ Set.fromList logFiles
+
+parsingNodeLogFile :: FilePath -> Bool
+parsingNodeLogFile path = isJust $ do
+    let filename = takeFileName path
+    guard $ isPrefixOf "node-" filename
+    let timestamp = drop 5 $ takeWhile (/= '.') filename
+    parseTimeM @_ @UTCTime
+        True
+        defaultTimeLocale
+        "%Y-%m-%dT%H-%M-%S"
+        timestamp

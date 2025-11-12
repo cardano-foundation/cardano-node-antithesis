@@ -71,6 +71,7 @@ test-suite test
     , hspec-golden
     , process
     , temporary
+    , time
     , tracer-sidecar
 
   build-tool-depends: hspec-discover:hspec-discover

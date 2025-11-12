@@ -40,6 +40,7 @@ import Data.Foldable (forM_)
 import Data.Maybe
     ( mapMaybe
     )
+import Data.Time
 import System.FilePath ((</>))
 import System.IO.Temp
     ( withSystemTempDirectory
@@ -82,7 +83,8 @@ spec = do
                         $ tailJsonLinesFromTracerLogDir dir
                         $ collectAllInts r
                 let nFiles = 10
-                let nValues = 10
+                let nValues = 130
+                threadDelay 500000
                 simulateRestartingNodeTracer nFiles nValues dir
                 threadDelay 500000
                 cancel thread
@@ -90,7 +92,7 @@ spec = do
                 vals `shouldBe` concat (replicate nFiles [1 .. nValues])
 
 collectAllInts :: MVar [Int] -> Int -> IO ()
-collectAllInts xs newInt =
+collectAllInts xs newInt = do
     modifyMVar_ xs $ \ints -> pure (ints <> [newInt])
 
 jsonifyOutput :: Output -> Value
@@ -119,18 +121,33 @@ generateAFileWithJSONLines fp xs = do
         _ <- system $ "echo " <> value <> " >> " <> fp
         threadDelay 1000
 
+generateIncreasingUTCTimes
+    :: Int -> UTCTime -> NominalDiffTime -> [UTCTime]
+generateIncreasingUTCTimes n start delta =
+    take n $ iterate (addUTCTime delta) start
+
+renderFilenameWithUTCTime :: UTCTime -> FilePath
+renderFilenameWithUTCTime =
+    (<> ".json")
+        . ("node-" <>)
+        . formatTime defaultTimeLocale "%Y-%m-%dT%H-%M-%S"
+
 -- less than 10000 files may be generated
 generateFilenamesInLexicalOrder :: FilePath -> Int -> [FilePath]
 generateFilenamesInLexicalOrder dir n =
-    [dir </> "file-" <> padZeroes i <> ".json" | i <- [1 .. n]]
+    [dir </> renderFilenameWithUTCTime t | t <- times]
   where
-    padZeroes i = let s = show i in replicate (4 - length s) '0' <> s
+    times =
+        generateIncreasingUTCTimes
+            n
+            (UTCTime (fromGregorian 2025 11 1) (secondsToDiffTime 0))
+            3890
 
 generateStreamOfFiles :: [FilePath] -> (FilePath -> IO ()) -> IO ()
 generateStreamOfFiles files action = do
     forM_ files $ \file -> do
         action file
-        threadDelay 10000
+        threadDelay 100000
 
 simulateRestartingNodeTracer
     :: Int -- number of files
