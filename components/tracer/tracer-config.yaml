@@ -1,10 +1,10 @@
 ---
-networkMagic: 42 
+networkMagic: 42
 network:
   tag: AcceptAt
   contents: "/opt/cardano-tracer/tracer.socket"
 logging:
-- logRoot: "/opt/cardano-tracer"
+- logRoot: "/opt/cardano-tracer/logs"
   logMode: FileMode
   logFormat: ForMachine
 verbosity: Maximum

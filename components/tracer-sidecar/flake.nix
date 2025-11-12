@@ -31,10 +31,19 @@
             indexState = "2025-05-07T00:00:00Z";
             inherit pkgs;
           };
-
+          docker-image = import ./nix/docker-image.nix {
+            inherit pkgs project version;
+          };
+          docker.packages = { inherit docker-image; };
+          info.packages = { inherit version; };
+          fullPackages = lib.mergeAttrsList [
+            project.packages
+            info.packages
+            docker.packages
+          ];
         in {
 
-          packages = project.packages // {
+          packages = fullPackages // {
             default = project.packages.tracer-sidecar;
           };
           inherit (project) devShells;
