@@ -33,7 +33,7 @@ services:
       - p5-configs:/configs/5 # configs for p5
 
   tracer:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer:aa43ea4
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer:fb6208f
     hostname: tracer.example
     container_name: tracer
     volumes:
@@ -92,7 +92,7 @@ services:
       always
 
   tracer-sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:4d88b68
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:fb6208f
     container_name: tracer-sidecar
     hostname: tracer-sidecar.example
     environment:
