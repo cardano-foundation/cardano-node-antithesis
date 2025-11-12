@@ -107,9 +107,7 @@ tailJsonLinesFromTracerLogDir dir action = go mempty
   where
     callback bs = case eitherDecode $ BL.fromStrict bs of
         Right msg -> action msg
-        Left e ->
-            putStrLn
-                $ "warning: unrecognized line: " <> B8.unpack bs <> " " <> show e
+        Left _e -> pure () -- ignore decode errors
     go
         :: Set FilePath
         -> IO ()
