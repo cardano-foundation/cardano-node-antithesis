@@ -12,7 +12,8 @@ module App
 where
 
 import Cardano.Antithesis.Sdk
-    ( sometimesTracesDeclaration
+    ( sometimesFailed
+    , sometimesTracesDeclaration
     , writeSdkJsonl
     )
 import Cardano.Antithesis.Sidecar
@@ -38,6 +39,7 @@ import Control.Monad
 import Control.Monad.Fix (fix)
 import Data.Aeson
     ( FromJSON
+    , ToJSON (..)
     , eitherDecode
     )
 import qualified Data.ByteString.Char8 as B8
@@ -85,17 +87,13 @@ main = do
 
     (nPools :: Int) <- read <$> getEnv "POOLS"
 
-    writeSdkJsonl $ sometimesTracesDeclaration "finds all node log files"
+    writeSdkJsonl $ sometimesTracesDeclaration "find log files"
 
     nodeDirs <- fix $ \loop -> do
         mls <- try $ listDirectory dir
         case mls of
             Left (e :: SomeException) -> do
-                putStrLn
-                    $ "Error listing directory "
-                        <> dir
-                        <> ": "
-                        <> show e
+                putStrLn $ "Error listing directory " <> dir <> ": " <> show e
                 threadDelay 1000000
                 loop
             Right _ -> do
@@ -108,8 +106,9 @@ main = do
                     else return nodeDirs'
     let spec = mkSpec nPools
 
-    mvar <- newMVar =<< initialStateIO spec
+    writeSdkJsonl $ sometimesFailed "find log files" $ toJSON nodeDirs
 
+    mvar <- newMVar =<< initialStateIO spec
     threads <- forM nodeDirs $ \nodeDir ->
         async
             $ tailJsonLinesFromTracerLogDir
