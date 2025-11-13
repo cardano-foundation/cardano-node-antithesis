@@ -55,7 +55,7 @@ push-config: TESTNET ## Push config container image
 
 up: TESTNET ## Start Run local Docker Compose
 	export INTERNAL_NETWORK=true ; \
-	cd ../testnets/${testnet} ; docker compose up --detach --pull always
+	cd ../testnets/${testnet} ; docker compose up --detach 
 
 down: TESTNET ## Stop local Docker Compose
 	export INTERNAL_NETWORK=true ; \

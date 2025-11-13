@@ -35,6 +35,7 @@ import Control.Monad
     , when
     , (<=<)
     )
+import Control.Monad.Fix (fix)
 import Data.Aeson
     ( FromJSON
     , eitherDecode
@@ -48,8 +49,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Time (UTCTime, defaultTimeLocale, parseTimeM)
 import System.Directory
-    ( createDirectoryIfMissing
-    , listDirectory
+    ( listDirectory
     )
 import System.Environment
     ( getArgs
@@ -87,9 +87,25 @@ main = do
 
     writeSdkJsonl $ sometimesTracesDeclaration "finds all node log files"
 
-    createDirectoryIfMissing True dir
-    nodeDirs <- fmap (dir </>) <$> listDirectory dir
-
+    nodeDirs <- fix $ \loop -> do
+        mls <- try $ listDirectory dir
+        case mls of
+            Left (e :: SomeException) -> do
+                putStrLn
+                    $ "Error listing directory "
+                        <> dir
+                        <> ": "
+                        <> show e
+                threadDelay 1000000
+                loop
+            Right _ -> do
+                nodeDirs' <- fmap (dir </>) <$> listDirectory dir
+                if null nodeDirs'
+                    then do
+                        putStrLn "No node log directories found, waiting..."
+                        threadDelay 1000000
+                        loop
+                    else return nodeDirs'
     let spec = mkSpec nPools
 
     mvar <- newMVar =<< initialStateIO spec
