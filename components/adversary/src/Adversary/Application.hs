@@ -1,29 +1,34 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use const" #-}
 module Adversary.Application
     ( Limit (..)
     , adversaryApplication
+    , ChainSyncApplication
     )
 where
 
 import Adversary.ChainSync.Codec (Header, Point, Tip)
-import Adversary.ChainSync.Connection (clientChainSync)
+import Adversary.ChainSync.Connection
+    ( ChainSyncApplication
+    , runChainSyncApplication
+    )
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
     , StrictTVar
+    , modifyTVar
     , newTVarIO
     , readTVar
     , readTVarIO
-    , writeTVar
     )
-import Control.Exception (Exception, try)
+import Control.Exception (SomeException, try)
+import Data.Function (fix)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word32)
 import Network.Socket (PortNumber)
 import Ouroboros.Consensus.Protocol.Praos.Header ()
 import Ouroboros.Consensus.Shelley.Ledger.NetworkProtocolVersion ()
 import Ouroboros.Consensus.Shelley.Ledger.SupportsProtocol ()
-import Ouroboros.Network.Block
-    ( castPoint
-    )
 import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.Mock.Chain (Chain)
 import Ouroboros.Network.Mock.Chain qualified as Chain
@@ -38,137 +43,155 @@ import Ouroboros.Network.Protocol.ChainSync.Client
     , ClientStNext (..)
     )
 
-data Client header point tip m t = Client
-    { onRollBackward
-        :: point
-        -> tip
-        -> m (Either t (Client header point tip m t))
-    , onRollForward :: header -> m (Either t (Client header point tip m t))
-    , points :: [point] -> m (Either t (Client header point tip m t))
-    }
+type State = StrictTVar IO (Chain Header)
 
+rollForward :: State -> Header -> IO ()
+rollForward chainvar b = atomically $ modifyTVar chainvar $ \(!chain) ->
+    Chain.addBlock b chain
+
+-- We will fail to roll back iff `p` doesn't exist in `chain`
+-- This will happen when we're asked to roll back to `startingPoint`,
+-- which we can check for, or any point before, which we can't
+-- check for. Hence we ignore all failures to rollback and replace the
+-- chain with an empty one if we do.
+rollBackward :: State -> Point -> IO ()
+rollBackward chainvar p = atomically $ modifyTVar chainvar $ \(!chain) ->
+    fromMaybe Chain.Genesis $ Chain.rollback p chain
+
+-- | A limit on the number of blocks to sync
 newtype Limit = Limit {limit :: Word32}
     deriving newtype (Show, Read, Eq, Ord)
 
-controlledClient
-    :: (MonadSTM m)
-    => ControlMessageSTM m
-    -> Client header point tip m ()
-controlledClient controlMessageSTM = client
-  where
-    client =
-        Client
-            { onRollBackward = \_ _ -> do
-                ctrl <- atomically controlMessageSTM
-                case ctrl of
-                    Continue -> pure (Right client)
-                    Quiesce ->
-                        error
-                            "Ouroboros.Network.Protocol.ChainSync.Examples.controlledClient: unexpected Quiesce"
-                    Terminate -> pure (Left ())
-            , onRollForward = \_ -> do
-                ctrl <- atomically controlMessageSTM
-                case ctrl of
-                    Continue -> pure (Right client)
-                    Quiesce ->
-                        error
-                            "Ouroboros.Network.Protocol.ChainSync.Examples.controlledClient: unexpected Quiesce"
-                    Terminate -> pure (Left ())
-            , points = \_ -> pure (Right client)
+-- the way to step the protocol
+type StepProtocol = IO (Maybe Protocol)
+
+-- Internal protocol state machine
+data Protocol = Protocol
+    { onRollBackward :: Point -> Tip -> StepProtocol
+    , onRollForward :: Header -> StepProtocol
+    , points :: [Point] -> StepProtocol
+    }
+
+-- A protocol controlled by control messages
+controlledProtocol
+    :: ControlMessageSTM IO -- control message source
+    -> Protocol
+controlledProtocol controlMessageSTM = fix $ \client ->
+    let react ctrl = case ctrl of
+            Continue -> Just client
+            Quiesce -> error "controlledClient: unexpected Quiesce"
+            Terminate -> Nothing
+    in  Protocol
+            { onRollBackward = \_point _tip ->
+                react <$> atomically controlMessageSTM
+            , onRollForward = \_header ->
+                react <$> atomically controlMessageSTM
+            , points = \_points -> pure $ Just client
             }
 
+-- a control message source that terminates after syncing 'limit' blocks
 terminateAfterCount
-    :: StrictTVar IO (Chain Header) -> Limit -> STM IO ControlMessage
+    :: State
+    -> Limit
+    -> ControlMessageSTM IO
 terminateAfterCount chainvar limit = do
-    chainLength <- getChainLength chainvar
+    chainLength <-
+        Limit . fromIntegral . Chain.length <$> readTVar chainvar
     pure
         $ if chainLength < limit
             then Continue
             else Terminate
 
-getChainLength :: StrictTVar IO (Chain Header) -> STM IO Limit
-getChainLength chainvar = Limit . fromIntegral . Chain.length <$> readTVar chainvar
+-- initialize the protocol with a control message source
+mkProtocol
+    :: State -- the mock chain
+    -> Limit -- limit of blocks to sync
+    -> Protocol
+mkProtocol stateVar limit =
+    controlledProtocol $ terminateAfterCount stateVar limit
 
-chainSyncClient
-    :: StrictTVar IO (Chain Header)
+-- The idle state of the chain sync client
+type ChainSyncIdle = ClientStIdle Header Point Tip IO ()
+
+-- when the protocols returns Nothing, we're done as a N2N client
+nothingToDone
+    :: Maybe Protocol
+    -> (Protocol -> ChainSyncIdle)
+    -> ChainSyncIdle
+nothingToDone Nothing _ = SendMsgDone ()
+nothingToDone (Just next) cont = cont next
+
+-- boots the protocol and step into initialise
+mkChainSyncApplication
+    :: State
+    -- ^ the mock chain
     -> Point
+    -- ^ starting point
     -> Limit
-    -> ChainSyncClient Header Point Tip IO ()
-chainSyncClient chainvar startingPoint limit =
-    ChainSyncClient
-        $ either SendMsgDone initialise <$> getChainPoints
-  where
-    initialise client' =
-        SendMsgFindIntersect [startingPoint]
-            $
-            -- In this consumer example, we do not care about whether the server
-            -- found an intersection or not. If not, we'll just sync from genesis.
-            --
-            -- Alternative policies here include:
-            --  iteratively finding the best intersection
-            --  rejecting the server if there is no intersection in the last K blocks
-            --
-            ClientStIntersect
-                { recvMsgIntersectFound = \_ _ -> ChainSyncClient (return (requestNext client'))
-                , recvMsgIntersectNotFound = \_ -> ChainSyncClient (return (requestNext client'))
+    -- ^ limit of blocks to sync
+    -> ChainSyncApplication
+    -- ^ the chain sync client application
+mkChainSyncApplication stateVar startingPoint limit = ChainSyncClient $ do
+    ps <- points (mkProtocol stateVar limit) [startingPoint]
+    pure $ nothingToDone ps $ initialise stateVar startingPoint
+
+-- In this consumer example, we do not care about whether the server
+-- found an intersection or not. If not, we'll just sync from genesis.
+--
+-- Alternative policies here include:
+--  iteratively finding the best intersection
+--  rejecting the server if there is no intersection in the last K blocks
+--
+initialise
+    :: State -- the mock chain
+    -> Point -- starting point
+    -> Protocol -- previous client state machine
+    -> ChainSyncIdle
+initialise stateVar startingPoint prev =
+    let next =
+            ChainSyncClient
+                { runChainSyncClient = pure $ requestNext stateVar prev
+                }
+    in  SendMsgFindIntersect [startingPoint]
+            $ ClientStIntersect
+                { recvMsgIntersectFound = \_point _tip -> next
+                , recvMsgIntersectNotFound = \_tip -> next
                 }
 
-    requestNext client' =
-        SendMsgRequestNext
-            -- We have the opportunity to do something when receiving
-            -- MsgAwaitReply. In this example we don't take up that opportunity.
-            (pure ())
-            (handleNext client')
-
-    handleNext client' =
+requestNext
+    :: State -- the mock chain
+    -> Protocol -- this client state machine
+    -> ChainSyncIdle
+requestNext stateVar prev =
+    SendMsgRequestNext
+        -- We have the opportunity to do something when receiving
+        -- MsgAwaitReply. In this example we don't take up that opportunity.
+        (pure ())
         ClientStNext
             { recvMsgRollForward = \header _tip -> ChainSyncClient $ do
-                rollForward header
-                choice <- onRollForward client' header
-                pure $ case choice of
-                    Left a -> SendMsgDone a
-                    Right client'' -> requestNext client''
+                rollForward stateVar header
+                choice <- onRollForward prev header
+                pure $ nothingToDone choice $ requestNext stateVar
             , recvMsgRollBackward = \pIntersect tip -> ChainSyncClient $ do
-                rollBackward pIntersect
-                choice <- onRollBackward client' pIntersect tip
-                pure $ case choice of
-                    Left a -> SendMsgDone a
-                    Right client'' -> requestNext client''
+                rollBackward stateVar pIntersect
+                choice <- onRollBackward prev pIntersect tip
+                pure $ nothingToDone choice $ requestNext stateVar
             }
 
-    getChainPoints :: IO (Either () (Client Header Point Tip IO ()))
-    getChainPoints = do
-        choice <-
-            points (controlledClient $ terminateAfterCount chainvar limit) []
-        pure $ case choice of
-            Left a -> Left a
-            Right client' -> Right client'
-
-    rollForward b = atomically $ do
-        chain <- readTVar chainvar
-        let !chain' = Chain.addBlock b chain
-        writeTVar chainvar chain'
-
-    rollBackward p = atomically $ do
-        chain <- readTVar chainvar
-
-        -- We will fail to roll back iff `p` doesn't exist in `chain`
-        -- This will happen when we're asked to roll back to `startingPoint`,
-        -- which we can check for, or any point before, which we can't
-        -- check for. Hence we ignore all failures to rollback and replace the
-        -- chain with an empty one if we do.
-        let !chain' = fromMaybe Chain.Genesis $ Chain.rollback (castPoint p) chain
-
-        writeTVar chainvar chain'
-
+-- | Run an adversary application that connects to a node and syncs
+-- blocks starting from the given point, up to the given limit.
 adversaryApplication
-    :: Exception a
-    => NetworkMagic
+    :: NetworkMagic
+    -- ^ network magic
     -> String
+    -- ^ peer host
     -> PortNumber
+    -- ^ peer port
     -> Point
+    -- ^ starting point
     -> Limit
-    -> IO (Either a (Chain.Point Header))
+    -- ^ limit of blocks to sync
+    -> IO (Either SomeException (Chain.Point Header))
 adversaryApplication magic peerName peerPort startingPoint limit = do
     chainvar <- newTVarIO (Chain.Genesis :: Chain Header)
     res <-
@@ -176,11 +199,11 @@ adversaryApplication magic peerName peerPort startingPoint limit = do
         -- the outer 'try', even if connectToNode already returns 'Either
         -- SomeException'.
         try
-            $ clientChainSync
+            $ runChainSyncApplication
                 magic
                 peerName
                 peerPort
-                (const $ chainSyncClient chainvar startingPoint limit)
+                (const $ mkChainSyncApplication chainvar startingPoint limit)
     case res of
         Left e -> return $ Left e
         Right _ -> pure . Chain.headPoint <$> readTVarIO chainvar

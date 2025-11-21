@@ -1,15 +1,20 @@
-{-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
-{-# HLINT ignore "Use const" #-}
-
 module Adversary.ChainSync.Connection
+    ( runChainSyncApplication
+    , HeaderHash
+    , ChainSyncApplication
+    )
 where
 
 import Adversary.ChainSync.Codec
+    ( Block
+    , Header
+    , Point
+    , Tip
+    , codecChainSync
+    )
 import Control.Exception (SomeException)
 import Control.Tracer (Contravariant (contramap), stdoutTracer)
-import Data.ByteString.Lazy qualified as LBS
+import Data.ByteString.Lazy (LazyByteString)
 import Data.List.NonEmpty qualified as NE
 import Data.Void (Void)
 import Network.Mux qualified as Mx
@@ -34,10 +39,9 @@ import Ouroboros.Network.Mux
     ( MiniProtocol (..)
     , MiniProtocolLimits (..)
     , MiniProtocolNum (MiniProtocolNum)
-    , OuroborosApplication (OuroborosApplication)
+    , OuroborosApplication (..)
     , OuroborosApplicationWithMinimalCtx
     , RunMiniProtocol (InitiatorProtocolOnly)
-    , RunMiniProtocolWithMinimalCtx
     , StartOnDemandOrEagerly (StartOnDemand)
     , mkMiniProtocolCbFromPeer
     )
@@ -72,15 +76,24 @@ import Ouroboros.Network.Socket
     , nullNetworkConnectTracers
     )
 
+-- | The application type for a chain sync client
+type ChainSyncApplication = ChainSyncClient Header Point Tip IO ()
+
+-- | The header hash type used in the chain sync connection
 type HeaderHash = Network.HeaderHash Block
 
-clientChainSync
+-- | Connect to a node-to-node chain sync server and run the given application
+runChainSyncApplication
     :: NetworkMagic
-    -> String -- host
-    -> PortNumber -- port
-    -> (NodeToNodeVersionData -> ChainSyncClient Header Point Tip IO ())
+    -- ^ The network magic
+    -> String
+    -- ^ host
+    -> PortNumber
+    -- ^ port
+    -> (NodeToNodeVersionData -> ChainSyncApplication)
+    -- ^ application
     -> IO (Either SomeException (Either () Void))
-clientChainSync magic peerName peerPort application = withIOManager $ \iocp -> do
+runChainSyncApplication magic peerName peerPort application = withIOManager $ \iocp -> do
     AddrInfo{addrAddress} <- resolve peerName peerPort
     connectToNode -- withNode
         (socketSnocket iocp) -- TCP
@@ -108,7 +121,7 @@ clientChainSync magic peerName peerPort application = withIOManager $ \iocp -> d
                 , query = False
                 }
             )
-            (app . application) -- application
+            (chainSyncToOuroboros . application) -- application
         )
         Nothing
         addrAddress
@@ -123,24 +136,6 @@ resolve peerName peerPort = do
     NE.head
         <$> getAddrInfo (Just hints) (Just peerName) (Just $ show peerPort)
 
-app
-    :: ChainSyncClient Header Point Tip IO ()
-    -> OuroborosApplicationWithMinimalCtx
-        Mx.InitiatorMode
-        addr
-        LBS.ByteString
-        IO
-        ()
-        Void
-app client = miniProtocolToOuroborosApplication
-    $ InitiatorProtocolOnly
-    $ mkMiniProtocolCbFromPeer
-    $ \_ctx ->
-        ( contramap show stdoutTracer -- tracer
-        , codecChainSync
-        , ChainSync.chainSyncClientPeer client
-        )
-
 -- TODO: provide sensible limits
 -- https://github.com/intersectmbo/ouroboros-network/issues/575
 maximumMiniProtocolLimits :: MiniProtocolLimits
@@ -149,20 +144,32 @@ maximumMiniProtocolLimits =
         { maximumIngressQueue = maxBound
         }
 
---
--- Chain sync demo
---
-
-miniProtocolToOuroborosApplication
-    :: RunMiniProtocolWithMinimalCtx appType addr bytes m a b
+chainSyncToOuroboros
+    :: ChainSyncApplication
     -- ^ chainSync
-    -> OuroborosApplicationWithMinimalCtx appType addr bytes m a b
-miniProtocolToOuroborosApplication chainSync =
+    -> OuroborosApplicationWithMinimalCtx
+        Mx.InitiatorMode
+        addr
+        LazyByteString
+        IO
+        ()
+        Void
+chainSyncToOuroboros chainSyncApp =
     OuroborosApplication
-        [ MiniProtocol
-            { miniProtocolNum = MiniProtocolNum 2
-            , miniProtocolStart = StartOnDemand
-            , miniProtocolLimits = maximumMiniProtocolLimits
-            , miniProtocolRun = chainSync
-            }
-        ]
+        { getOuroborosApplication =
+            [ MiniProtocol
+                { miniProtocolNum = MiniProtocolNum 2
+                , miniProtocolStart = StartOnDemand
+                , miniProtocolLimits = maximumMiniProtocolLimits
+                , miniProtocolRun = run
+                }
+            ]
+        }
+  where
+    run = InitiatorProtocolOnly
+        $ mkMiniProtocolCbFromPeer
+        $ \_ctx ->
+            ( contramap show stdoutTracer -- tracer
+            , codecChainSync
+            , ChainSync.chainSyncClientPeer chainSyncApp
+            )

@@ -7,9 +7,9 @@ module Adversary.ChainSync.Codec
     ) where
 
 import Cardano.Chain.Slotting (EpochSlots (EpochSlots))
-import Codec.Serialise qualified as CBOR
-import Codec.Serialise.Decoding qualified as CBOR
-import Codec.Serialise.Encoding qualified as CBOR
+import Codec.Serialise (DeserialiseFailure, Serialise (..))
+import Codec.Serialise.Decoding (Decoder)
+import Codec.Serialise.Encoding (Encoding)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Data (Proxy (Proxy))
 import Network.TypedProtocol.Codec (Codec)
@@ -44,20 +44,25 @@ import Ouroboros.Network.Block
     )
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Protocol.ChainSync.Codec qualified as ChainSync
-import Ouroboros.Network.Protocol.ChainSync.Type qualified as ChainSync
+import Ouroboros.Network.Protocol.ChainSync.Type (ChainSync)
 
+-- | Real Cardano Block type
 type Block = Consensus.CardanoBlock Consensus.StandardCrypto
 
+-- | Real Cardano Header type
 type Header = Consensus.Header Block
 
+-- | Real Cardano Tip type
 type Tip = Network.Tip Block
 
+-- | Real Cardano Point type
 type Point = Network.Point Header
 
+-- The ChainSync codec for our Block, Point, and Tip types
 codecChainSync
     :: Codec
-        (ChainSync.ChainSync Header Point Tip)
-        CBOR.DeserialiseFailure
+        (ChainSync Header Point Tip)
+        DeserialiseFailure
         IO
         LBS.ByteString
 codecChainSync =
@@ -70,10 +75,10 @@ codecChainSync =
         decTip
 
 ----- Encoding and Decoding Headers -----
-encHeader :: Header -> CBOR.Encoding
+encHeader :: Header -> Encoding
 encHeader = encodeNodeToNode @Block ccfg version
 
-decHeader :: CBOR.Decoder s Header
+decHeader :: Decoder s Header
 decHeader = decodeNodeToNode @Block ccfg version
 
 version
@@ -93,13 +98,13 @@ ccfg =
         ShelleyCodecConfig
 
 --- Encoding and Decoding Points -----
-encPoint :: Point -> CBOR.Encoding
-encPoint = CBOR.encode
-decPoint :: CBOR.Decoder s Point
-decPoint = CBOR.decode
+encPoint :: Point -> Encoding
+encPoint = encode
+decPoint :: Decoder s Point
+decPoint = decode
 
 --- Encoding and Decoding Tips -----
-encTip :: Network.Tip Block -> CBOR.Encoding
+encTip :: Network.Tip Block -> Encoding
 encTip = encodeTip (encodeRawHash (Proxy @Block))
-decTip :: CBOR.Decoder s (Network.Tip Block)
+decTip :: Decoder s (Network.Tip Block)
 decTip = decodeTip (decodeRawHash (Proxy @Block))
