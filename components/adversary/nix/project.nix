@@ -1,14 +1,32 @@
 { CHaP, indexState, pkgs, ... }:
 
 let
+  indexTool = { index-state = indexState; };
+  fix-libs = ({ lib, pkgs, ... }: {
+    # Use the VRF fork of libsodium
+    packages.cardano-crypto-praos.components.library.pkgconfig =
+      lib.mkForce [ [ pkgs.libsodium-vrf ] ];
+    packages.cardano-crypto-class.components.library.pkgconfig =
+      lib.mkForce [[ pkgs.libsodium-vrf pkgs.secp256k1 pkgs.libblst ]];
+  });
+  mkProject = ctx@{ lib, pkgs, ... }: {
+    name = "adversary";
+    src = ./..;
+    compiler-nix-name = "ghc984";
+
+    modules = [ fix-libs ];
+    inputMap = { "https://chap.intersectmbo.org/" = CHaP; };
+  };
+  project = pkgs.haskell-nix.cabalProject' mkProject;
+
   shell = { pkgs, ... }: {
     tools = {
-      cabal = { index-state = indexState; };
-      cabal-fmt = { index-state = indexState; };
-      haskell-language-server = { index-state = indexState; };
-      hoogle = { index-state = indexState; };
-      fourmolu = { index-state = indexState; };
-      hlint = { index-state = indexState; };
+      cabal = indexTool;
+      cabal-fmt = indexTool;
+      haskell-language-server = indexTool;
+      hoogle = indexTool;
+      fourmolu = indexTool;
+      hlint = indexTool;
     };
     withHoogle = true;
     buildInputs = [
@@ -21,26 +39,21 @@ let
       echo "Entering shell for adversary development"
     '';
   };
-  fix-libs = ({ lib, pkgs, ... }: {
-    # Use the VRF fork of libsodium
-    packages.cardano-crypto-praos.components.library.pkgconfig =
-      lib.mkForce [ [ pkgs.libsodium-vrf ] ];
-    packages.cardano-crypto-class.components.library.pkgconfig =
-      lib.mkForce [[ pkgs.libsodium-vrf pkgs.secp256k1 pkgs.libblst ]];
-  });
-  mkProject = ctx@{ lib, pkgs, ... }: {
-    name = "adversary";
-    src = ./..;
-    compiler-nix-name = "ghc984";
-    shell = shell { inherit pkgs; };
-
-    modules = [ fix-libs ];
-    inputMap = { "https://chap.intersectmbo.org/" = CHaP; };
+  quality-shell = { pkgs, ... }: {
+    tools = {
+      cabal-fmt = indexTool;
+      fourmolu = indexTool;
+      hlint = indexTool;
+    };
+    withHoogle = false;
+    buildInputs = [ pkgs.nixfmt-classic pkgs.just ];
   };
-  project = pkgs.haskell-nix.cabalProject' mkProject;
 
 in {
-  devShells.default = project.shell;
+  devShells = {
+    default = project.shellFor shell;
+    quality = project.shellFor quality-shell;
+  };
   packages.adversary = project.hsPkgs.adversary.components.exes.adversary;
   packages.adversary-tests =
     project.hsPkgs.adversary.components.tests.adversary-test;
