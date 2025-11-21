@@ -24,3 +24,4 @@ cli/tmp
 cli/result
 .aider*
 docs/yarn.lock
+components/adversary/result

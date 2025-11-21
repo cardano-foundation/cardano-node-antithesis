@@ -25,13 +25,14 @@ jobs:
       - name: Build executable
         working-directory: ./components/adversary
         run: nix build .#adversary
-      # - name: Build docker image
-      #   run: nix build .#docker-image -o output-docker-image
-      # - name: Upload Artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: cardano-utxo-csmt-image
-      #     path: output-docker-image
+      - name: Build docker image
+        run: nix build .#docker-image -o output-docker-image
+        working-directory: ./components/adversary
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardano-utxo-csmt-image
+          path: ./components/adversary/output-docker-image
       - name: Build arx
         run: nix bundle -o output-linux-tarball
         working-directory: ./components/adversary
