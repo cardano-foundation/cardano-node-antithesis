@@ -76,8 +76,8 @@ jobs:
   #         authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
   #     - name: Run Benchmarks
   #       run: nix run .#bench
-  formatting:
-    name: Check code formatting
+  code-quality:
+    name: Check code quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +93,7 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Check Formatting
         working-directory: ./components/adversary
-        run: nix develop -c just format
+        run: nix develop .#quality -c just format
       - name: Check linting
         working-directory: ./components/adversary
-        run: nix develop -c just hlint
+        run: nix develop .#quality -c just hlint
