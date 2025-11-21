@@ -48,12 +48,19 @@
             inherit CHaP;
             inherit pkgs;
           };
+          docker-adversary-image =
+            import ./nix/docker-image.nix { inherit pkgs project version; };
+          docker-packages = { packages.docker-image = docker-adversary-image; };
           other-tools = {
             packages.cardano-node = cardano-node;
             packages.cardano-cli = cardano-cli;
           };
 
-          fullPackages = lib.mergeAttrsList [ project.packages other-tools.packages ];
+          fullPackages = lib.mergeAttrsList [
+            project.packages
+            other-tools.packages
+            docker-packages.packages
+          ];
 
         in {
           packages = fullPackages // { default = project.packages.adversary; };
