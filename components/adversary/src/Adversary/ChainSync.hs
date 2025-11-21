@@ -1,10 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Adversary.ChainSync
     ( clientChainSync
+    , repeatedClientChainSync
     , Limit (..)
     , Point
     , HeaderHash
@@ -12,6 +14,7 @@ module Adversary.ChainSync
 
 import Cardano.Chain.Slotting (EpochSlots (EpochSlots))
 import Codec.Serialise qualified as CBOR
+import Control.Concurrent.Async (mapConcurrently)
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (STM, atomically)
     , StrictTVar
@@ -21,9 +24,10 @@ import Control.Concurrent.Class.MonadSTM.Strict
     , writeTVar
     )
 import Control.Exception (SomeException, try)
-import Control.Tracer (Contravariant (contramap), stdoutTracer)
+import Control.Tracer (nullTracer)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Data (Proxy (Proxy))
+import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Void (Void)
@@ -135,6 +139,23 @@ type HeaderHash = Network.HeaderHash Block
 newtype Limit = Limit {limit :: Word32}
     deriving newtype (Show, Read, Eq, Ord)
 
+repeatedClientChainSync
+    :: Int
+    -> NetworkMagic
+    -> [String]
+    -> PortNumber
+    -> NonEmpty Point
+    -- ^ must be infinite list
+    -> Limit
+    -> IO [(Point, Either SomeException Point)]
+repeatedClientChainSync nConns magic peerNames peerPort startingPoints limit =
+    mapConcurrently
+        ( \(_i, peerName, startingPoint) ->
+            (startingPoint,)
+                <$> clientChainSync magic peerName peerPort startingPoint limit
+        )
+        (zip3 [1 .. nConns] (cycle peerNames) (NE.toList startingPoints))
+
 clientChainSync
     :: NetworkMagic
     -> String
@@ -143,15 +164,15 @@ clientChainSync
     -> Limit
     -> IO (Either SomeException Point)
 clientChainSync magic peerName peerPort startingPoint limit = withIOManager $ \iocp -> do
-    AddrInfo{addrAddress} <- resolve
     chainvar <- newTVarIO (Chain.Genesis :: Chain Header)
 
     res <-
         -- To gracefully handle the node getting killed it seems we need
         -- the outer 'try', even if connectToNode already returns 'Either
         -- SomeException'.
-        try
-            $ connectToNode
+        try $ do
+            AddrInfo{addrAddress} <- resolve
+            connectToNode
                 (socketSnocket iocp)
                 makeSocketBearer
                 ConnectToArgs
@@ -178,6 +199,9 @@ clientChainSync magic peerName peerPort startingPoint limit = withIOManager $ \i
                 addrAddress
     case res of
         Left e -> return $ Left e
+        -- NOTE: 'limit == 0' will make this always return Genesis, which
+        -- is confusing. We can't have a 'Chain Point' containing just startingPoint,
+        -- however because of the constraints of 'Chain'.
         Right _ -> pure . Chain.headPoint <$> readTVarIO chainvar
   where
     resolve = do
@@ -198,14 +222,15 @@ clientChainSync magic peerName peerPort startingPoint limit = withIOManager $ \i
             IO
             ()
             Void
-    app chainvar = demoProtocol2
-        $ InitiatorProtocolOnly
-        $ mkMiniProtocolCbFromPeer
-        $ \_ctx ->
-            ( contramap show stdoutTracer
-            , codecChainSync
-            , ChainSync.chainSyncClientPeer (client chainvar)
-            )
+    app chainvar =
+        demoProtocol2
+            $ InitiatorProtocolOnly
+            $ mkMiniProtocolCbFromPeer
+            $ const
+                ( nullTracer -- limit stdout for antithesis
+                , codecChainSync
+                , ChainSync.chainSyncClientPeer (client chainvar)
+                )
 
     client
         :: StrictTVar IO (Chain Header) -> ChainSyncClient Header Point Tip IO ()
