@@ -1,8 +1,18 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Adversary (adversary, Message (..), toString, readChainPoint, originPoint) where
+module Adversary
+    ( adversary
+    , Message (..)
+    , toString
+    , readChainPoint
+    , originPoint
+    )
+where
 
-import Adversary.ChainSync (HeaderHash, Point, clientChainSync)
+import Adversary.Application (adversaryApplication)
+import Adversary.ChainSync.Codec
+import Adversary.ChainSync.Connection (HeaderHash)
+import Control.Exception (SomeException)
 import Data.Aeson (FromJSON, ToJSON, withText)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Base16 qualified as B16
@@ -47,10 +57,10 @@ adversary args@(magicArg : host : port : limitArg : startPointArg : _) = do
     let (startPoint :: Point) =
             fromMaybe (error "invalid chain point") $ readChainPoint startPointArg
     res <-
-        clientChainSync magic host (read port) startPoint (read limitArg)
+        adversaryApplication magic host (read port) startPoint (read limitArg)
     case res of
         Right endPoint -> pure $ Completed{startPoint, endPoint}
-        Left err -> pure $ Failed $ show err
+        Left (err :: SomeException) -> pure $ Failed $ show err
 adversary _ =
     error
         "Expected network-magic, host, port, sync-length and startPoint arguments"
@@ -64,8 +74,10 @@ readChainPoint str = case split (== '@') str of
     [blockHashStr, slotNoStr] -> do
         (hash :: HeaderHash) <-
             Consensus.OneEraHash . SBS.toShort
-                <$> ( either (const Nothing) Just
-                        $ B16.decode
+                <$> either
+                    (const Nothing)
+                    Just
+                    ( B16.decode
                         $ T.encodeUtf8
                         $ T.pack blockHashStr
                     )

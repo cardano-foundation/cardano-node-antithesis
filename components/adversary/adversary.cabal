@@ -17,18 +17,28 @@ common settings
 
   default-extensions:
     BangPatterns
+    DataKinds
     DeriveAnyClass
     DeriveGeneric
     DerivingStrategies
+    DerivingVia
     DuplicateRecordFields
     FlexibleContexts
     FlexibleInstances
+    GADTs
+    GeneralizedNewtypeDeriving
     ImportQualifiedPost
     LambdaCase
+    MultiParamTypeClasses
     NamedFieldPuns
     OverloadedStrings
+    PatternSynonyms
+    RankNTypes
     RecordWildCards
     ScopedTypeVariables
+    StandaloneDeriving
+    StrictData
+    TupleSections
     TypeApplications
     TypeFamilies
     TypeOperators
@@ -60,7 +70,9 @@ library
 
   exposed-modules:
     Adversary
-    Adversary.ChainSync
+    Adversary.Application
+    Adversary.ChainSync.Codec
+    Adversary.ChainSync.Connection
 
   other-modules:
 

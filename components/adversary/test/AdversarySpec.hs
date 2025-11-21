@@ -1,7 +1,12 @@
 module AdversarySpec where
 
 import Adversary
-import Adversary.ChainSync (Limit (..))
+    ( Message (Startup, arguments)
+    , originPoint
+    , readChainPoint
+    , toString
+    )
+import Adversary.Application (Limit (..))
 import Data.Aeson (decode, encode)
 import Data.Aeson qualified as Aeson
 import Data.Maybe (fromMaybe)
