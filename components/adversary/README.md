@@ -55,11 +55,12 @@ Describe pre-requisites, in particular:
 
 ## Getting started
 
-How to:
+### Building with nix
 
-- download or clone
-- install
-- start or run
+```bash
+nix shell nixpkgs#cachix -c cachix use paolino
+nix build .#adversary
+```
 
 ## Usage
 
@@ -82,4 +83,3 @@ A few basic examples of how to use (not a complete reference).
 [HAL]: https://github.com/cardano-foundation/hal
 [CF]: https://github.com/cardano-foundation
 [Cardano]: https://cardano.org/
-

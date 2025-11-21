@@ -7,7 +7,6 @@
   };
   inputs = {
     haskellNix.url = "github:input-output-hk/haskell.nix";
-    nixpkgs.url = "github:NixOS/nixpkgs";
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-utils.url = "github:hamishmack/flake-utils/hkm/nested-hydraJobs";
@@ -35,7 +34,6 @@
           node-project = cardano-node-runtime.project.${system};
           cardano-node = node-project.pkgs.cardano-node;
           cardano-cli = node-project.pkgs.cardano-cli;
-          cardano-submit-api = node-project.pkgs.cardano-submit-api;
           pkgs = import nixpkgs {
             overlays = [
               iohkNix.overlays.crypto # modified crypto libs
@@ -49,10 +47,13 @@
             indexState = "2025-08-07T00:00:00Z";
             inherit CHaP;
             inherit pkgs;
-            inherit cardano-cli;
+          };
+          other-tools = {
+            packages.cardano-node = cardano-node;
+            packages.cardano-cli = cardano-cli;
           };
 
-          fullPackages = lib.mergeAttrsList [ project.packages ];
+          fullPackages = lib.mergeAttrsList [ project.packages other-tools.packages ];
 
         in {
           packages = fullPackages // { default = project.packages.adversary; };
