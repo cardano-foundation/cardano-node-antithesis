@@ -1,4 +1,4 @@
-{ CHaP, indexState, pkgs, cardano-cli, ... }:
+{ CHaP, indexState, pkgs, ... }:
 
 let
   shell = { pkgs, ... }: {
@@ -42,5 +42,6 @@ let
 in {
   devShells.default = project.shell;
   packages.adversary = project.hsPkgs.adversary.components.exes.adversary;
+  packages.adversary-tests = project.hsPkgs.adversary.components.tests.adversary-test;
   inherit project;
 }
