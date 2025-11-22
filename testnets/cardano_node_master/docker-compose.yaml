@@ -33,14 +33,17 @@ services:
       - p5-configs:/configs/5 # configs for p5
 
   tracer:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer:fb6208f
+    image: ghcr.io/intersectmbo/cardano-tracer:10.6.0
+
     hostname: tracer.example
     container_name: tracer
     volumes:
       - tracer:/opt/cardano-tracer
+      - ./tracer-config.yaml:/tracer-config.yaml:ro
+    entrypoint: cardano-tracer
     command:
        - "--config"
-       - "tracer-config.yaml"
+       - "/tracer-config.yaml"
     restart:
       always
 

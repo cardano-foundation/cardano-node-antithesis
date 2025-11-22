@@ -15,10 +15,6 @@ build-shared:
 		-t ${registry}/sidecar:latest sidecar
 	docker build \
 	    --label "org.opencontainers.image.source=${source}" \
-		-f tracer/Dockerfile\
-		-t ${registry}/tracer:latest tracer
-	docker build \
-	    --label "org.opencontainers.image.source=${source}" \
 		-f tracer-sidecar/Dockerfile \
 		-t ${registry}/tracer-sidecar:latest tracer-sidecar
 	docker build \
@@ -32,7 +28,6 @@ build-shared:
 
 push-shared:
 	docker push ${registry}/sidecar:latest
-	docker push ${registry}/tracer:latest
 	docker push ${registry}/tracer-sidecar:latest
 	docker push ${registry}/configurator:latest
 	docker push ${registry}/adversary:latest
@@ -55,7 +50,7 @@ push-config: TESTNET ## Push config container image
 
 up: TESTNET ## Start Run local Docker Compose
 	export INTERNAL_NETWORK=true ; \
-	cd ../testnets/${testnet} ; docker compose up --detach 
+	cd ../testnets/${testnet} ; docker compose up --detach
 
 down: TESTNET ## Stop local Docker Compose
 	export INTERNAL_NETWORK=true ; \

@@ -1,4 +1,3 @@
----
 networkMagic: 42
 network:
   tag: AcceptAt
@@ -7,7 +6,7 @@ logging:
 - logRoot: "/opt/cardano-tracer/logs"
   logMode: FileMode
   logFormat: ForMachine
-verbosity: Maximum
+verbosity: Minimum
 hasPrometheus:
   epHost: 0.0.0.0
   epPort: 4000
