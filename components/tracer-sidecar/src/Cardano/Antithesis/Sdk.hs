@@ -26,6 +26,7 @@ import Data.Maybe
 import Data.Text
     ( Text
     )
+import System.Directory (createDirectoryIfMissing)
 import System.Environment
     ( lookupEnv
     )
@@ -38,6 +39,7 @@ import System.IO
 writeSdkJsonl :: Value -> IO ()
 writeSdkJsonl v = do
     dir <- fromMaybe "/tmp" <$> lookupEnv "ANTITHESIS_OUTPUT_DIR"
+    createDirectoryIfMissing True dir
     let outFile = dir ++ "/sdk.jsonl"
     -- open in AppendMode and write the JSON + newline
     withFile outFile AppendMode $ \h ->
