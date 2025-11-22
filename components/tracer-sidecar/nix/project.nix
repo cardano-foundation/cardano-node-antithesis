@@ -1,14 +1,24 @@
 { indexState, pkgs, ... }:
 
 let
+  indexTool = { index-state = indexState; };
+  mkProject = ctx@{ lib, pkgs, ... }: {
+    name = "tracer-sidecar";
+    src = ./..;
+    compiler-nix-name = "ghc984";
+
+    modules = [ ];
+  };
+  project = pkgs.haskell-nix.cabalProject' mkProject;
+
   shell = { pkgs, ... }: {
     tools = {
-      cabal = { index-state = indexState; };
-      cabal-fmt = { index-state = indexState; };
-      haskell-language-server = { index-state = indexState; };
-      hoogle = { index-state = indexState; };
-      fourmolu = { index-state = indexState; };
-      hlint = { index-state = indexState; };
+      cabal = indexTool;
+      cabal-fmt = indexTool;
+      haskell-language-server = indexTool;
+      hoogle = indexTool;
+      fourmolu = indexTool;
+      hlint = indexTool;
     };
     withHoogle = true;
     buildInputs = [
@@ -22,19 +32,23 @@ let
     '';
   };
 
-  mkProject = ctx@{ lib, pkgs, ... }: {
-    name = "tracer-sidecar";
-    src = ./..;
-    compiler-nix-name = "ghc984";
-    shell = shell { inherit pkgs; };
-
-    modules = [ ];
+  quality-shell = { pkgs, ... }: {
+    tools = {
+      cabal-fmt = indexTool;
+      fourmolu = indexTool;
+      hlint = indexTool;
+    };
+    withHoogle = false;
+    buildInputs = [ pkgs.nixfmt-classic pkgs.just ];
   };
-  project = pkgs.haskell-nix.cabalProject' mkProject;
-
 in {
-  devShells.default = project.shell;
+  devShells = {
+    default = project.shellFor shell;
+    quality = project.shellFor quality-shell;
+  };
   packages.tracer-sidecar =
     project.hsPkgs.tracer-sidecar.components.exes.tracer-sidecar;
+  packages.tracer-sidecar-tests =
+    project.hsPkgs.tracer-sidecar.components.tests.test;
   inherit project;
 }
