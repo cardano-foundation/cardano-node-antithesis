@@ -6,17 +6,14 @@
 module Spec (spec)
 where
 
+import App (tailJsonLinesFromTracerLogDir)
+import Cardano.Antithesis.LogMessage (LogMessage)
 import Cardano.Antithesis.Sidecar
     ( Output (..)
     , initialState
     , mkSpec
     , processMessages
     )
-import Data.ByteString.Char8 qualified as B8
-import Data.ByteString.Lazy qualified as BL
-
-import App (tailJsonLinesFromTracerLogDir)
-import Cardano.Antithesis.LogMessage (LogMessage)
 import Control.Concurrent
     ( MVar
     , modifyMVar_
@@ -32,11 +29,16 @@ import Data.Aeson
     , eitherDecodeStrict
     , encode
     )
+import Data.ByteString.Char8 qualified as B8
+import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Lazy.Char8 qualified as BL8
 import Data.Either
     ( partitionEithers
     )
 import Data.Foldable (forM_)
+import Data.List
+    ( sort
+    )
 import Data.Maybe
     ( mapMaybe
     )
@@ -89,7 +91,7 @@ spec = do
                 threadDelay 500000
                 cancel thread
                 vals <- readMVar r
-                vals `shouldBe` concat (replicate nFiles [1 .. nValues])
+                sort vals `shouldBe` sort (concat $ replicate nFiles [1 .. nValues])
 
 collectAllInts :: MVar [Int] -> Int -> IO ()
 collectAllInts xs newInt = do
