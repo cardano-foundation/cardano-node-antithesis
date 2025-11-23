@@ -5,6 +5,7 @@ module Adversary.Application
     ( Limit (..)
     , adversaryApplication
     , ChainSyncApplication
+    , repeatedAdversaryApplication
     )
 where
 
@@ -13,6 +14,7 @@ import Adversary.ChainSync.Connection
     ( ChainSyncApplication
     , runChainSyncApplication
     )
+import Control.Concurrent.Async (mapConcurrently)
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
     , StrictTVar
@@ -23,6 +25,8 @@ import Control.Concurrent.Class.MonadSTM.Strict
     )
 import Control.Exception (SomeException, try)
 import Data.Function (fix)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Word (Word32)
 import Network.Socket (PortNumber)
@@ -207,3 +211,20 @@ adversaryApplication magic peerName peerPort startingPoint limit = do
     case res of
         Left e -> return $ Left e
         Right _ -> pure . Chain.headPoint <$> readTVarIO chainvar
+
+repeatedAdversaryApplication
+    :: Int
+    -> NetworkMagic
+    -> [String]
+    -> PortNumber
+    -> NonEmpty Point
+    -- ^ must be infinite list
+    -> Limit
+    -> IO [(Point, Either SomeException Point)]
+repeatedAdversaryApplication nConns magic peerNames peerPort startingPoints limit =
+    mapConcurrently
+        ( \(_i, peerName, startingPoint) ->
+            (startingPoint,)
+                <$> adversaryApplication magic peerName peerPort startingPoint limit
+        )
+        (zip3 [1 .. nConns] (cycle peerNames) (NE.toList startingPoints))

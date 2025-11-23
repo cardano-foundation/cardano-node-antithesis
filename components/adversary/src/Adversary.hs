@@ -6,17 +6,22 @@ module Adversary
     , toString
     , readChainPoint
     , originPoint
+    , unsafeReadChainPoint
+    , ChainPointSamples (..)
+    , generatePoints
     )
 where
 
-import Adversary.Application (adversaryApplication)
-import Adversary.ChainSync.Codec
+import Adversary.Application (repeatedAdversaryApplication)
+import Adversary.ChainSync.Codec (Point)
 import Adversary.ChainSync.Connection (HeaderHash)
-import Control.Exception (SomeException)
+import Control.Arrow (second)
 import Data.Aeson (FromJSON, ToJSON, withText)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Short qualified as SBS
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
@@ -29,6 +34,7 @@ import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import Ouroboros.Network.Point (WithOrigin (..))
 import Ouroboros.Network.Point qualified as Point
+import System.Random (StdGen, newStdGen, randomR)
 import Text.Read (readMaybe)
 
 originPoint :: Point
@@ -36,8 +42,7 @@ originPoint = Network.Point Origin
 
 data Message
     = Startup {arguments :: [String]}
-    | Completed {startPoint :: Point, endPoint :: Point}
-    | Failed {reason :: String}
+    | Completed {results :: [(Point, Either String Point)]}
     deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
 instance ToJSON Point where
@@ -50,23 +55,64 @@ instance FromJSON Point where
             pure
             (readChainPoint $ T.unpack t)
 
+readOrFail :: Read a => String -> String -> a
+readOrFail msg s =
+    fromMaybe
+        (error (msg <> " failed to read from " <> s))
+        (readMaybe s)
+
 adversary :: [String] -> IO Message
-adversary args@(magicArg : host : port : limitArg : startPointArg : _) = do
-    putStrLn $ toString $ Startup args
-    let magic = NetworkMagic{unNetworkMagic = read magicArg}
-    let (startPoint :: Point) =
-            fromMaybe (error "invalid chain point") $ readChainPoint startPointArg
-    res <-
-        adversaryApplication magic host (read port) startPoint (read limitArg)
-    case res of
-        Right endPoint -> pure $ Completed{startPoint, endPoint}
-        Left (err :: SomeException) -> pure $ Failed $ show err
+adversary
+    args@( magicArg : port : limitArg : chainPointsFilePath : nConnectionsArg
+                : hosts
+            ) = do
+        putStrLn $ toString $ Startup args
+        let magic = NetworkMagic{unNetworkMagic = readOrFail "magic" magicArg}
+        randomGen <- newStdGen
+        ChainPointSamples samplePoints <-
+            unsafeParseChainPointSamples <$> readFile chainPointsFilePath
+        let startPoints = generatePoints randomGen samplePoints
+        let (nConnections :: Int) = readOrFail "nConnections" nConnectionsArg
+        res <-
+            repeatedAdversaryApplication
+                nConnections
+                magic
+                hosts
+                (readOrFail "port" port)
+                startPoints
+                (readOrFail "limit" limitArg)
+        pure
+            $ Completed
+            $ map (second (either (Left . show) Right)) res
 adversary _ =
     error
-        "Expected network-magic, host, port, sync-length and startPoint arguments"
+        "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
+
+generatePoints :: StdGen -> NonEmpty Point -> NonEmpty Point
+generatePoints g points = NE.unfoldr (fmap Just . randomElement points) g
+  where
+    randomElement :: NonEmpty a -> StdGen -> (a, StdGen)
+    randomElement l g' =
+        let (randomIndex, g'') = randomR (0, length l - 1) g' -- untested
+        in  (l NE.!! randomIndex, g'')
 
 toString :: Message -> String
 toString = TL.unpack . TL.decodeUtf8 . Aeson.encode
+
+newtype ChainPointSamples = ChainPointSamples (NonEmpty Point)
+    deriving (Eq, Show)
+
+unsafeParseChainPointSamples :: String -> ChainPointSamples
+unsafeParseChainPointSamples = fromMaybe (error "invalid chain points") . parseChainPointSamples
+
+parseChainPointSamples :: String -> Maybe ChainPointSamples
+parseChainPointSamples =
+    fmap (ChainPointSamples . (originPoint NE.:|))
+        . mapM readChainPoint
+        . lines
+
+unsafeReadChainPoint :: String -> Point
+unsafeReadChainPoint = fromMaybe (error "invalid chain point") . readChainPoint
 
 readChainPoint :: String -> Maybe Point
 readChainPoint "origin" = Just originPoint
