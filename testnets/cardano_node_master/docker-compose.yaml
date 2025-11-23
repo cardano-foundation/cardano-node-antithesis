@@ -102,10 +102,24 @@ services:
       - "/opt/cardano-tracer/logs"
     environment:
       POOLS: "5"
+      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     volumes:
       - tracer:/opt/cardano-tracer
     restart:
       always
+
+  adversary:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:deca818
+    environment:
+      NETWORKMAGIC: 42
+      PORT: 3001
+      LIMIT: 100
+      POOLS: "5"
+      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+    hostname: adversary
+    container_name: adversary
+    volumes:
+      - tracer:/opt/cardano-tracer
 
 volumes:
   tracer:
