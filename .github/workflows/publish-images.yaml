@@ -1,4 +1,4 @@
-name: "Build and push component images"
+name: "Build and push component images for cardano-node testnet"
 env:
   REGISTRY: ghcr.io/cardano-foundation/cardano-node-antithesis
 on:
