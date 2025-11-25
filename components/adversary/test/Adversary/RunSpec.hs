@@ -16,5 +16,5 @@ spec = do
     withArgs [] (withProgName "adversary" run) `shouldReturn` Usage "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
 
   it "returns Startup given program name is 'submit-txs'" $ do
-    let args = [ "arg1", "arg2" ]
-    withArgs args (withProgName "submit-txs" run) `shouldReturn` Startup args
+    let args = ["arg1", "arg2"]
+    withArgs args (withProgName "submit-txs" run) `shouldReturn` Usage "Usage: submit-txs <magic> <host> <port> <tx-file1> <tx-file2> ..."
