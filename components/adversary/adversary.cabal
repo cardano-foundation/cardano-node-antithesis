@@ -75,6 +75,8 @@ library
     Adversary.Application
     Adversary.ChainSync.Codec
     Adversary.ChainSync.Connection
+    Adversary.Run
+    Adversary.SubmitTransactions
 
   other-modules:
 
@@ -102,3 +104,5 @@ test-suite adversary-test
     , random
 
   build-tool-depends: hspec-discover:hspec-discover
+  other-modules:
+    Adversary.RunSpec
