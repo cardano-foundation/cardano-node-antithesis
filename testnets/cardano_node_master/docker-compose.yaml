@@ -109,7 +109,7 @@ services:
       always
 
   adversary:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:dev
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:99fc38c
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
