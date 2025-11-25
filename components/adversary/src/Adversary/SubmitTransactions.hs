@@ -10,7 +10,7 @@ import Codec.CBOR.Write (toLazyByteString)
 import Codec.Serialise (DeserialiseFailure)
 import Control.Concurrent.Class.MonadSTM.Strict.TVar (StrictTVar, newTVarIO, readTVarIO)
 import Control.Exception (SomeException)
-import Control.Tracer (nullTracer, stdoutTracer)
+import Control.Tracer (stdoutTracer)
 import Data.Bifunctor (first)
 import Data.ByteString.Base16.Lazy qualified as Hex
 import Data.ByteString.Lazy (LazyByteString)
@@ -21,27 +21,23 @@ import Data.Void (Void)
 import Network.Mux qualified as Mx
 import Network.Socket (AddrInfo (..), PortNumber)
 import Network.TypedProtocol.Codec (Codec)
-import Ouroboros.Consensus.Cardano (CardanoBlock)
-import Ouroboros.Consensus.Cardano.Block (CardanoEras, StandardCrypto)
 import Ouroboros.Consensus.Cardano.Node ()
 import Ouroboros.Consensus.HardFork.Combinator.Serialisation.SerialiseNodeToNode ()
 import Ouroboros.Consensus.Ledger.SupportsMempool (GenTx, GenTxId, HasTxId (txId))
 import Ouroboros.Consensus.Node.Serialisation (decodeNodeToNode, encodeNodeToNode)
-import Ouroboros.Consensus.Shelley.Eras (ConwayEra)
 import Ouroboros.Consensus.Shelley.Ledger.Mempool ()
 import Ouroboros.Consensus.Shelley.Node.Serialisation ()
-import Ouroboros.Network.Diffusion.Configuration (PeerSharing (PeerSharingDisabled))
+import Ouroboros.Network.Diffusion.Configuration (PeerSharing (PeerSharingDisabled), DiffusionMode (..))
 import Ouroboros.Network.Handshake.Acceptable (Acceptable (..))
 import Ouroboros.Network.Handshake.Queryable (queryVersion)
 import Ouroboros.Network.IOManager (withIOManager)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import Ouroboros.Network.Mux
   ( MiniProtocol (..),
-    MiniProtocolNum (..),
     OuroborosApplication (..),
     OuroborosApplicationWithMinimalCtx,
-    RunMiniProtocol (InitiatorProtocolOnly),
-    StartOnDemandOrEagerly (StartOnDemand),
+    RunMiniProtocol (..),
+    StartOnDemandOrEagerly (..),
     mkMiniProtocolCbFromPeer,
   )
 import Ouroboros.Network.NodeToNode
@@ -50,7 +46,6 @@ import Ouroboros.Network.NodeToNode
     NodeToNodeVersionData (..),
     nodeToNodeCodecCBORTerm,
     nodeToNodeHandshakeCodec,
-    nullNetworkConnectTracers,
     simpleSingletonVersions,
     txSubmissionMiniProtocolNum,
   )
@@ -63,7 +58,7 @@ import Ouroboros.Network.Socket (ConnectToArgs (..), HandshakeCallbacks (..), co
 
 submitTxs :: [String] -> IO Message
 submitTxs = \case
-  args@(magicArg : host : port : txFiles) -> do
+  args@(magicArg : host : port : hexEncodedTxFiles) -> do
     putStrLn $ toString $ Startup args
     let magic = NetworkMagic {unNetworkMagic = readOrFail "magic" magicArg}
     txs <-
@@ -74,7 +69,7 @@ submitTxs = \case
               Left err -> error $ "Failed to deserialise transaction from file " ++ file ++ ": " ++ show err
               Right tx -> return $ snd tx
         )
-        txFiles
+        hexEncodedTxFiles
         >>= newTVarIO
     _ <- runTxSubmissionApplication magic host (readOrFail "port" port) (mkTxSubmissionApplication txs)
     return $ Completed []
@@ -142,6 +137,7 @@ mkTxSubmissionApplication txsVar =
     idle =
       ClientStIdle
         { recvMsgRequestTxIds = \blocking _numToAck _numToReq -> do
+            putStrLn $ "Received request for tx ids: " ++ show blocking
             txs <- readTVarIO txsVar
             let txIdsWithSizes =
                   map
@@ -151,12 +147,15 @@ mkTxSubmissionApplication txsVar =
                         )
                     )
                     txs
+            putStrLn $ "Sending " ++ show txIdsWithSizes
             case blocking of
               SingBlocking -> return $ SendMsgReplyTxIds (BlockingReply $ head txIdsWithSizes :| tail txIdsWithSizes) idle
               SingNonBlocking -> return $ SendMsgReplyTxIds (NonBlockingReply txIdsWithSizes) idle,
           recvMsgRequestTxs = \reqTxIds -> do
+            putStrLn $ "Received request for txs ids: " ++ show reqTxIds
             txs <- readTVarIO txsVar
             let requestedTxs = filter (\tx -> txId tx `elem` reqTxIds) txs
+            putStrLn $ "Sending " ++ show (length requestedTxs) ++ " requested txs"
             return $ SendMsgReplyTxs requestedTxs idle
         }
 
