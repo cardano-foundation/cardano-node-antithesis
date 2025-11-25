@@ -109,7 +109,7 @@ services:
       always
 
   adversary:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:d9222f2
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:dev
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -119,7 +119,7 @@ services:
     hostname: adversary
     container_name: adversary
     volumes:
-      - tracer:/opt/cardano-tracer
+      - tracer:/opt/cardano-tracer # to read chain points
     depends_on:
       tracer-sidecar:
         condition: service_started

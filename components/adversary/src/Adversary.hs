@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Adversary
-    ( adversary
+    ( main
     , Message (..)
     , toString
     , readChainPoint
@@ -15,7 +15,7 @@ where
 import Adversary.Application (repeatedAdversaryApplication)
 import Adversary.ChainSync.Codec (Point)
 import Adversary.ChainSync.Connection (HeaderHash)
-import Control.Arrow (second)
+import Control.Tracer (nullTracer)
 import Data.Aeson (FromJSON, ToJSON, withText)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Base16 qualified as B16
@@ -34,6 +34,7 @@ import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import Ouroboros.Network.Point (WithOrigin (..))
 import Ouroboros.Network.Point qualified as Point
+import System.Environment (getArgs)
 import System.Random (StdGen, newStdGen, randomR)
 import Text.Read (readMaybe)
 
@@ -42,7 +43,7 @@ originPoint = Network.Point Origin
 
 data Message
     = Startup {arguments :: [String]}
-    | Completed {results :: [(Point, Either String Point)]}
+    | Completed
     deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
 instance ToJSON Point where
@@ -61,32 +62,32 @@ readOrFail msg s =
         (error (msg <> " failed to read from " <> s))
         (readMaybe s)
 
-adversary :: [String] -> IO Message
-adversary
-    args@( magicArg : port : limitArg : chainPointsFilePath : nConnectionsArg
+main :: IO ()
+main = do
+    args <- getArgs
+    case args of
+        ( magicArg : port : limitArg : chainPointsFilePath : nConnectionsArg
                 : hosts
-            ) = do
-        putStrLn $ toString $ Startup args
-        let magic = NetworkMagic{unNetworkMagic = readOrFail "magic" magicArg}
-        randomGen <- newStdGen
-        ChainPointSamples samplePoints <-
-            unsafeParseChainPointSamples <$> readFile chainPointsFilePath
-        let startPoints = generatePoints randomGen samplePoints
-        let (nConnections :: Int) = readOrFail "nConnections" nConnectionsArg
-        res <-
-            repeatedAdversaryApplication
-                nConnections
-                magic
-                hosts
-                (readOrFail "port" port)
-                startPoints
-                (readOrFail "limit" limitArg)
-        pure
-            $ Completed
-            $ map (second (either (Left . show) Right)) res
-adversary _ =
-    error
-        "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
+            ) -> do
+                putStrLn $ toString $ Startup args
+                let magic = NetworkMagic{unNetworkMagic = readOrFail "magic" magicArg}
+                randomGen <- newStdGen
+                ChainPointSamples samplePoints <-
+                    unsafeParseChainPointSamples <$> readFile chainPointsFilePath
+                let startPoints = generatePoints randomGen samplePoints
+                let (nConnections :: Int) = readOrFail "nConnections" nConnectionsArg
+                repeatedAdversaryApplication
+                    nullTracer
+                    nConnections
+                    magic
+                    hosts
+                    (readOrFail "port" port)
+                    startPoints
+                    (readOrFail "limit" limitArg)
+                putStrLn $ toString Completed
+        _ ->
+            error
+                "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
 
 generatePoints :: StdGen -> NonEmpty Point -> NonEmpty Point
 generatePoints g points = NE.unfoldr (fmap Just . randomElement points) g

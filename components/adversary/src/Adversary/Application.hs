@@ -14,7 +14,10 @@ import Adversary.ChainSync.Connection
     ( ChainSyncApplication
     , runChainSyncApplication
     )
-import Control.Concurrent.Async (mapConcurrently)
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async
+    ( mapConcurrently_
+    )
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
     , StrictTVar
@@ -22,8 +25,10 @@ import Control.Concurrent.Class.MonadSTM.Strict
     , newTVarIO
     , readTVar
     , readTVarIO
+    , writeTVar
     )
 import Control.Exception (SomeException, try)
+import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
@@ -47,10 +52,28 @@ import Ouroboros.Network.Protocol.ChainSync.Client
     , ClientStNext (..)
     )
 
-type State = StrictTVar IO (Chain Header)
+data State = State
+    { chainVar :: StrictTVar IO (Chain Header)
+    , stop :: StrictTVar IO Bool
+    }
+
+setStop :: State -> Bool -> IO ()
+setStop state b = atomically $ writeTVar (stop state) b
+
+getStop :: State -> IO Bool
+getStop state = readTVarIO $ stop state
+
+onChainVar :: State -> (Chain Header -> Chain Header) -> IO ()
+onChainVar state f = atomically $ modifyTVar (chainVar state) f
+
+readChainVar :: State -> STM IO (Chain Header)
+readChainVar state = readTVar $ chainVar state
+
+readChainVarIO :: State -> IO (Chain Header)
+readChainVarIO = atomically . readChainVar
 
 rollForward :: State -> Header -> IO ()
-rollForward chainvar b = atomically $ modifyTVar chainvar $ \(!chain) ->
+rollForward state b = onChainVar state $ \(!chain) ->
     Chain.addBlock b chain
 
 -- We will fail to roll back iff `p` doesn't exist in `chain`
@@ -59,7 +82,7 @@ rollForward chainvar b = atomically $ modifyTVar chainvar $ \(!chain) ->
 -- check for. Hence we ignore all failures to rollback and replace the
 -- chain with an empty one if we do.
 rollBackward :: State -> Point -> IO ()
-rollBackward chainvar p = atomically $ modifyTVar chainvar $ \(!chain) ->
+rollBackward state p = onChainVar state $ \(!chain) ->
     fromMaybe Chain.Genesis $ Chain.rollback p chain
 
 -- | A limit on the number of blocks to sync
@@ -98,9 +121,9 @@ terminateAfterCount
     :: State
     -> Limit
     -> ControlMessageSTM IO
-terminateAfterCount chainvar limit = do
+terminateAfterCount stateVar limit = do
     chainLength <-
-        Limit . fromIntegral . Chain.length <$> readTVar chainvar
+        Limit . fromIntegral . Chain.length <$> readChainVar stateVar
     pure
         $ if chainLength < limit
             then Continue
@@ -168,13 +191,12 @@ requestNext
     -> ChainSyncIdle
 requestNext stateVar prev =
     SendMsgRequestNext
-        -- We have the opportunity to do something when receiving
-        -- MsgAwaitReply. In this example we don't take up that opportunity.
-        (pure ())
+        (setStop stateVar True)
         ClientStNext
             { recvMsgRollForward = \header _tip -> ChainSyncClient $ do
                 rollForward stateVar header
-                choice <- onRollForward prev header
+                stop <- getStop stateVar
+                choice <- if stop then pure Nothing else onRollForward prev header
                 pure $ nothingToDone choice $ requestNext stateVar
             , recvMsgRollBackward = \pIntersect tip -> ChainSyncClient $ do
                 rollBackward stateVar pIntersect
@@ -197,7 +219,9 @@ adversaryApplication
     -- ^ limit of blocks to sync
     -> IO (Either SomeException (Chain.Point Header))
 adversaryApplication magic peerName peerPort startingPoint limit = do
-    chainvar <- newTVarIO (Chain.Genesis :: Chain Header)
+    chainVar <- newTVarIO (Chain.Genesis :: Chain Header)
+    stopVar <- newTVarIO False
+    let stateVar = State{chainVar, stop = stopVar}
     res <-
         -- To gracefully handle the node getting killed it seems we need
         -- the outer 'try', even if connectToNode already returns 'Either
@@ -207,24 +231,40 @@ adversaryApplication magic peerName peerPort startingPoint limit = do
                 magic
                 peerName
                 peerPort
-                (const $ mkChainSyncApplication chainvar startingPoint limit)
+                (const $ mkChainSyncApplication stateVar startingPoint limit)
     case res of
         Left e -> return $ Left e
-        Right _ -> pure . Chain.headPoint <$> readTVarIO chainvar
+        Right _ -> pure . Chain.headPoint <$> readChainVarIO stateVar
 
 repeatedAdversaryApplication
-    :: Int
+    :: Tracer IO String -- thread safe logger
+    -> Int
     -> NetworkMagic
     -> [String]
     -> PortNumber
     -> NonEmpty Point
     -- ^ must be infinite list
     -> Limit
-    -> IO [(Point, Either SomeException Point)]
-repeatedAdversaryApplication nConns magic peerNames peerPort startingPoints limit =
-    mapConcurrently
-        ( \(_i, peerName, startingPoint) ->
-            (startingPoint,)
-                <$> adversaryApplication magic peerName peerPort startingPoint limit
-        )
-        (zip3 [1 .. nConns] (cycle peerNames) (NE.toList startingPoints))
+    -> IO ()
+repeatedAdversaryApplication tracer nConns magic peerNames peerPort startingPoints limit = do
+    let write = traceWith tracer
+    let singleRun (_i, peerName, startingPoint) = do
+            write
+                $ "Starting adversary application against "
+                    <> peerName
+                    <> " from point "
+                    <> show startingPoint
+            result <-
+                (startingPoint,)
+                    <$> adversaryApplication magic peerName peerPort startingPoint limit
+            write
+                $ "Completed adversary application against "
+                    <> peerName
+                    <> " from point "
+                    <> show startingPoint
+                    <> " with result "
+                    <> show result
+    mapConcurrently_
+        singleRun
+        $ zip3 [1 .. nConns] (cycle peerNames) (NE.toList startingPoints)
+    threadDelay 1000000 -- wait for logging to complete

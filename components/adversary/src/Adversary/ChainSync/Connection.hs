@@ -13,7 +13,7 @@ import Adversary.ChainSync.Codec
     , codecChainSync
     )
 import Control.Exception (SomeException)
-import Control.Tracer (Contravariant (contramap), stdoutTracer)
+import Control.Tracer (nullTracer)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.List.NonEmpty qualified as NE
 import Data.Void (Void)
@@ -169,7 +169,7 @@ chainSyncToOuroboros chainSyncApp =
     run = InitiatorProtocolOnly
         $ mkMiniProtocolCbFromPeer
         $ \_ctx ->
-            ( contramap show stdoutTracer -- tracer
+            ( nullTracer
             , codecChainSync
             , ChainSync.chainSyncClientPeer chainSyncApp
             )

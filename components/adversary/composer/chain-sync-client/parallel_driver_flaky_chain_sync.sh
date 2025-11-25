@@ -15,8 +15,8 @@ set +f
 PORT="${PORT:-3001}"
 NETWORKMAGIC="${NETWORKMAGIC:-42}"
 LIMIT="${LIMIT:-100}"
+NCONNS="${NCONNS:-100}"
 
-echo "Checking flaky chain sync among the following nodes"
-printf '%s\n' "${NODES[@]}"
+# echo "Checking flaky chain sync among the following nodes: $(IFS=', '; echo "${NODES[*]}")"
 
-adversary "$NETWORKMAGIC" "$PORT" "$LIMIT" "$CHAINPOINT_FILEPATH" 100 "${NODES[@]}"
+adversary "$NETWORKMAGIC" "$PORT" "$LIMIT" "$CHAINPOINT_FILEPATH" "$NCONNS" "${NODES[@]}"

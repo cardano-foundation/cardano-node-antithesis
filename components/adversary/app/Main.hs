@@ -1,12 +1,4 @@
-{-# OPTIONS_GHC -Wno-missing-export-lists #-}
-
-module Main where
-
-import Adversary (adversary, toString)
-import System.Environment (getArgs)
+import Adversary qualified
 
 main :: IO ()
-main = do
-    args <- getArgs
-    msg <- adversary args
-    putStrLn $ toString msg
+main = Adversary.main
