@@ -3,11 +3,20 @@ module Adversary.SubmitTransactions where
 import Adversary (Message (..), readOrFail, toString)
 import Adversary.ChainSync.Codec (Block, ccfg, version)
 import Adversary.ChainSync.Connection (maximumMiniProtocolLimits, resolve)
+import Codec.CBOR.Decoding (Decoder)
+import Codec.CBOR.Encoding (Encoding)
+import Codec.CBOR.Read (deserialiseFromBytes)
+import Codec.CBOR.Write (toLazyByteString)
 import Codec.Serialise (DeserialiseFailure)
+import Control.Concurrent.Class.MonadSTM.Strict.TVar (StrictTVar, newTVarIO, readTVarIO)
 import Control.Exception (SomeException)
 import Control.Tracer (nullTracer, stdoutTracer)
+import Data.Bifunctor (first)
+import Data.ByteString.Base16.Lazy qualified as Hex
 import Data.ByteString.Lazy (LazyByteString)
+import Data.ByteString.Lazy qualified as LBS
 import Data.Functor.Contravariant (contramap)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Void (Void)
 import Network.Mux qualified as Mx
 import Network.Socket (AddrInfo (..), PortNumber)
@@ -16,8 +25,7 @@ import Ouroboros.Consensus.Cardano (CardanoBlock)
 import Ouroboros.Consensus.Cardano.Block (CardanoEras, StandardCrypto)
 import Ouroboros.Consensus.Cardano.Node ()
 import Ouroboros.Consensus.HardFork.Combinator.Serialisation.SerialiseNodeToNode ()
-import Ouroboros.Consensus.Ledger.SupportsMempool (GenTx, GenTxId)
-import Ouroboros.Network.NodeToNode (txSubmissionMiniProtocolNum)
+import Ouroboros.Consensus.Ledger.SupportsMempool (GenTx, GenTxId, HasTxId (txId))
 import Ouroboros.Consensus.Node.Serialisation (decodeNodeToNode, encodeNodeToNode)
 import Ouroboros.Consensus.Shelley.Eras (ConwayEra)
 import Ouroboros.Consensus.Shelley.Ledger.Mempool ()
@@ -44,21 +52,33 @@ import Ouroboros.Network.NodeToNode
     nodeToNodeHandshakeCodec,
     nullNetworkConnectTracers,
     simpleSingletonVersions,
+    txSubmissionMiniProtocolNum,
   )
 import Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec, noTimeLimitsHandshake)
-import Ouroboros.Network.Protocol.TxSubmission2.Client (TxSubmissionClient (..), txSubmissionClientPeer)
+import Ouroboros.Network.Protocol.TxSubmission2.Client (BlockingReplyList (..), ClientStIdle (..), ClientStTxIds (..), ClientStTxs (..), SingBlockingStyle (..), TxSubmissionClient (..), txSubmissionClientPeer)
 import Ouroboros.Network.Protocol.TxSubmission2.Codec (codecTxSubmission2)
-import Ouroboros.Network.Protocol.TxSubmission2.Type (TxSubmission2)
+import Ouroboros.Network.Protocol.TxSubmission2.Type (SizeInBytes (..), TxSubmission2)
 import Ouroboros.Network.Snocket (makeSocketBearer, socketSnocket)
 import Ouroboros.Network.Socket (ConnectToArgs (..), HandshakeCallbacks (..), connectToNode, debuggingNetworkConnectTracers)
 
 submitTxs :: [String] -> IO Message
 submitTxs = \case
-    args@(magicArg : host : port : txFiles) -> do
-        putStrLn $ toString $ Startup args
-        let magic = NetworkMagic {unNetworkMagic = readOrFail "magic" magicArg}
-        result <- runTxSubmissionApplication magic host (readOrFail "port" port) (const mkTxSubmissionApplication)
-        return $ Completed []
+  args@(magicArg : host : port : txFiles) -> do
+    putStrLn $ toString $ Startup args
+    let magic = NetworkMagic {unNetworkMagic = readOrFail "magic" magicArg}
+    txs <-
+      mapM
+        ( \file -> do
+            content <- LBS.readFile file
+            case Hex.decode content >>= first show . deserialiseFromBytes decodeTx of
+              Left err -> error $ "Failed to deserialise transaction from file " ++ file ++ ": " ++ show err
+              Right tx -> return $ snd tx
+        )
+        txFiles
+        >>= newTVarIO
+    _ <- runTxSubmissionApplication magic host (readOrFail "port" port) (mkTxSubmissionApplication txs)
+    return $ Completed []
+  _ -> pure $ Usage "Usage: submit-txs <magic> <host> <port> <tx-file1> <tx-file2> ..."
 
 type TxSubmissionApplication = TxSubmissionClient TxId Tx IO ()
 
@@ -76,7 +96,7 @@ runTxSubmissionApplication ::
   -- | port
   PortNumber ->
   -- | application
-  (NodeToNodeVersionData -> TxSubmissionApplication) ->
+  TxSubmissionApplication ->
   IO (Either SomeException (Either () Void))
 runTxSubmissionApplication magic peerName peerPort application = withIOManager $ \iocp -> do
   AddrInfo {addrAddress} <- resolve peerName peerPort
@@ -107,15 +127,38 @@ runTxSubmissionApplication magic peerName peerPort application = withIOManager $
               query = False
             }
         )
-        (txSubmissionToOuroboros . application) -- application
+        (const $ txSubmissionToOuroboros application) -- application
     )
     Nothing
     addrAddress
 
 mkTxSubmissionApplication ::
+  StrictTVar IO [Tx] ->
   -- | the chain sync client application
   TxSubmissionApplication
-mkTxSubmissionApplication = TxSubmissionClient $ undefined
+mkTxSubmissionApplication txsVar =
+  TxSubmissionClient $ pure idle
+  where
+    idle =
+      ClientStIdle
+        { recvMsgRequestTxIds = \blocking _numToAck _numToReq -> do
+            txs <- readTVarIO txsVar
+            let txIdsWithSizes =
+                  map
+                    ( \tx ->
+                        ( txId tx,
+                          SizeInBytes (fromIntegral (LBS.length (toLazyByteString $ encodeTx tx)))
+                        )
+                    )
+                    txs
+            case blocking of
+              SingBlocking -> return $ SendMsgReplyTxIds (BlockingReply $ head txIdsWithSizes :| tail txIdsWithSizes) idle
+              SingNonBlocking -> return $ SendMsgReplyTxIds (NonBlockingReply txIdsWithSizes) idle,
+          recvMsgRequestTxs = \reqTxIds -> do
+            txs <- readTVarIO txsVar
+            let requestedTxs = filter (\tx -> txId tx `elem` reqTxIds) txs
+            return $ SendMsgReplyTxs requestedTxs idle
+        }
 
 txSubmissionToOuroboros ::
   -- | chainSync
@@ -151,9 +194,15 @@ txSubmissionToOuroboros txSubmissionapp =
 codecTxSubmission :: Codec (TxSubmission2 TxId Tx) DeserialiseFailure IO LazyByteString
 codecTxSubmission =
   codecTxSubmission2 encodeTxId decodeTxId encodeTx decodeTx
-  where
-    encodeTxId = encodeNodeToNode @Block ccfg version
-    decodeTxId = decodeNodeToNode @Block ccfg version
 
-    encodeTx = encodeNodeToNode @Block ccfg version
-    decodeTx = decodeNodeToNode @Block ccfg version
+encodeTxId :: TxId -> Encoding
+encodeTxId = encodeNodeToNode @Block ccfg version
+
+decodeTxId :: Decoder s TxId
+decodeTxId = decodeNodeToNode @Block ccfg version
+
+encodeTx :: Tx -> Encoding
+encodeTx = encodeNodeToNode @Block ccfg version
+
+decodeTx :: Decoder s Tx
+decodeTx = decodeNodeToNode @Block ccfg version

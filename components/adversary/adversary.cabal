@@ -55,6 +55,7 @@ library
     , cardano-ledger-alonzo
     , cardano-ledger-core
     , cardano-ledger-byron
+    , cborg
     , contra-tracer
     , network
     , network-mux
