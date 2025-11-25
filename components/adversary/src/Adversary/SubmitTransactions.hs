@@ -27,7 +27,7 @@ import Ouroboros.Consensus.Ledger.SupportsMempool (GenTx, GenTxId, HasTxId (txId
 import Ouroboros.Consensus.Node.Serialisation (decodeNodeToNode, encodeNodeToNode)
 import Ouroboros.Consensus.Shelley.Ledger.Mempool ()
 import Ouroboros.Consensus.Shelley.Node.Serialisation ()
-import Ouroboros.Network.Diffusion.Configuration (PeerSharing (PeerSharingDisabled), DiffusionMode (..))
+import Ouroboros.Network.Diffusion.Configuration (DiffusionMode (..), PeerSharing (PeerSharingDisabled))
 import Ouroboros.Network.Handshake.Acceptable (Acceptable (..))
 import Ouroboros.Network.Handshake.Queryable (queryVersion)
 import Ouroboros.Network.IOManager (withIOManager)
@@ -149,7 +149,9 @@ mkTxSubmissionApplication txsVar =
                     txs
             putStrLn $ "Sending " ++ show txIdsWithSizes
             case blocking of
-              SingBlocking -> return $ SendMsgReplyTxIds (BlockingReply $ head txIdsWithSizes :| tail txIdsWithSizes) idle
+              SingBlocking -> case txIdsWithSizes of
+                [] -> return $ SendMsgDone ()
+                (t : ts) -> return $ SendMsgReplyTxIds (BlockingReply $ t :| ts) idle
               SingNonBlocking -> return $ SendMsgReplyTxIds (NonBlockingReply txIdsWithSizes) idle,
           recvMsgRequestTxs = \reqTxIds -> do
             putStrLn $ "Received request for txs ids: " ++ show reqTxIds
