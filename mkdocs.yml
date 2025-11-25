@@ -1,0 +1,34 @@
+site_name: Cardano Node assets for Antithesis
+site_url: https://cardano-foundation.github.io/cardano-node-antithesis/
+repo_url: https://github.com/cardano-foundation/cardano-node-antithesis
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+  features:
+    - navigation.expand
+    - navigation.sections
+    - navigation.indexes
+    - toc.integrate
+    - content.code.copy
+
+plugins:
+  - search
+  - asciinema-player
+
+markdown_extensions:
+  - callouts
+
+nav:
+  - Home: index.md
+  - Components:
+      - Tracer: components/tracer.md
+      - Tracer-sidecar: components/tracer-sidecar.md
+      - Sidecar: components/sidecar.md
+      - Configurator: components/configurator.md
+      - Config: components/config.md
+      - Adversary: components/adversary.md
+  - Testnets:
+      - License: testnets/cardano-node-master.md
+  - Contributing: contributing.md
