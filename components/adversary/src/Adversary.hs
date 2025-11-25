@@ -9,7 +9,8 @@ module Adversary
     , unsafeReadChainPoint
     , ChainPointSamples (..)
     , generatePoints
-    )
+    , readOrFail
+  )
 where
 
 import Adversary.Application (repeatedAdversaryApplication)
