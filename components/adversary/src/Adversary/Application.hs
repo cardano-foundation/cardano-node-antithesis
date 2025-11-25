@@ -24,8 +24,6 @@ import Control.Concurrent.Class.MonadSTM.Strict
     , modifyTVar
     , newTVarIO
     , readTVar
-    , readTVarIO
-    , writeTVar
     )
 import Control.Exception (SomeException, try)
 import Control.Tracer (Tracer, traceWith)
@@ -35,9 +33,11 @@ import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Word (Word32)
 import Network.Socket (PortNumber)
+import Ouroboros.Consensus.Block (headerPoint)
 import Ouroboros.Consensus.Protocol.Praos.Header ()
 import Ouroboros.Consensus.Shelley.Ledger.NetworkProtocolVersion ()
 import Ouroboros.Consensus.Shelley.Ledger.SupportsProtocol ()
+import Ouroboros.Network.Block (getTipPoint)
 import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.Mock.Chain (Chain)
 import Ouroboros.Network.Mock.Chain qualified as Chain
@@ -52,16 +52,9 @@ import Ouroboros.Network.Protocol.ChainSync.Client
     , ClientStNext (..)
     )
 
-data State = State
+newtype State = State
     { chainVar :: StrictTVar IO (Chain Header)
-    , stop :: StrictTVar IO Bool
     }
-
-setStop :: State -> Bool -> IO ()
-setStop state b = atomically $ writeTVar (stop state) b
-
-getStop :: State -> IO Bool
-getStop state = readTVarIO $ stop state
 
 onChainVar :: State -> (Chain Header -> Chain Header) -> IO ()
 onChainVar state f = atomically $ modifyTVar (chainVar state) f
@@ -191,18 +184,31 @@ requestNext
     -> ChainSyncIdle
 requestNext stateVar prev =
     SendMsgRequestNext
-        (setStop stateVar True)
+        (pure ())
         ClientStNext
-            { recvMsgRollForward = \header _tip -> ChainSyncClient $ do
+            { recvMsgRollForward = \header tip -> ChainSyncClient $ do
                 rollForward stateVar header
-                stop <- getStop stateVar
-                choice <- if stop then pure Nothing else onRollForward prev header
+                choice <-
+                    stoppingOnTip
+                        (headerPoint header)
+                        (getTipPoint tip)
+                        $ onRollForward prev header
                 pure $ nothingToDone choice $ requestNext stateVar
             , recvMsgRollBackward = \pIntersect tip -> ChainSyncClient $ do
                 rollBackward stateVar pIntersect
                 choice <- onRollBackward prev pIntersect tip
                 pure $ nothingToDone choice $ requestNext stateVar
             }
+
+stoppingOnTip
+    :: Ord a
+    => a
+    -> a
+    -> StepProtocol
+    -> StepProtocol
+stoppingOnTip h t stepProtocol
+    | h >= t = pure Nothing
+    | otherwise = stepProtocol
 
 -- | Run an adversary application that connects to a node and syncs
 -- blocks starting from the given point, up to the given limit.
@@ -220,8 +226,7 @@ adversaryApplication
     -> IO (Either SomeException (Chain.Point Header))
 adversaryApplication magic peerName peerPort startingPoint limit = do
     chainVar <- newTVarIO (Chain.Genesis :: Chain Header)
-    stopVar <- newTVarIO False
-    let stateVar = State{chainVar, stop = stopVar}
+    let stateVar = State{chainVar}
     res <-
         -- To gracefully handle the node getting killed it seems we need
         -- the outer 'try', even if connectToNode already returns 'Either
