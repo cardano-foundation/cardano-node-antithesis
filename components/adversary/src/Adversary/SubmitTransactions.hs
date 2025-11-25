@@ -3,6 +3,9 @@ module Adversary.SubmitTransactions where
 import Adversary (Message (..), readOrFail, toString)
 import Adversary.ChainSync.Codec (Block, ccfg, version)
 import Adversary.ChainSync.Connection (maximumMiniProtocolLimits, resolve)
+import Cardano.Ledger.Alonzo.Tx ()
+import Cardano.Ledger.Binary (decCBOR, decodeFull, decodeFullAnnotator)
+import Cardano.Ledger.Core (eraProtVerHigh)
 import Codec.CBOR.Decoding (Decoder)
 import Codec.CBOR.Encoding (Encoding)
 import Codec.CBOR.Read (deserialiseFromBytes)
@@ -11,7 +14,7 @@ import Codec.Serialise (DeserialiseFailure)
 import Control.Concurrent.Class.MonadSTM.Strict.TVar (StrictTVar, newTVarIO, readTVarIO)
 import Control.Exception (SomeException)
 import Control.Tracer (stdoutTracer)
-import Data.Bifunctor (first)
+import Data.Bifunctor (first, Bifunctor (bimap))
 import Data.ByteString.Base16.Lazy qualified as Hex
 import Data.ByteString.Lazy (LazyByteString)
 import Data.ByteString.Lazy qualified as LBS
@@ -25,7 +28,8 @@ import Ouroboros.Consensus.Cardano.Node ()
 import Ouroboros.Consensus.HardFork.Combinator.Serialisation.SerialiseNodeToNode ()
 import Ouroboros.Consensus.Ledger.SupportsMempool (GenTx, GenTxId, HasTxId (txId))
 import Ouroboros.Consensus.Node.Serialisation (decodeNodeToNode, encodeNodeToNode)
-import Ouroboros.Consensus.Shelley.Ledger.Mempool ()
+import Ouroboros.Consensus.Shelley.Eras (ConwayEra)
+import Ouroboros.Consensus.Shelley.Ledger.Mempool (mkShelleyTx)
 import Ouroboros.Consensus.Shelley.Node.Serialisation ()
 import Ouroboros.Network.Diffusion.Configuration (DiffusionMode (..), PeerSharing (PeerSharingDisabled))
 import Ouroboros.Network.Handshake.Acceptable (Acceptable (..))
@@ -55,6 +59,7 @@ import Ouroboros.Network.Protocol.TxSubmission2.Codec (codecTxSubmission2)
 import Ouroboros.Network.Protocol.TxSubmission2.Type (SizeInBytes (..), TxSubmission2)
 import Ouroboros.Network.Snocket (makeSocketBearer, socketSnocket)
 import Ouroboros.Network.Socket (ConnectToArgs (..), HandshakeCallbacks (..), connectToNode, debuggingNetworkConnectTracers)
+import Ouroboros.Consensus.Cardano.Block (GenTx(GenTxConway))
 
 submitTxs :: [String] -> IO Message
 submitTxs = \case
@@ -65,15 +70,17 @@ submitTxs = \case
       mapM
         ( \file -> do
             content <- LBS.readFile file
-            case Hex.decode content >>= first show . deserialiseFromBytes decodeTx of
+            case Hex.decode content >>= bimap show (GenTxConway . mkShelleyTx @ConwayEra) . decodeTx of
               Left err -> error $ "Failed to deserialise transaction from file " ++ file ++ ": " ++ show err
-              Right tx -> return $ snd tx
+              Right tx -> return tx
         )
         hexEncodedTxFiles
         >>= newTVarIO
     _ <- runTxSubmissionApplication magic host (readOrFail "port" port) (mkTxSubmissionApplication txs)
     return $ Completed []
   _ -> pure $ Usage "Usage: submit-txs <magic> <host> <port> <tx-file1> <tx-file2> ..."
+  where
+    decodeTx = decodeFull (eraProtVerHigh @ConwayEra)
 
 type TxSubmissionApplication = TxSubmissionClient TxId Tx IO ()
 
