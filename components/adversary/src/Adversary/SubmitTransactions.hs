@@ -1,35 +1,46 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module Adversary.SubmitTransactions where
 
 import Adversary (Message (..), readOrFail, toString)
 import Adversary.ChainSync.Codec (Block, ccfg, version)
 import Adversary.ChainSync.Connection (maximumMiniProtocolLimits, resolve)
+import Cardano.Crypto.Hash (Blake2b_256, hashWith)
 import Cardano.Ledger.Alonzo.Tx ()
-import Cardano.Ledger.Binary (decCBOR, decodeFull, decodeFullAnnotator)
+import Cardano.Ledger.Binary (decodeFull)
+import Cardano.Ledger.Binary.Plain (Term (TList))
 import Cardano.Ledger.Core (eraProtVerHigh)
-import Codec.CBOR.Decoding (Decoder)
-import Codec.CBOR.Encoding (Encoding)
+import Cardano.Ledger.Hashes (unsafeMakeSafeHash)
+import Cardano.Ledger.TxIn qualified as Ledger
+import Codec.CBOR.Decoding (Decoder, decodeBytes)
+import Codec.CBOR.Encoding (Encoding, encodePreEncoded)
 import Codec.CBOR.Read (deserialiseFromBytes)
+import Codec.CBOR.Term (decodeTerm, encodeTerm)
 import Codec.CBOR.Write (toLazyByteString)
 import Codec.Serialise (DeserialiseFailure)
-import Control.Concurrent.Class.MonadSTM.Strict.TVar (StrictTVar, newTVarIO, readTVarIO)
+import Control.Concurrent.Class.MonadSTM.Strict (atomically)
+import Control.Concurrent.Class.MonadSTM.Strict.TVar (StrictTVar, modifyTVar, newTVarIO, readTVar, readTVarIO)
 import Control.Exception (SomeException)
 import Control.Tracer (stdoutTracer)
-import Data.Bifunctor (first, Bifunctor (bimap))
+import Data.Bifunctor (Bifunctor (bimap))
 import Data.ByteString.Base16.Lazy qualified as Hex
 import Data.ByteString.Lazy (LazyByteString)
 import Data.ByteString.Lazy qualified as LBS
+import Data.Coerce (coerce)
+import Data.Function ((&))
 import Data.Functor.Contravariant (contramap)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Void (Void)
 import Network.Mux qualified as Mx
 import Network.Socket (AddrInfo (..), PortNumber)
 import Network.TypedProtocol.Codec (Codec)
+import Ouroboros.Consensus.Cardano.Block (GenTx (GenTxConway), TxId (GenTxIdConway))
 import Ouroboros.Consensus.Cardano.Node ()
 import Ouroboros.Consensus.HardFork.Combinator.Serialisation.SerialiseNodeToNode ()
-import Ouroboros.Consensus.Ledger.SupportsMempool (GenTx, GenTxId, HasTxId (txId))
+import Ouroboros.Consensus.Ledger.SupportsMempool (GenTxId, HasTxId (txId))
 import Ouroboros.Consensus.Node.Serialisation (decodeNodeToNode, encodeNodeToNode)
 import Ouroboros.Consensus.Shelley.Eras (ConwayEra)
-import Ouroboros.Consensus.Shelley.Ledger.Mempool (mkShelleyTx)
+import Ouroboros.Consensus.Shelley.Ledger.Mempool (TxId (ShelleyTxId), mkShelleyTx)
 import Ouroboros.Consensus.Shelley.Node.Serialisation ()
 import Ouroboros.Network.Diffusion.Configuration (DiffusionMode (..), PeerSharing (PeerSharingDisabled))
 import Ouroboros.Network.Handshake.Acceptable (Acceptable (..))
@@ -45,8 +56,7 @@ import Ouroboros.Network.Mux
     mkMiniProtocolCbFromPeer,
   )
 import Ouroboros.Network.NodeToNode
-  ( DiffusionMode (InitiatorOnlyDiffusionMode),
-    NodeToNodeVersion (NodeToNodeV_14),
+  ( NodeToNodeVersion (NodeToNodeV_14),
     NodeToNodeVersionData (..),
     nodeToNodeCodecCBORTerm,
     nodeToNodeHandshakeCodec,
@@ -54,12 +64,20 @@ import Ouroboros.Network.NodeToNode
     txSubmissionMiniProtocolNum,
   )
 import Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec, noTimeLimitsHandshake)
-import Ouroboros.Network.Protocol.TxSubmission2.Client (BlockingReplyList (..), ClientStIdle (..), ClientStTxIds (..), ClientStTxs (..), SingBlockingStyle (..), TxSubmissionClient (..), txSubmissionClientPeer)
+import Ouroboros.Network.Protocol.TxSubmission2.Client
+  ( BlockingReplyList (..),
+    ClientStIdle (..),
+    ClientStTxIds (..),
+    ClientStTxs (..),
+    SingBlockingStyle (..),
+    TxSubmissionClient (..),
+    txSubmissionClientPeer,
+  )
 import Ouroboros.Network.Protocol.TxSubmission2.Codec (codecTxSubmission2)
 import Ouroboros.Network.Protocol.TxSubmission2.Type (SizeInBytes (..), TxSubmission2)
 import Ouroboros.Network.Snocket (makeSocketBearer, socketSnocket)
 import Ouroboros.Network.Socket (ConnectToArgs (..), HandshakeCallbacks (..), connectToNode, debuggingNetworkConnectTracers)
-import Ouroboros.Consensus.Cardano.Block (GenTx(GenTxConway))
+import Ouroboros.Network.Util.ShowProxy (ShowProxy)
 
 submitTxs :: [String] -> IO Message
 submitTxs = \case
@@ -70,21 +88,51 @@ submitTxs = \case
       mapM
         ( \file -> do
             content <- LBS.readFile file
-            case Hex.decode content >>= bimap show (GenTxConway . mkShelleyTx @ConwayEra) . decodeTx of
+            case Hex.decode content of
               Left err -> error $ "Failed to deserialise transaction from file " ++ file ++ ": " ++ show err
-              Right tx -> return tx
+              Right tx -> case mkTxId tx of
+                Left err -> error $ "Failed to compute transaction id from file " ++ file ++ ": " ++ show err
+                Right txid -> return (txid, tx)
         )
         hexEncodedTxFiles
         >>= newTVarIO
     _ <- runTxSubmissionApplication magic host (readOrFail "port" port) (mkTxSubmissionApplication txs)
     return $ Completed []
   _ -> pure $ Usage "Usage: submit-txs <magic> <host> <port> <tx-file1> <tx-file2> ..."
+
+fromHex :: LBS.ByteString -> LBS.ByteString
+fromHex = either (error . ("Failed to decode hex: " ++)) id . Hex.decode
+
+getTxId :: Tx -> TxId'
+getTxId = txId
+
+mkTxId :: LBS.ByteString -> Either String TxId'
+mkTxId txBytes =
+  deserialiseFromBytes dec txBytes
+    & bimap (("Failed to decode transaction for tx id: " ++) . show) snd
   where
-    decodeTx = decodeFull (eraProtVerHigh @ConwayEra)
+    dec :: forall s. Decoder s TxId'
+    dec =
+      decodeTerm >>= \case
+        TList (body : _) -> do
+          let bodyBytes = toLazyByteString (encodeTerm body)
+          pure $
+            GenTxIdConway $
+              ShelleyTxId $
+                Ledger.TxId $
+                  unsafeMakeSafeHash $
+                    coerce $
+                      hashWith @Blake2b_256 id (LBS.toStrict bodyBytes)
+        _ -> fail "Expected a 'list' term for transaction"
 
-type TxSubmissionApplication = TxSubmissionClient TxId Tx IO ()
+mkGenTx :: LBS.ByteString -> Either String Tx
+mkGenTx txBytes = bimap show (GenTxConway . mkShelleyTx @ConwayEra) $ decode txBytes
+  where
+    decode = decodeFull (eraProtVerHigh @ConwayEra)
 
-type TxId = GenTxId Block
+type TxSubmissionApplication = TxSubmissionClient TxId' LazyByteString IO ()
+
+type TxId' = GenTxId Block
 
 type Tx = GenTx Block
 
@@ -135,7 +183,7 @@ runTxSubmissionApplication magic peerName peerPort application = withIOManager $
     addrAddress
 
 mkTxSubmissionApplication ::
-  StrictTVar IO [Tx] ->
+  StrictTVar IO [(TxId', LazyByteString)] ->
   -- | the chain sync client application
   TxSubmissionApplication
 mkTxSubmissionApplication txsVar =
@@ -143,27 +191,40 @@ mkTxSubmissionApplication txsVar =
   where
     idle =
       ClientStIdle
-        { recvMsgRequestTxIds = \blocking _numToAck _numToReq -> do
-            putStrLn $ "Received request for tx ids: " ++ show blocking
-            txs <- readTVarIO txsVar
-            let txIdsWithSizes =
-                  map
-                    ( \tx ->
-                        ( txId tx,
-                          SizeInBytes (fromIntegral (LBS.length (toLazyByteString $ encodeTx tx)))
-                        )
-                    )
-                    txs
-            putStrLn $ "Sending " ++ show txIdsWithSizes
+        { recvMsgRequestTxIds = \blocking numToAck numToReq -> do
+            putStrLn $
+              "Received request for tx ids: "
+                ++ show blocking
+                ++ "(ack: "
+                ++ show numToAck
+                ++ ", req: "
+                ++ show numToReq
+                ++ ")"
+            txIds <- atomically $ do
+              txs <- readTVar txsVar
+              let toSend =
+                    drop (fromIntegral numToAck) txs
+                      & take (fromIntegral numToReq)
+              let txIdsWithSizes =
+                    map
+                      ( \(tid, tx) ->
+                          ( tid,
+                            SizeInBytes (fromIntegral (LBS.length tx))
+                          )
+                      )
+                      toSend
+              modifyTVar txsVar (drop (fromIntegral numToAck))
+              return txIdsWithSizes
+            putStrLn $ "Sending " ++ show txIds
             case blocking of
-              SingBlocking -> case txIdsWithSizes of
+              SingBlocking -> case txIds of
                 [] -> return $ SendMsgDone ()
                 (t : ts) -> return $ SendMsgReplyTxIds (BlockingReply $ t :| ts) idle
-              SingNonBlocking -> return $ SendMsgReplyTxIds (NonBlockingReply txIdsWithSizes) idle,
+              SingNonBlocking -> return $ SendMsgReplyTxIds (NonBlockingReply txIds) idle,
           recvMsgRequestTxs = \reqTxIds -> do
             putStrLn $ "Received request for txs ids: " ++ show reqTxIds
             txs <- readTVarIO txsVar
-            let requestedTxs = filter (\tx -> txId tx `elem` reqTxIds) txs
+            let requestedTxs = map snd $ filter (\(tid, _) -> tid `elem` reqTxIds) txs
             putStrLn $ "Sending " ++ show (length requestedTxs) ++ " requested txs"
             return $ SendMsgReplyTxs requestedTxs idle
         }
@@ -199,18 +260,14 @@ txSubmissionToOuroboros txSubmissionapp =
               txSubmissionClientPeer txSubmissionapp
             )
 
-codecTxSubmission :: Codec (TxSubmission2 TxId Tx) DeserialiseFailure IO LazyByteString
-codecTxSubmission =
-  codecTxSubmission2 encodeTxId decodeTxId encodeTx decodeTx
+instance ShowProxy LBS.ByteString
 
-encodeTxId :: TxId -> Encoding
+codecTxSubmission :: Codec (TxSubmission2 TxId' LazyByteString) DeserialiseFailure IO LazyByteString
+codecTxSubmission =
+  codecTxSubmission2 encodeTxId decodeTxId (encodePreEncoded . LBS.toStrict) (fmap LBS.fromStrict decodeBytes)
+
+encodeTxId :: TxId' -> Encoding
 encodeTxId = encodeNodeToNode @Block ccfg version
 
-decodeTxId :: Decoder s TxId
+decodeTxId :: Decoder s TxId'
 decodeTxId = decodeNodeToNode @Block ccfg version
-
-encodeTx :: Tx -> Encoding
-encodeTx = encodeNodeToNode @Block ccfg version
-
-decodeTx :: Decoder s Tx
-decodeTx = decodeNodeToNode @Block ccfg version

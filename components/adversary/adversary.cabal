@@ -47,32 +47,33 @@ library
   import:          settings
   hs-source-dirs:  src
   build-depends:
-    , aeson
-    , async
-    , base
-    , base16-bytestring
-    , bytestring
-    , cardano-ledger-alonzo
-    , cardano-ledger-binary
-    , cardano-ledger-core
-    , cardano-ledger-byron
-    , cborg
-    , contra-tracer
-    , network
-    , network-mux
-    , ouroboros-consensus
-    , ouroboros-consensus-cardano   ^>=0.25
-    , ouroboros-consensus-protocol
-    , ouroboros-network
-    , ouroboros-network-api
-    , ouroboros-network-framework
-    , ouroboros-network-mock
-    , ouroboros-network-protocols
-    , random
-    , serialise
-    , strict-stm
-    , text
-    , typed-protocols
+                  aeson
+                , async
+                , base
+                , base16-bytestring
+                , bytestring
+                , cardano-crypto-class
+                , cardano-ledger-alonzo
+                , cardano-ledger-binary
+                , cardano-ledger-byron
+                , cardano-ledger-core
+                , cborg
+                , contra-tracer
+                , network
+                , network-mux
+                , ouroboros-consensus
+                , ouroboros-consensus-cardano   ^>=0.25
+                , ouroboros-consensus-protocol
+                , ouroboros-network
+                , ouroboros-network-api
+                , ouroboros-network-framework
+                , ouroboros-network-mock
+                , ouroboros-network-protocols
+                , random
+                , serialise
+                , strict-stm
+                , text
+                , typed-protocols
 
   exposed-modules:
     Adversary
@@ -100,13 +101,15 @@ test-suite adversary-test
   hs-source-dirs:     test
   main-is:            Main.hs
   build-depends:
-    , adversary
-    , aeson
-    , base
-    , hspec
-    , QuickCheck
-    , random
+                  QuickCheck
+                , adversary
+                , aeson
+                , base
+                , bytestring
+                , hspec
+                , random
 
   build-tool-depends: hspec-discover:hspec-discover
   other-modules:
     Adversary.RunSpec
+    Adversary.SubmitTransactionsSpec
