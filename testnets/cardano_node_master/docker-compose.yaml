@@ -14,11 +14,10 @@ x-cardano-node: &cardano-node
       --port 3001
       --host-addr 0.0.0.0
       +RTS -N -A16m -qg -qb -RTS
-  restart:
-    always
+  restart: always
   depends_on:
-      configurator:
-        condition: service_completed_successfully
+    configurator:
+      condition: service_completed_successfully
 
 services:
   configurator:
@@ -42,10 +41,9 @@ services:
       - ./tracer-config.yaml:/tracer-config.yaml:ro
     entrypoint: cardano-tracer
     command:
-       - "--config"
-       - "/tracer-config.yaml"
-    restart:
-      always
+      - "--config"
+      - "/tracer-config.yaml"
+    restart: always
 
   p1:
     <<: *cardano-node
@@ -100,10 +98,9 @@ services:
     depends_on:
       tracer-sidecar:
         condition: service_started
-    restart:
-      always
+    restart: always
     tmpfs:
-      - /tmp:size=100m,uid=1000,gid=1000   # adjust size as needed
+      - /tmp
 
   tracer-sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:d401b28
@@ -116,9 +113,7 @@ services:
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     volumes:
       - tracer:/opt/cardano-tracer
-    restart:
-      always
-
+    restart: always
 
 volumes:
   tracer:
