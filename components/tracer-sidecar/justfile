@@ -31,3 +31,11 @@ CI:
   just hlint
   just build
   just test
+
+load-docker-image:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nix build .#docker-image
+    docker load < result
+    version=$(nix eval --raw .#version)
+    echo "image tag: "$version
