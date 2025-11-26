@@ -18,6 +18,8 @@ x-cardano-node: &cardano-node
   depends_on:
     configurator:
       condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
 
 services:
   configurator:
@@ -114,6 +116,9 @@ services:
     volumes:
       - tracer:/opt/cardano-tracer
     restart: always
+    depends_on:
+      tracer:
+        condition: service_started
 
 volumes:
   tracer:

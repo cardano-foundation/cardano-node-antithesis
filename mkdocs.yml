@@ -7,11 +7,10 @@ theme:
   palette:
     scheme: slate
   features:
-    - navigation.expand
-    - navigation.sections
     - navigation.indexes
     - toc.integrate
     - content.code.copy
+    - navigation.path
 
 plugins:
   - search
@@ -30,5 +29,6 @@ nav:
       - Config: components/config.md
       - Adversary: components/adversary.md
   - Testnets:
+      - testnets/index.md
       - Cardano Node Master: testnets/cardano-node-master.md
   - Contributing: contributing.md
