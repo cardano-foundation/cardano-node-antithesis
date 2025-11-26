@@ -1,5 +1,5 @@
 {
-  description = "tracer-sidecar";
+  description = "tracer-sidecar docker image for Cardano node test assets";
   nixConfig = {
     extra-substituters = [ "https://cache.iog.io" ];
     extra-trusted-public-keys =
@@ -10,42 +10,37 @@
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-utils.url = "github:hamishmack/flake-utils/hkm/nested-hydraJobs";
-
   };
 
-  outputs = inputs@{ self, nixpkgs, flake-utils, haskellNix, ... }:
+  outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, ... }:
     let
-      lib = nixpkgs.lib;
       version = self.dirtyShortRev or self.shortRev;
-
-      perSystem = system:
+      parts = flake-parts.lib.mkFlake { inherit inputs; } {
+        systems = [ "x86_64-linux" "aarch64-darwin" ];
+        perSystem = { system, ... }:
         let
           pkgs = import nixpkgs {
-            overlays = [
-              haskellNix.overlay # some functions
-            ];
+            overlays = [ haskellNix.overlay ];
             inherit system;
           };
-          project = import ./nix/project.nix {
+          project = pkgs.callPackage ./nix/project.nix {
             indexState = "2025-08-07T00:00:00Z";
-            inherit pkgs;
           };
-          docker-image =
-            import ./nix/docker-image.nix { inherit pkgs project version; };
-          docker.packages = { inherit docker-image; };
-          info.packages = { inherit version; };
-          fullPackages = lib.mergeAttrsList [
-            project.packages
-            info.packages
-            docker.packages
-          ];
-        in {
-
-          packages = fullPackages // {
-            default = project.packages.tracer-sidecar;
+          docker-image = pkgs.callPackage ./nix/docker-image.nix {
+            inherit project version;
+          };
+        in rec {
+          packages = {
+            inherit (project.packages) tracer-sidecar;
+            inherit docker-image;
+            default = packages.tracer-sidecar;
           };
           inherit (project) devShells;
-        };
+         };
+      };
+    in {
+      inherit (parts) packages devShells;
+      inherit version;
+    };
 
-    in flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-darwin" ] perSystem;
 }
