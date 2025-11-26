@@ -1,10 +1,10 @@
-build:
+load-docker-image:
     #!/usr/bin/env bash
     set -euo pipefail
-    nix build
+    nix build .#docker-image
     docker load < result
     version=$(nix eval --raw .#version)
-    echo $version
+    echo "image tag: "$version
 
 format:
     #!/usr/bin/env bash
