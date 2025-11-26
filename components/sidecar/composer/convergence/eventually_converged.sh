@@ -15,8 +15,7 @@ set +f
 PORT="${PORT:-3001}"
 
 
-echo "Checking for convergence among the following nodes"
-printf '%s\n' "${NODES[@]}"
+# echo "Checking for convergence among the following nodes: $(IFS=', '; echo "${NODES[*]}")"
 
 verify_environment_variables() {
     if [ -z "${POOLS}" ]; then
@@ -33,7 +32,8 @@ validate_block_hash() {
     # Fetch hashes in parallel
     for i in "${NODES[@]}"; do
         (
-            timeout 10 cardano-cli ping -j --magic 42 --host "${i}.example" --port "${PORT}" --tip --quiet -c1 | jq -r '.tip[0].hash + " " + (.tip[0].blockNo|tostring) + " " + (.tip[0].slotNo|tostring)' >"$temp_dir/hash_${i}"
+            timeout 10 cardano-cli ping -j --magic 42 --host "${i}.example" --port "${PORT}" --tip --quiet -c1 \
+                | jq -r '.tip[0].hash + " " + (.tip[0].blockNo|tostring) + " " + (.tip[0].slotNo|tostring)' >"$temp_dir/hash_${i}"
         )2>/dev/null &
         # store background process pid and corresponding node being checked
         pids+=("$i $!")

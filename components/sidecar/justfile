@@ -1,0 +1,13 @@
+build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nix build
+    docker load < result
+    version=$(nix eval --raw .#version)
+    echo $version
+
+format:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nixfmt *.nix
+    nixfmt nix/*.nix

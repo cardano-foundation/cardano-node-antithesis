@@ -86,13 +86,24 @@ services:
       - tracer:/tracer
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:aa43ea4
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:a173a90-dirty
+    environment:
+      NETWORKMAGIC: 42
+      PORT: 3001
+      LIMIT: 100
+      POOLS: "5"
+      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     container_name: sidecar
     hostname: sidecar.example
-    environment:
-      POOLS: "5" # FIXME: could remove
+    volumes:
+      - tracer:/opt/cardano-tracer # to read chain points
+    depends_on:
+      tracer-sidecar:
+        condition: service_started
     restart:
       always
+    tmpfs:
+      - /tmp:size=100m,uid=1000,gid=1000   # adjust size as needed
 
   tracer-sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:d401b28
@@ -108,21 +119,6 @@ services:
     restart:
       always
 
-  adversary:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:c33ed0e
-    environment:
-      NETWORKMAGIC: 42
-      PORT: 3001
-      LIMIT: 100
-      POOLS: "5"
-      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
-    hostname: adversary
-    container_name: adversary
-    volumes:
-      - tracer:/opt/cardano-tracer # to read chain points
-    depends_on:
-      tracer-sidecar:
-        condition: service_started
 
 volumes:
   tracer:
