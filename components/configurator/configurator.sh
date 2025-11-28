@@ -23,7 +23,7 @@ config_genesis_shelley_json() {
     FAUCET_KEY_HASH=$(cat $1/keys/faucet.hash)
 
     # configure faucet with 1M ADA
-    jq ".initialFunds[\"60${FAUCET_KEY_HASH}\"] = 1000000000000" "${CONFIG_JSON}" | write_file "${CONFIG_JSON}"
+    jq ".initialFunds[\"60${FAUCET_KEY_HASH}\"] = 10000000000000" "${CONFIG_JSON}" | write_file "${CONFIG_JSON}"
 }
 
 
