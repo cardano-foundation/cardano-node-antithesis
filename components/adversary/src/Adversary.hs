@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Adversary
-    ( main
+    ( adversary
     , Message (..)
     , toString
     , readChainPoint
@@ -35,7 +35,6 @@ import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import Ouroboros.Network.Point (WithOrigin (..))
 import Ouroboros.Network.Point qualified as Point
-import System.Environment (getArgs)
 import System.Random (StdGen, newStdGen, randomR)
 import Text.Read (readMaybe)
 
@@ -64,9 +63,8 @@ readOrFail msg s =
     (error (msg <> " failed to read from " <> s))
     (readMaybe s)
 
-main :: IO ()
-main = do
-    args <- getArgs
+adversary :: [String] -> IO Message
+adversary args =
     case args of
         ( magicArg : port : limitArg : chainPointsFilePath : nConnectionsArg
                 : hosts
@@ -86,7 +84,7 @@ main = do
                     (readOrFail "port" port)
                     startPoints
                     (readOrFail "limit" limitArg)
-                putStrLn $ toString Completed
+                pure Completed
         _ ->
             error
                 "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
