@@ -1,5 +1,28 @@
-x-cardano-node: &cardano-node
-  image: ghcr.io/intersectmbo/cardano-node:latest
+x-cardano-node-3: &cardano-node-3
+  image: ghcr.io/intersectmbo/cardano-node:10.5.3
+  environment:
+    CARDANO_BLOCK_PRODUCER: true
+  command: >
+    run --topology /configs/configs/topology.json
+      --config /configs/configs/config.json
+      --database-path /state
+      --socket-path /state/node.socket
+      --tracer-socket-path-connect /tracer/tracer.socket
+      --shelley-operational-certificate /configs/keys/opcert.cert
+      --shelley-kes-key /configs/keys/kes.skey
+      --shelley-vrf-key /configs/keys/vrf.skey
+      --port 3001
+      --host-addr 0.0.0.0
+      +RTS -N -A16m -qg -qb -RTS
+  restart: always
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
+
+x-cardano-node-1: &cardano-node-1
+  image: ghcr.io/intersectmbo/cardano-node:10.5.1
   environment:
     CARDANO_BLOCK_PRODUCER: true
   command: >
@@ -23,7 +46,7 @@ x-cardano-node: &cardano-node
 
 services:
   configurator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:aa43ea4
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:latest
     container_name: configurator
     volumes:
       - ./testnet.yaml:/testnet.yaml #  source of configurations
@@ -48,21 +71,22 @@ services:
     restart: always
 
   p1:
-    <<: *cardano-node
+    <<: *cardano-node-1
     container_name: p1
     hostname: p1.example
     volumes:
       - p1-configs:/configs:ro
+      - p1-state:/state
       - tracer:/tracer
   p2:
-    <<: *cardano-node
+    <<: *cardano-node-1
     container_name: p2
     hostname: p2.example
     volumes:
       - p2-configs:/configs:ro
       - tracer:/tracer
   p3:
-    <<: *cardano-node
+    <<: *cardano-node-1
     container_name: p3
     hostname: p3.example
     volumes:
@@ -70,7 +94,7 @@ services:
       - tracer:/tracer
 
   p4:
-    <<: *cardano-node
+    <<: *cardano-node-3
     container_name: p4
     hostname: p4.example
     volumes:
@@ -78,7 +102,7 @@ services:
       - tracer:/tracer
 
   p5:
-    <<: *cardano-node
+    <<: *cardano-node-3
     container_name: p5
     hostname: p5.example
     volumes:
@@ -128,6 +152,7 @@ volumes:
   p3-configs:
   p4-configs:
   p5-configs:
+  p1-state:
 
 networks:
   default:
