@@ -48,6 +48,9 @@ RUN ldconfig
 # Copy binaries from build stage
 COPY --from=build --chown=root:root /usr/local/bin/adversary /usr/local/bin/adversary
 
+# Copy cardano-cli
+COPY --from=ghcr.io/intersectmbo/cardano-node:10.5.1 --chown=root:root /usr/local/bin/cardano-cli /usr/local/bin/cardano-cli
+
 # Create cardano group and user
 RUN groupadd --gid 10000 cardano && \
     useradd --comment 'cardano' --create-home --gid 10000 --password '!' --shell '/bin/bash' --uid 10000 cardano
@@ -55,6 +58,8 @@ RUN groupadd --gid 10000 cardano && \
 # Copy Antithesis scripts
 COPY composer /opt/antithesis/test/v1/
 RUN chmod 0755 /opt/antithesis/test/v1/*/*
+
+COPY generate-delegate-tx.sh .
 
 COPY sleep.sh .
 RUN chmod 0755 ./sleep.sh
