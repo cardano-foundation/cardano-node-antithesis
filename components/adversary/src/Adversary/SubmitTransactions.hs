@@ -89,7 +89,7 @@ submitTxs = \case
         ( \file -> do
             content <- LBS.readFile file
             case Hex.decode content of
-              Left err -> error $ "Failed to deserialise transaction from file " ++ file ++ ": " ++ show err
+              Left err -> error $ "Failed to deserialise transaction from file " ++ file ++ ": " ++ show err ++ "\n" ++ " " ++ show content
               Right tx -> case mkTxId tx of
                 Left err -> error $ "Failed to compute transaction id from file " ++ file ++ ": " ++ show err
                 Right txid -> return (txid, tx)

@@ -56,6 +56,13 @@ services:
       - p4-configs:/configs/4 # configs for p4
       - p5-configs:/configs/5 # configs for p5
 
+  adversary:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:latest
+    container_name: adversary
+    volumes:
+      - p1-configs:/configs
+      - p1-state:/state
+
   tracer:
     image: ghcr.io/intersectmbo/cardano-tracer:10.6.0
 
