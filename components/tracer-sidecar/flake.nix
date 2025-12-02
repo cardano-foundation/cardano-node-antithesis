@@ -31,7 +31,7 @@
           };
         in rec {
           packages = {
-            inherit (project.packages) tracer-sidecar;
+            inherit (project.packages) tracer-sidecar tracer-sidecar-tests;
             inherit docker-image;
             default = packages.tracer-sidecar;
           };
