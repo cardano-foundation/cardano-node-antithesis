@@ -142,7 +142,6 @@ find /tmp/testnet -type f -name 'topology.json' -exec rm -f '{}' ';'
 
 mkdir -p /configs
 cp -r /tmp/testnet/pools/* /configs
-cp -r /tmp/testnet/utxos/* /configs
 
 echo "removing /configs/keys"; rm -rf /configs/keys
 
@@ -155,4 +154,5 @@ for pool in $pools; do
   pool_ix=$(echo "$pool" | awk -F '/' '{print $3}')
   config_topology_json "$pool_ix" "$number_of_pools"
   set_start_time "$pool"
+  cp -r /tmp/testnet/utxos/* /configs/$pool_ix
 done
