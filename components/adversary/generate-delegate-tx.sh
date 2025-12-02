@@ -11,6 +11,7 @@ SOCKET_PATH=${SOCKET_PATH:-state/node.socket}
 function get-utxo {
     local index=$1
     local addr=$(cat $2)
+    local txid=$3
 
     timeout=30
     utxo=null
@@ -18,6 +19,12 @@ function get-utxo {
         sleep 5
         timeout=$(( timeout - 1 ))
         utxo=$(cardano-cli query utxo --address $addr --testnet-magic $TESTNET_MAGIC --socket-path $SOCKET_PATH | jq -r "keys[$index]")
+
+        if echo "$utxo" | grep "$txid" > /dev/null 2>&1 ; then
+            [ $utxo == "null" ] || break
+        else
+            utxo=null
+        fi
     done
 
     [ $timeout -ne 0 ] || { echo "no utxo found for $addr, waiting" ; exit 1 ; }
@@ -74,9 +81,9 @@ cardano-cli latest transaction build --tx-in "$(get-utxo 0 alice.full.addr)" \
             --change-address $(cat alice.full.addr) \
             --socket-path $SOCKET_PATH --out-file tx.delegate.raw --testnet-magic $TESTNET_MAGIC
 cardano-cli latest transaction sign --signing-key-file alice.sk --signing-key-file alice.stake.sk --tx-file tx.delegate.raw --out-file tx.delegate.signed
-cardano-cli latest transaction submit --tx-file tx.delegate.signed --socket-path $SOCKET_PATH --testnet-magic $TESTNET_MAGIC
+TXID=$(cardano-cli latest transaction submit --tx-file tx.delegate.signed --socket-path $SOCKET_PATH --testnet-magic $TESTNET_MAGIC | grep txHash | jq .txHash)
 
-echo "Submitted valid delegation transaction for Alice to $STAKE_POOL_ID"
+echo "Submitted valid delegation transaction $TXID for Alice to $STAKE_POOL_ID"
 
 # delegate to another spo
 STAKE_POOL_ID=$(cardano-cli latest query stake-snapshot --testnet-magic $TESTNET_MAGIC --socket-path $SOCKET_PATH --all-stake-pools | jq -r '.pools | keys | .[1]')
@@ -88,21 +95,8 @@ cardano-cli latest stake-address stake-delegation-certificate \
 echo "Generate delegation certificate to $STAKE_POOL_ID"
 
 # build raw delegation transaction
-cardano-cli latest transaction build --tx-in "$(get-utxo 0 alice.full.addr)" \
+cardano-cli latest transaction build --tx-in "$(get-utxo 0 alice.full.addr $TXID)" \
             --witness-override 2 \
             --certificate-file alice.delegation.cert \
             --change-address $(cat alice.full.addr) \
             --socket-path $SOCKET_PATH --out-file tx.delegate.raw --testnet-magic 42
-
-# sign and submit transaction
-cardano-cli latest transaction sign --signing-key-file alice.sk --signing-key-file alice.stake.sk --tx-file tx.delegate.raw --out-file tx.delegate.signed
-
-# extend pool id by 2 bytes
-jq  ".cborHex |= sub(\"$STAKE_POOL_ID\"; \"${STAKE_POOL_ID}1234\")" tx.delegate.signed > /tmp/tx.delegate.signed
-cp /tmp/tx.delegate.signed tx.delegate.signed
-
-echo "Extended $STAKE_POOL_ID with 2 bytes"
-
-cardano-cli latest transaction submit --tx-file tx.delegate.signed --socket-path $SOCKET_PATH --testnet-magic $TESTNET_MAGIC
-
-echo "Submitted invalid delegation certificate to $STAKE_POOL_ID"
