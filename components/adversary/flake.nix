@@ -9,7 +9,6 @@
     haskellNix.url = "github:input-output-hk/haskell.nix";
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    flake-utils.url = "github:hamishmack/flake-utils/hkm/nested-hydraJobs";
     iohkNix = {
       url = "github:input-output-hk/iohk-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -23,51 +22,44 @@
     };
   };
 
-  outputs = inputs@{ self, nixpkgs, flake-utils, haskellNix, CHaP, iohkNix
+  outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, CHaP, iohkNix
     , cardano-node-runtime, ... }:
     let
-      lib = nixpkgs.lib;
       version = self.dirtyShortRev or self.shortRev;
-
-      perSystem = system:
-        let
-          node-project = cardano-node-runtime.project.${system};
-          cardano-node = node-project.pkgs.cardano-node;
-          cardano-cli = node-project.pkgs.cardano-cli;
-          pkgs = import nixpkgs {
-            overlays = [
-              iohkNix.overlays.crypto # modified crypto libs
-              haskellNix.overlay # some functions
-              iohkNix.overlays.haskell-nix-crypto
-              iohkNix.overlays.cardano-lib
-            ];
-            inherit system;
+      parts = flake-parts.lib.mkFlake { inherit inputs; } {
+        systems = [ "x86_64-linux" "aarch64-darwin" ];
+        perSystem = { system, ... }:
+          let
+            node = cardano-node-runtime.project.${system};
+            pkgs = import nixpkgs {
+              overlays = [
+                iohkNix.overlays.crypto
+                haskellNix.overlay
+                iohkNix.overlays.haskell-nix-crypto
+                iohkNix.overlays.cardano-lib
+              ];
+              inherit system;
+            };
+            project = import ./nix/project.nix {
+              indexState = "2025-08-07T00:00:00Z";
+              inherit CHaP;
+              inherit pkgs;
+            };
+            docker-image = pkgs.callPackage ./nix/docker-image.nix {
+              inherit project version;
+            };
+          in rec {
+            packages = {
+              inherit (node.pkgs) cardano-node cardano-cli;
+              inherit (project.packages) adversary adversary-tests;
+              inherit docker-image;
+              default = packages.adversary;
+            };
+            inherit (project) devShells;
           };
-          project = import ./nix/project.nix {
-            indexState = "2025-08-07T00:00:00Z";
-            inherit CHaP;
-            inherit pkgs;
-          };
-          docker-adversary-image =
-            import ./nix/docker-image.nix { inherit pkgs project version; };
-          docker-packages = { packages.docker-image = docker-adversary-image; };
-          info.packages = { inherit version; };
-          other-tools = {
-            packages.cardano-node = cardano-node;
-            packages.cardano-cli = cardano-cli;
-          };
-
-          fullPackages = lib.mergeAttrsList [
-            project.packages
-            other-tools.packages
-            docker-packages.packages
-            info.packages
-          ];
-
-        in {
-          packages = fullPackages // { default = project.packages.adversary; };
-          inherit (project) devShells;
-        };
-
-    in flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-darwin" ] perSystem;
+      };
+    in {
+      inherit (parts) packages devShells;
+      inherit version;
+    };
 }
