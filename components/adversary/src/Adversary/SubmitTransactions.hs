@@ -97,7 +97,7 @@ submitTxs = \case
         hexEncodedTxFiles
         >>= newTVarIO
     _ <- runTxSubmissionApplication magic host (readOrFail "port" port) (mkTxSubmissionApplication txs)
-    return $ Completed []
+    return Completed
   _ -> pure $ Usage "Usage: submit-txs <magic> <host> <port> <tx-file1> <tx-file2> ..."
 
 fromHex :: LBS.ByteString -> LBS.ByteString

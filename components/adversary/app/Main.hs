@@ -1,4 +1,4 @@
-import Adversary qualified
+import Adversary.Run (run)
 
 main :: IO ()
-main = Adversary.main
+main = run >>= print
