@@ -110,6 +110,7 @@ test-suite adversary-test
                 , base
                 , base16-bytestring
                 , bytestring
+                , contra-tracer
                 , directory
                 , filepath
                 , hspec

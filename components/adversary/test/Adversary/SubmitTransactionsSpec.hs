@@ -7,6 +7,7 @@ import Control.Concurrent.Class.MonadSTM.Strict (atomically, newTBQueueIO)
 import Control.Concurrent.Class.MonadSTM.Strict.TBQueue (tryReadTBQueue)
 import Control.Exception (bracket)
 import Control.Monad (replicateM)
+import Control.Tracer (nullTracer)
 import Data.ByteString.Base16.Lazy qualified as Hex
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (fromRight)
@@ -35,7 +36,7 @@ spec = do
     let txId = fromRight undefined $ mkTxId txBytes
     queue <- newTBQueueIO 10
     withTempDir $ \dir -> do
-      withAsync (pollTransactionsFromFiles [dir] queue) $ \async -> do
+      withAsync (pollTransactionsFromFiles nullTracer [dir] queue) $ \async -> do
         threadDelay 100000
         let txFile1 = dir </> "tx1"
         let txFile2 = dir </> "tx2"
@@ -51,7 +52,7 @@ spec = do
 
 withTempDir :: (FilePath -> IO a) -> IO a
 withTempDir =
-  bracket (mkTempFile >>= (\fp -> removePathForcibly fp >> createDirectory fp >> canonicalizePath fp)) (const $ pure ()) -- removePathForcibly
+  bracket (mkTempFile >>= (\fp -> removePathForcibly fp >> createDirectory fp >> canonicalizePath fp)) removePathForcibly
 
 mkTempFile :: IO FilePath
 mkTempFile = mkstemp "test-adversary" >>= \(fp, h) -> hClose h >> pure fp

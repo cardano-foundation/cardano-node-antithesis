@@ -25,7 +25,7 @@ import Control.Concurrent.Class.MonadSTM.Strict.TBQueue (StrictTBQueue)
 import Control.Concurrent.Class.MonadSTM.Strict.TVar (modifyTVar, newTVarIO, readTVarIO)
 import Control.Exception (SomeException)
 import Control.Monad (forM_, forever, when)
-import Control.Tracer (stdoutTracer)
+import Control.Tracer (Tracer, stdoutTracer, traceWith)
 import Data.Bifunctor (Bifunctor (bimap))
 import Data.ByteString.Base16.Lazy qualified as Hex
 import Data.ByteString.Lazy (LazyByteString)
@@ -63,6 +63,7 @@ import Ouroboros.Network.Mux
 import Ouroboros.Network.NodeToNode
   ( NodeToNodeVersion (NodeToNodeV_14),
     NodeToNodeVersionData (..),
+    TraceSendRecv,
     nodeToNodeCodecCBORTerm,
     nodeToNodeHandshakeCodec,
     simpleSingletonVersions,
@@ -86,20 +87,41 @@ import Ouroboros.Network.Util.ShowProxy (ShowProxy)
 import System.Directory (doesDirectoryExist, doesFileExist)
 import System.FSNotify (Event (Added, Modified), watchTree, withManager)
 
-submitTxs :: [String] -> IO Message
-submitTxs = \case
+data SubmitLog
+  = Starting {args :: [String]}
+  | IgnoringFSEvent {fsEvent :: Event}
+  | WatchingDirectory {directory :: FilePath}
+  | ReadingTxFile {txFilePath :: FilePath}
+  | FailedToComputeTxId {txFilePath :: FilePath, errorMsg :: String}
+  | EnqueuingTx {txFilePath :: FilePath, txid :: TxId'}
+  | FileDoesNotExist {path :: FilePath}
+  | ReceivedRequestTxIds {numToAck :: Word, numToReq :: Word}
+  | SendingTxIds {txid :: TxId'}
+  | ReceivedRequestTxs {reqTxIds :: [TxId']}
+  | SendingRequestedTxs {numTxs :: Int}
+  | NetworkLog {message :: TraceSendRecv (TxSubmission2 TxId' LazyByteString)}
+  deriving (Show)
+
+submitTxs :: Tracer IO SubmitLog -> [String] -> IO Message
+submitTxs tracer = \case
   args@(magicArg : host : port : hexEncodedTxFiles) -> do
-    putStrLn $ toString $ Startup args
+    traceWith tracer $ Starting args
     let magic = NetworkMagic {unNetworkMagic = readOrFail "magic" magicArg}
     txsQueue :: StrictTBQueue IO (TxId', LazyByteString) <- newTBQueueIO 10
-    withAsync (pollTransactionsFromFiles hexEncodedTxFiles txsQueue) $ \readerAsync -> do
-      void $ runTxSubmissionApplication magic host (readOrFail "port" port) (mkTxSubmissionApplication txsQueue)
+    withAsync (pollTransactionsFromFiles tracer hexEncodedTxFiles txsQueue) $ \readerAsync -> do
+      void $
+        runTxSubmissionApplication
+          tracer
+          magic
+          host
+          (readOrFail "port" port)
+          (mkTxSubmissionApplication tracer txsQueue)
       cancel readerAsync
       return Completed
   _ -> pure $ Usage "Usage: submit-txs <magic> <host> <port> <tx-file1> <tx-file2> ..."
 
-pollTransactionsFromFiles :: [String] -> StrictTBQueue IO (TxId', LazyByteString) -> IO ()
-pollTransactionsFromFiles files txQueue =
+pollTransactionsFromFiles :: Tracer IO SubmitLog -> [String] -> StrictTBQueue IO (TxId', LazyByteString) -> IO ()
+pollTransactionsFromFiles tracer files txQueue =
   withManager $ \mgr -> do
     forM_ files $ \file -> do
       isDir <- doesDirectoryExist file
@@ -110,27 +132,27 @@ pollTransactionsFromFiles files txQueue =
             file
             (const True)
             ( \case
-                Added path _ _ -> do
-                  isFile <- doesFileExist path
-                  when isFile $ readAndEnqueue path
-                Modified path _ _ -> do
-                  isFile <- doesFileExist path
-                  when isFile $ readAndEnqueue path
-                other -> putStrLn $ "got event " <> show other
+                Added path _ _ -> readAndEnqueue path
+                Modified path _ _ -> readAndEnqueue path
+                other -> traceWith tracer (IgnoringFSEvent other)
             )
-            >> putStrLn ("Watching for transaction files in " <> file)
+            >> traceWith tracer (WatchingDirectory file)
         else readAndEnqueue file
     forever (threadDelay 1000000)
   where
     readAndEnqueue path = do
-      putStrLn $ "Reading transaction file: " ++ path
-      hexContents <- LBS.readFile path
-      let txBytes = fromHex hexContents
-      case mkTxId txBytes of
-        Left err -> putStrLn $ "Failed to compute transaction id from file " ++ path ++ ": " ++ err
-        Right txid -> do
-          putStrLn $ "Enqueuing transaction with id: " ++ show txid
-          atomically $ writeTBQueue txQueue (txid, txBytes)
+      isFile <- doesFileExist path
+      if isFile
+        then do
+          traceWith tracer (ReadingTxFile path)
+          hexContents <- LBS.readFile path
+          let txBytes = fromHex hexContents
+          case mkTxId txBytes of
+            Left err -> traceWith tracer (FailedToComputeTxId path err)
+            Right txid -> do
+              traceWith tracer (EnqueuingTx path txid)
+              atomically $ writeTBQueue txQueue (txid, txBytes)
+        else traceWith tracer (FileDoesNotExist path)
 
 fromHex :: LBS.ByteString -> LBS.ByteString
 fromHex = either (error . ("Failed to decode hex: " ++)) id . Hex.decode
@@ -184,6 +206,8 @@ type Tx = GenTx Block
 -- | Connect to a node-to-node tx submission server, and runs the given application
 -- to submit transactions.
 runTxSubmissionApplication ::
+  -- | tracer
+  Tracer IO SubmitLog ->
   -- | The network magic
   NetworkMagic ->
   -- | host
@@ -193,7 +217,7 @@ runTxSubmissionApplication ::
   -- | application
   TxSubmissionApplication ->
   IO (Either SomeException (Either () Void))
-runTxSubmissionApplication magic peerName peerPort application = withIOManager $ \iocp -> do
+runTxSubmissionApplication tracer magic peerName peerPort application = withIOManager $ \iocp -> do
   AddrInfo {addrAddress} <- resolve peerName peerPort
   connectToNode -- withNode
     (socketSnocket iocp) -- TCP
@@ -221,16 +245,17 @@ runTxSubmissionApplication magic peerName peerPort application = withIOManager $
               query = False
             }
         )
-        (const $ txSubmissionToOuroboros application) -- application
+        (const $ txSubmissionToOuroboros tracer application) -- application
     )
     Nothing
     addrAddress
 
 mkTxSubmissionApplication ::
+  Tracer IO SubmitLog ->
   StrictTBQueue IO (TxId', LazyByteString) ->
   -- | the chain sync client application
   TxSubmissionApplication
-mkTxSubmissionApplication txsVar =
+mkTxSubmissionApplication tracer txsVar =
   TxSubmissionClient $ do
     inflight <- newTVarIO []
     pure $ idle inflight
@@ -238,20 +263,14 @@ mkTxSubmissionApplication txsVar =
     idle inflight =
       ClientStIdle
         { recvMsgRequestTxIds = \blocking numToAck numToReq -> do
-            putStrLn $
-              "Received request for tx ids: "
-                ++ show blocking
-                ++ "(ack: "
-                ++ show numToAck
-                ++ ", req: "
-                ++ show numToReq
-                ++ ")"
+            traceWith tracer $ ReceivedRequestTxIds (fromIntegral numToAck) (fromIntegral numToReq)
             -- drain inflight txs with acks
             atomically $ modifyTVar inflight (drop (fromIntegral numToAck))
             case blocking of
               SingBlocking -> do
                 tx <- atomically $ readTBQueue txsVar
                 atomically $ modifyTVar inflight (<> [tx])
+                traceWith tracer $ SendingTxIds (fst tx)
                 return $ SendMsgReplyTxIds (BlockingReply $ sized tx :| []) (idle inflight)
               SingNonBlocking -> do
                 mayTx <- atomically $ tryReadTBQueue txsVar
@@ -259,18 +278,20 @@ mkTxSubmissionApplication txsVar =
                   Nothing -> return $ SendMsgReplyTxIds (NonBlockingReply []) (idle inflight)
                   Just tx -> do
                     atomically $ modifyTVar inflight (<> [tx])
+                    traceWith tracer $ SendingTxIds (fst tx)
                     return $ SendMsgReplyTxIds (NonBlockingReply [sized tx]) (idle inflight),
           recvMsgRequestTxs = \reqTxIds -> do
-            putStrLn $ "Received request for txs ids: " ++ show reqTxIds
+            traceWith tracer $ ReceivedRequestTxs reqTxIds
             txs <- readTVarIO inflight
             let requestedTxs = map (mkTxN2N . snd) $ filter (\(tid, _) -> tid `elem` reqTxIds) txs
-            putStrLn $ "Sending " ++ show (length requestedTxs) ++ " requested txs"
+            traceWith tracer $ SendingRequestedTxs (length requestedTxs)
             return $ SendMsgReplyTxs requestedTxs (idle inflight)
         }
 
     sized (tid, tx) = (tid, SizeInBytes (fromIntegral (LBS.length tx)))
 
 txSubmissionToOuroboros ::
+  Tracer IO SubmitLog ->
   -- | chainSync
   TxSubmissionApplication ->
   OuroborosApplicationWithMinimalCtx
@@ -280,7 +301,7 @@ txSubmissionToOuroboros ::
     IO
     ()
     Void
-txSubmissionToOuroboros txSubmissionapp =
+txSubmissionToOuroboros tracer txSubmissionapp =
   OuroborosApplication
     { getOuroborosApplication =
         [ MiniProtocol
@@ -296,7 +317,7 @@ txSubmissionToOuroboros txSubmissionapp =
       InitiatorProtocolOnly $
         mkMiniProtocolCbFromPeer $
           const
-            ( contramap show stdoutTracer, -- tracer
+            ( contramap NetworkLog tracer,
               codecTxSubmission,
               txSubmissionClientPeer txSubmissionapp
             )
