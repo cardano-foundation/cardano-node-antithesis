@@ -1,9 +1,21 @@
 module Adversary.SubmitTransactionsSpec where
 
+import Adversary.SubmitTransactions (fromHex, getTxId, mkGenTx, mkTxId, pollTransactionsFromFiles)
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (cancel, withAsync)
+import Control.Concurrent.Class.MonadSTM.Strict (atomically, newTBQueueIO)
+import Control.Concurrent.Class.MonadSTM.Strict.TBQueue (tryReadTBQueue)
+import Control.Exception (bracket)
+import Control.Monad (replicateM)
+import Data.ByteString.Lazy qualified as LBS
+import Data.Either (fromRight)
+import Data.Maybe (catMaybes)
+import GHC.Stack (HasCallStack)
+import System.Directory (createDirectory, removePathForcibly, canonicalizePath)
+import System.FilePath ((</>))
+import System.IO (hClose)
+import System.Posix (mkstemp)
 import Test.Hspec (Spec, it, shouldBe)
-import qualified Data.ByteString.Lazy as LBS
-import Adversary.SubmitTransactions (mkTxId, getTxId, fromHex)
-import Adversary.SubmitTransactions (mkGenTx)
 
 spec :: Spec
 spec = do
@@ -13,3 +25,28 @@ spec = do
     let txId = mkTxId txBytes
     let expectedTxId = getTxId <$> mkGenTx txBytes
     txId `shouldBe` expectedTxId
+
+  it "can collect transactions from a directory as they are created" $ do
+    let txId = fromRight undefined $ mkTxId txBytes
+    queue <- newTBQueueIO 10
+    withTempDir $ \dir -> do
+      withAsync (pollTransactionsFromFiles [dir] queue) $ \async -> do
+        threadDelay 100000
+        let txFile1 = dir </> "tx1"
+        let txFile2 = dir </> "tx2"
+        LBS.writeFile txFile1 txBytes
+        LBS.writeFile txFile2 txBytes
+        threadDelay 1000000 -- wait for 1 second to allow polling
+        cancel async
+
+    txs <- catMaybes <$> atomically (replicateM 2 (tryReadTBQueue queue))
+
+    length txs `shouldBe` 2
+    fst <$> txs `shouldBe` [txId, txId]
+
+withTempDir :: (FilePath -> IO a) -> IO a
+withTempDir =
+  bracket (mkTempFile >>= (\fp -> removePathForcibly fp >> createDirectory fp >> canonicalizePath fp)) (const $ pure ()) -- removePathForcibly
+
+mkTempFile :: IO FilePath
+mkTempFile = mkstemp "test-adversary" >>= \(fp, h) -> hClose h >> pure fp

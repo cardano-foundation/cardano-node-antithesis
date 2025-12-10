@@ -86,8 +86,9 @@ adversary args = do
           (readOrFail "limit" limitArg)
         pure Completed
     _ ->
-      error
-        "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
+      pure $
+        Usage
+          "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
 
 generatePoints :: StdGen -> NonEmpty Point -> NonEmpty Point
 generatePoints g points = NE.unfoldr (fmap Just . randomElement points) g

@@ -59,6 +59,8 @@ library
                 , cardano-ledger-core
                 , cborg
                 , contra-tracer
+                , directory
+                , fsnotify
                 , network
                 , network-mux
                 , ouroboros-consensus
@@ -104,10 +106,15 @@ test-suite adversary-test
                   QuickCheck
                 , adversary
                 , aeson
+                , async
                 , base
                 , bytestring
+                , directory
+                , filepath
                 , hspec
                 , random
+                , strict-stm
+                , unix
 
   build-tool-depends: hspec-discover:hspec-discover
   other-modules:
