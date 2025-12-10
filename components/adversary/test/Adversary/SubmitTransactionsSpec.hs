@@ -1,17 +1,17 @@
 module Adversary.SubmitTransactionsSpec where
 
-import Adversary.SubmitTransactions (fromHex, getTxId, mkGenTx, mkTxId, pollTransactionsFromFiles)
+import Adversary.SubmitTransactions (encodeN2N, fromHex, getTxId, mkGenTx, mkTxId, mkTxN2N, pollTransactionsFromFiles)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (cancel, withAsync)
 import Control.Concurrent.Class.MonadSTM.Strict (atomically, newTBQueueIO)
 import Control.Concurrent.Class.MonadSTM.Strict.TBQueue (tryReadTBQueue)
 import Control.Exception (bracket)
 import Control.Monad (replicateM)
+import Data.ByteString.Base16.Lazy qualified as Hex
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (fromRight)
 import Data.Maybe (catMaybes)
-import GHC.Stack (HasCallStack)
-import System.Directory (createDirectory, removePathForcibly, canonicalizePath)
+import System.Directory (canonicalizePath, createDirectory, removePathForcibly)
 import System.FilePath ((</>))
 import System.IO (hClose)
 import System.Posix (mkstemp)
@@ -26,7 +26,12 @@ spec = do
     let expectedTxId = getTxId <$> mkGenTx txBytes
     txId `shouldBe` expectedTxId
 
-  it "can collect transactions from a directory as they are created" $ do
+  it "can encode n2n from raw bytes" $ do
+    let tx = Right $ mkTxN2N txBytes
+    let expectedTx = encodeN2N <$> mkGenTx txBytes
+    Hex.encode <$> tx `shouldBe` Hex.encode <$> expectedTx
+
+  it "can collect hex-encoded transaction files from a directory as they are created" $ do
     let txId = fromRight undefined $ mkTxId txBytes
     queue <- newTBQueueIO 10
     withTempDir $ \dir -> do
@@ -34,8 +39,8 @@ spec = do
         threadDelay 100000
         let txFile1 = dir </> "tx1"
         let txFile2 = dir </> "tx2"
-        LBS.writeFile txFile1 txBytes
-        LBS.writeFile txFile2 txBytes
+        LBS.writeFile txFile1 (Hex.encode txBytes)
+        LBS.writeFile txFile2 (Hex.encode txBytes)
         threadDelay 1000000 -- wait for 1 second to allow polling
         cancel async
 

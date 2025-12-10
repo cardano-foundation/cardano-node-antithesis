@@ -13,7 +13,7 @@ import Cardano.Ledger.Core (eraProtVerHigh)
 import Cardano.Ledger.Hashes (unsafeMakeSafeHash)
 import Cardano.Ledger.TxIn qualified as Ledger
 import Codec.CBOR.Decoding (Decoder, decodeBytes)
-import Codec.CBOR.Encoding (Encoding, encodePreEncoded)
+import Codec.CBOR.Encoding (Encoding, encodeBytes, encodeListLen, encodePreEncoded, encodeTag, encodeWord)
 import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Term (decodeTerm, encodeTerm)
 import Codec.CBOR.Write (toLazyByteString)
@@ -22,9 +22,9 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (cancel, withAsync)
 import Control.Concurrent.Class.MonadSTM.Strict (atomically, newTBQueueIO, readTBQueue, tryReadTBQueue, writeTBQueue)
 import Control.Concurrent.Class.MonadSTM.Strict.TBQueue (StrictTBQueue)
-import Control.Concurrent.Class.MonadSTM.Strict.TVar (StrictTVar, modifyTVar, newTVarIO, readTVar, readTVarIO)
+import Control.Concurrent.Class.MonadSTM.Strict.TVar (modifyTVar, newTVarIO, readTVarIO)
 import Control.Exception (SomeException)
-import Control.Monad (forM_, forever, replicateM_, when)
+import Control.Monad (forM_, forever, when)
 import Control.Tracer (stdoutTracer)
 import Data.Bifunctor (Bifunctor (bimap))
 import Data.ByteString.Base16.Lazy qualified as Hex
@@ -35,7 +35,6 @@ import Data.Function ((&))
 import Data.Functor (void)
 import Data.Functor.Contravariant (contramap)
 import Data.List.NonEmpty (NonEmpty (..))
-import Data.Maybe (maybeToList)
 import Data.Void (Void)
 import Network.Mux qualified as Mx
 import Network.Socket (AddrInfo (..), PortNumber)
@@ -85,7 +84,7 @@ import Ouroboros.Network.Snocket (makeSocketBearer, socketSnocket)
 import Ouroboros.Network.Socket (ConnectToArgs (..), HandshakeCallbacks (..), connectToNode, debuggingNetworkConnectTracers)
 import Ouroboros.Network.Util.ShowProxy (ShowProxy)
 import System.Directory (doesDirectoryExist, doesFileExist)
-import System.FSNotify (Event (Added, Modified), watchDir, watchTree, withManager)
+import System.FSNotify (Event (Added, Modified), watchTree, withManager)
 
 submitTxs :: [String] -> IO Message
 submitTxs = \case
@@ -112,11 +111,11 @@ pollTransactionsFromFiles files txQueue =
             (const True)
             ( \case
                 Added path _ _ -> do
-                    isFile <- doesFileExist path
-                    when isFile $ readAndEnqueue path
+                  isFile <- doesFileExist path
+                  when isFile $ readAndEnqueue path
                 Modified path _ _ -> do
-                    isFile <- doesFileExist path
-                    when isFile $ readAndEnqueue path
+                  isFile <- doesFileExist path
+                  when isFile $ readAndEnqueue path
                 other -> putStrLn $ "got event " <> show other
             )
             >> putStrLn ("Watching for transaction files in " <> file)
@@ -127,10 +126,9 @@ pollTransactionsFromFiles files txQueue =
       putStrLn $ "Reading transaction file: " ++ path
       hexContents <- LBS.readFile path
       let txBytes = fromHex hexContents
-      case mkGenTx txBytes of
-        Left err -> putStrLn $ "Failed to decode transaction from file " ++ path ++ ": " ++ err
-        Right genTx -> do
-          let txid = getTxId genTx
+      case mkTxId txBytes of
+        Left err -> putStrLn $ "Failed to compute transaction id from file " ++ path ++ ": " ++ err
+        Right txid -> do
           putStrLn $ "Enqueuing transaction with id: " ++ show txid
           atomically $ writeTBQueue txQueue (txid, txBytes)
 
@@ -139,6 +137,19 @@ fromHex = either (error . ("Failed to decode hex: " ++)) id . Hex.decode
 
 getTxId :: Tx -> TxId'
 getTxId = txId
+
+encodeN2N :: Tx -> LBS.ByteString
+encodeN2N = toLazyByteString . encodeNodeToNode @Block ccfg version
+
+-- | Encode a raw transaction bytes into node-to-node format
+--
+-- The N2N format wraps the raw transaction bytes into a CBOR array with 2 elements:
+-- - the era number (6 == Conway)
+-- - the raw transaction bytes as a byte string prefixed with tag 24 indicating embedded CBOR (see https://www.rfc-editor.org/rfc/rfc8949.html#name-encoded-cbor-data-item)
+mkTxN2N :: LBS.ByteString -> LBS.ByteString
+mkTxN2N txBytes =
+  toLazyByteString $
+    encodeListLen 2 <> encodeWord 6 <> encodeTag 24 <> encodeBytes (LBS.toStrict txBytes)
 
 mkTxId :: LBS.ByteString -> Either String TxId'
 mkTxId txBytes =
@@ -184,7 +195,6 @@ runTxSubmissionApplication ::
   IO (Either SomeException (Either () Void))
 runTxSubmissionApplication magic peerName peerPort application = withIOManager $ \iocp -> do
   AddrInfo {addrAddress} <- resolve peerName peerPort
-  print addrAddress
   connectToNode -- withNode
     (socketSnocket iocp) -- TCP
     makeSocketBearer
@@ -253,7 +263,7 @@ mkTxSubmissionApplication txsVar =
           recvMsgRequestTxs = \reqTxIds -> do
             putStrLn $ "Received request for txs ids: " ++ show reqTxIds
             txs <- readTVarIO inflight
-            let requestedTxs = map snd $ filter (\(tid, _) -> tid `elem` reqTxIds) txs
+            let requestedTxs = map (mkTxN2N . snd) $ filter (\(tid, _) -> tid `elem` reqTxIds) txs
             putStrLn $ "Sending " ++ show (length requestedTxs) ++ " requested txs"
             return $ SendMsgReplyTxs requestedTxs (idle inflight)
         }

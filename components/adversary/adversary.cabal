@@ -108,6 +108,7 @@ test-suite adversary-test
                 , aeson
                 , async
                 , base
+                , base16-bytestring
                 , bytestring
                 , directory
                 , filepath
