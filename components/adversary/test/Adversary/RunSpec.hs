@@ -2,19 +2,21 @@ module Adversary.RunSpec where
 
 import Adversary (Message (..))
 import Adversary.Run (run)
-import Control.Exception (ErrorCall)
 import Data.Functor (void)
-import System.Environment (withArgs, withProgName)
-import Test.Hspec (Spec, it, shouldBe, shouldReturn, shouldThrow)
+import System.Environment (withArgs)
+import System.Exit (ExitCode (..))
+import Test.Hspec (Spec, it, shouldReturn, shouldThrow)
 
 spec :: Spec
 spec = do
-  it "bails out with error given program name is 'foo'" $ do
-    void (withArgs [] (withProgName "foo" run)) `shouldThrow` \(_ :: ErrorCall) -> True
+  it "exits with error when no arguments provided" $ do
+    void (withArgs [] run) `shouldThrow` \(_ :: ExitCode) -> True
 
-  it "bails out with usage text given program name is 'adversary'" $ do
-    withArgs [] (withProgName "adversary" run) `shouldReturn` Usage "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
+  it "exits with error given unknown sub-command" $ do
+    void (withArgs ["unknown-cmd"] run) `shouldThrow` \(_ :: ExitCode) -> True
 
-  it "returns Startup given program name is 'submit-txs'" $ do
-    let args = ["arg1", "arg2"]
-    withArgs args (withProgName "submit-txs" run) `shouldReturn` Usage "Usage: submit-txs <magic> <host> <port> <tx-file1> <tx-file2> ..."
+  it "bails out with usage text given 'chainsync' sub-command with no arguments" $ do
+    withArgs ["chainsync"] run `shouldReturn` Usage "Expected network-magic, port, sync-length, startPoint, number-of-connections and list-of-hosts arguments"
+
+  it "returns Usage given 'submit' sub-command with insufficient arguments" $ do
+    withArgs ["submit", "arg1", "arg2"] run `shouldReturn` Usage "Usage: submit-txs <magic> <host> <port> <tx-file1> <tx-file2> ..."
