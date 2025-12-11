@@ -1,16 +1,16 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE NumericUnderscores #-}
 
 module Adversary.FetchPeers.Client
   ( requestPeersFrom,
   )
 where
 
+import Adversary.FetchPeers.Log (FetchLog (NetworkLog))
 import Cardano.Crypto.Libsodium (sodiumInit)
 import Control.Concurrent.Class.MonadSTM.Strict (StrictTMVar, newEmptyTMVarIO, putTMVar, takeTMVar)
 import Control.Monad.Class.MonadSTM (atomically)
 import Control.Monad.Class.MonadThrow (Exception, throwIO)
-import Control.Tracer (nullTracer)
+import Control.Tracer (Contravariant (contramap), Tracer)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.Void (Void)
 import Network.Mux qualified as Mx
@@ -35,7 +35,7 @@ import Ouroboros.Network.NodeToNode
     nodeToNodeCodecCBORTerm,
   )
 import Ouroboros.Network.PeerSelection.PeerSharing.Codec (decodeRemoteAddress, encodeRemoteAddress)
-import Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec, nodeToNodeHandshakeCodec, noTimeLimitsHandshake)
+import Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec, noTimeLimitsHandshake, nodeToNodeHandshakeCodec)
 import Ouroboros.Network.Protocol.Handshake.Version (Acceptable (acceptableVersion), Queryable (queryVersion), simpleSingletonVersions)
 import Ouroboros.Network.Protocol.PeerSharing.Client (PeerSharingClient (..), peerSharingClientPeer)
 import Ouroboros.Network.Protocol.PeerSharing.Codec (codecPeerSharing)
@@ -58,6 +58,7 @@ type PeerSharingApplication = PeerSharingClient SockAddr IO ()
 
 -- | Request peers from a specific peer
 requestPeersFrom ::
+  Tracer IO FetchLog ->
   -- | Network magic
   NetworkMagic ->
   -- | Peer address to request from
@@ -65,16 +66,17 @@ requestPeersFrom ::
   -- | Number of peers to request
   PeerSharingAmount ->
   IO [SockAddr]
-requestPeersFrom magic peerAddr amount = do
+requestPeersFrom tracer magic peerAddr amount = do
   sodiumInit
-  runPeerSharingApplication magic peerAddr (mkPeerSharingClient amount)
+  runPeerSharingApplication tracer magic peerAddr (mkPeerSharingClient amount)
 
 runPeerSharingApplication ::
+  Tracer IO FetchLog ->
   NetworkMagic ->
   SockAddr ->
   (StrictTMVar IO [SockAddr] -> PeerSharingApplication) ->
   IO [SockAddr]
-runPeerSharingApplication magic peerAddr application = withIOManager $ \iocp -> do
+runPeerSharingApplication tracer magic peerAddr application = withIOManager $ \iocp -> do
   resultVar <- newEmptyTMVarIO
 
   _ <-
@@ -104,7 +106,7 @@ runPeerSharingApplication magic peerAddr application = withIOManager $ \iocp -> 
                 query = False
               }
           )
-          (peerSharingToOuroboros . const (application resultVar))
+          (peerSharingToOuroboros tracer . const (application resultVar))
       )
       Nothing
       peerAddr
@@ -119,6 +121,7 @@ maximumMiniProtocolLimits =
     }
 
 peerSharingToOuroboros ::
+  Tracer IO FetchLog ->
   PeerSharingApplication ->
   OuroborosApplicationWithMinimalCtx
     Mx.InitiatorMode
@@ -127,7 +130,7 @@ peerSharingToOuroboros ::
     IO
     ()
     Void
-peerSharingToOuroboros peerSharingApp =
+peerSharingToOuroboros tracer peerSharingApp =
   OuroborosApplication
     { getOuroborosApplication =
         [ MiniProtocol
@@ -142,8 +145,8 @@ peerSharingToOuroboros peerSharingApp =
     run =
       InitiatorProtocolOnly $
         mkMiniProtocolCbFromPeer $
-          \_ctx ->
-            ( nullTracer,
+          const
+            ( contramap (NetworkLog . show) tracer,
               codecPeerSharing (encodeRemoteAddress NodeToNodeV_14) (decodeRemoteAddress NodeToNodeV_14),
               peerSharingClientPeer peerSharingApp
             )

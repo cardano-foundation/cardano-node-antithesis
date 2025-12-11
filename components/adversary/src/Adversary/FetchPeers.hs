@@ -118,7 +118,7 @@ requestPeersFromPeer tracer magic peer amount =
   catch
     (do
         traceWith tracer $ RequestingFromPeer peer
-        peers <- requestPeersFrom magic peer amount
+        peers <- requestPeersFrom tracer magic peer amount
         traceWith tracer $ ReceivedPeersFromPeer peer (length peers)
         pure peers
     )

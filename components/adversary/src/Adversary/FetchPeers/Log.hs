@@ -17,4 +17,5 @@ data FetchLog
   | NoNewPeersToSave
   | UpdatedPeerList {newTotal :: Int}
   | SleepingBeforeNextIteration {seconds :: Int}
+  | NetworkLog {message :: String}
   deriving (Show)
