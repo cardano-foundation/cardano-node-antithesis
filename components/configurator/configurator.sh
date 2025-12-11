@@ -17,6 +17,16 @@ write_file() {
     mv --force "${tmp_file}" "${1}"
 }
 
+config_genesis_shelley_json() {
+    CONFIG_JSON=$1/configs/shelley-genesis.json
+
+    FAUCET_KEY_HASH=$(cat $1/keys/faucet.hash)
+
+    # configure faucet with 1M ADA
+    jq ".initialFunds[\"60${FAUCET_KEY_HASH}\"] = 10000000000000" "${CONFIG_JSON}" | write_file "${CONFIG_JSON}"
+}
+
+
 # Updates specific node's configuration depending on environment variables
 # Those environment variables can be set in the service definition in the
 # docker-compose file like:
@@ -71,6 +81,7 @@ config_config_json() {
             jq '.LedgerDB = { Backend: "V2InMemory"}' "${CONFIG_JSON}" | write_file "${CONFIG_JSON}"
             ;;
     esac
+
 }
 
 config_topology_json() {
@@ -144,15 +155,26 @@ mkdir -p /configs
 cp -r /tmp/testnet/pools/* /configs
 cp -r /tmp/testnet/utxos/* /configs
 
+# generate faucet data
+# FIXME: should be extracted from testnet.yaml but we don't have yq in the image
+TESTNET_MAGIC=42
+cardano-cli address key-gen --verification-key-file /tmp/testnet/utxos/keys/faucet.vk --signing-key-file /tmp/testnet/utxos/keys/faucet.sk
+cardano-cli address build --verification-key-file /tmp/testnet/utxos/keys/faucet.vk --out-file /tmp/testnet/utxos/keys/faucet.addr --testnet-magic ${TESTNET_MAGIC}
+cardano-cli address key-hash --verification-key-file /tmp/testnet/utxos/keys/faucet.vk --out-file /tmp/testnet/utxos/keys/faucet.hash
+
 echo "removing /configs/keys"; rm -rf /configs/keys
 
 pools=$(ls -d /configs/*)
 number_of_pools=$(ls -d /configs/* | wc -l)
 echo "number_of_pools: $number_of_pools"
 for pool in $pools; do
-  echo "pool: $pool"
-  config_config_json "$pool"
   pool_ix=$(echo "$pool" | awk -F '/' '{print $3}')
+  echo "pool: $pool, pool index: $pool_ix"
+
+  cp -r /tmp/testnet/utxos/* /configs/$pool_ix
+
+  config_config_json "$pool"
+  config_genesis_shelley_json "$pool"
   config_topology_json "$pool_ix" "$number_of_pools"
   set_start_time "$pool"
 done

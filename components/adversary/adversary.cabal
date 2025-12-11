@@ -47,34 +47,48 @@ library
   import:          settings
   hs-source-dirs:  src
   build-depends:
-    , aeson
-    , async
-    , base
-    , base16-bytestring
-    , bytestring
-    , cardano-ledger-byron
-    , contra-tracer
-    , network
-    , network-mux
-    , ouroboros-consensus
-    , ouroboros-consensus-cardano   ^>=0.25
-    , ouroboros-consensus-protocol
-    , ouroboros-network
-    , ouroboros-network-api
-    , ouroboros-network-framework
-    , ouroboros-network-mock
-    , ouroboros-network-protocols
-    , random
-    , serialise
-    , strict-stm
-    , text
-    , typed-protocols
+                  aeson
+                , async
+                , base
+                , base16-bytestring
+                , bytestring
+                , cardano-crypto-class
+                , cardano-ledger-alonzo
+                , cardano-ledger-binary
+                , cardano-ledger-byron
+                , cardano-ledger-core
+                , cborg
+                , contra-tracer
+                , directory
+                , fsnotify
+                , network
+                , network-mux
+                , optparse-applicative
+                , ouroboros-consensus
+                , ouroboros-consensus-cardano   ^>=0.25
+                , ouroboros-consensus-protocol
+                , ouroboros-network
+                , ouroboros-network-api
+                , ouroboros-network-framework
+                , ouroboros-network-mock
+                , ouroboros-network-protocols
+                , random
+                , serialise
+                , strict-stm
+                , text
+                , typed-protocols
 
   exposed-modules:
     Adversary
     Adversary.Application
     Adversary.ChainSync.Codec
     Adversary.ChainSync.Connection
+    Adversary.Run
+    Adversary.SubmitTransactions
+    Adversary.SubmitTransactions.Client
+    Adversary.SubmitTransactions.Log
+    Adversary.SubmitTransactions.PollFiles
+    Adversary.SubmitTransactions.Util
 
   other-modules:
 
@@ -94,11 +108,23 @@ test-suite adversary-test
   hs-source-dirs:     test
   main-is:            Main.hs
   build-depends:
-    , adversary
-    , aeson
-    , base
-    , hspec
-    , QuickCheck
-    , random
+                  QuickCheck
+                , adversary
+                , aeson
+                , async
+                , base
+                , base16-bytestring
+                , bytestring
+                , contra-tracer
+                , directory
+                , filepath
+                , hspec
+                , optparse-applicative
+                , random
+                , strict-stm
+                , unix
 
   build-tool-depends: hspec-discover:hspec-discover
+  other-modules:
+    Adversary.RunSpec
+    Adversary.SubmitTransactionsSpec
