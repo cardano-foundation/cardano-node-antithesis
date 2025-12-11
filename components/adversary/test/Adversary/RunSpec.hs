@@ -1,6 +1,8 @@
 module Adversary.RunSpec where
 
-import Adversary.Run (ChainSyncOptions (..), Command (..), SubmitOptions (..))
+import Adversary (ChainSyncOptions (..))
+import Adversary.Run (Command (..))
+import Adversary.SubmitTransactions (SubmitOptions (..))
 import Data.List.NonEmpty qualified as NE
 import Options.Applicative (ParserResult (..), defaultPrefs, execParserPure)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)

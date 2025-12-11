@@ -58,9 +58,11 @@ library
                 , cardano-ledger-byron
                 , cardano-ledger-core
                 , cborg
+                , containers
                 , contra-tracer
                 , directory
                 , fsnotify
+                , io-classes
                 , network
                 , network-mux
                 , optparse-applicative
@@ -74,8 +76,10 @@ library
                 , ouroboros-network-protocols
                 , random
                 , serialise
+                , sqlite-simple
                 , strict-stm
                 , text
+                , time
                 , typed-protocols
 
   exposed-modules:
@@ -83,6 +87,11 @@ library
     Adversary.Application
     Adversary.ChainSync.Codec
     Adversary.ChainSync.Connection
+    Adversary.FetchPeers
+    Adversary.FetchPeers.Client
+    Adversary.FetchPeers.Database
+    Adversary.FetchPeers.Log
+    Adversary.FetchPeers.PeerList
     Adversary.Run
     Adversary.SubmitTransactions
     Adversary.SubmitTransactions.Client

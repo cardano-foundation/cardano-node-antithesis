@@ -8,8 +8,7 @@ import Ouroboros.Consensus.Shelley.Node.Serialisation ()
 import System.FSNotify (Event)
 
 data SubmitLog
-  = Starting {args :: [String]}
-  | IgnoringFSEvent {fsEvent :: Event}
+  = IgnoringFSEvent {fsEvent :: Event}
   | WatchingDirectory {directory :: FilePath}
   | ReadingTxFile {txFilePath :: FilePath}
   | FailedToComputeTxId {txFilePath :: FilePath, errorMsg :: String}
