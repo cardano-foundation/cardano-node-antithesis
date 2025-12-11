@@ -17,7 +17,6 @@ import Codec.CBOR.Term (decodeTerm, encodeTerm)
 import Codec.CBOR.Write (toLazyByteString)
 import Data.Bifunctor (Bifunctor (bimap))
 import Data.ByteString.Base16.Lazy qualified as Hex
-import Data.ByteString.Lazy (LazyByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Coerce (coerce)
 import Data.Function ((&))
@@ -29,12 +28,9 @@ import Ouroboros.Consensus.Node.Serialisation (encodeNodeToNode)
 import Ouroboros.Consensus.Shelley.Eras (ConwayEra)
 import Ouroboros.Consensus.Shelley.Ledger.Mempool (TxId (ShelleyTxId), mkShelleyTx)
 import Ouroboros.Consensus.Shelley.Node.Serialisation ()
-import Ouroboros.Network.Protocol.TxSubmission2.Client
-  ( TxSubmissionClient (..),
-  )
 
-fromHex :: LBS.ByteString -> LBS.ByteString
-fromHex = either (error . ("Failed to decode hex: " ++)) id . Hex.decode
+unsafeFromHex :: LBS.ByteString -> LBS.ByteString
+unsafeFromHex = either (error . ("Failed to decode hex: " ++)) id . Hex.decode
 
 getTxId :: Tx -> TxId'
 getTxId = txId

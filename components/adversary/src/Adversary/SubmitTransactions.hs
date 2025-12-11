@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
-
 module Adversary.SubmitTransactions where
 
 import Adversary (Message (..), readOrFail)
@@ -8,7 +6,7 @@ import Adversary.SubmitTransactions.Log (SubmitLog (..))
 import Adversary.SubmitTransactions.PollFiles (pollTransactionsFromFiles)
 import Adversary.SubmitTransactions.Util (TxId')
 import Cardano.Ledger.Alonzo.Tx ()
-import Control.Concurrent.Async (cancel, withAsync)
+import Control.Concurrent.Async (cancel, link, withAsync)
 import Control.Concurrent.Class.MonadSTM.Strict (newTBQueueIO)
 import Control.Concurrent.Class.MonadSTM.Strict.TBQueue (StrictTBQueue)
 import Control.Tracer (Tracer, traceWith)
@@ -26,6 +24,7 @@ submitTxs tracer = \case
     let magic = NetworkMagic {unNetworkMagic = readOrFail "magic" magicArg}
     txsQueue :: StrictTBQueue IO (TxId', LazyByteString) <- newTBQueueIO 10
     withAsync (pollTransactionsFromFiles tracer hexEncodedTxFiles txsQueue) $ \readerAsync -> do
+      link readerAsync -- ensures exceptions are propagated
       void $
         runTxSubmissionApplication
           tracer

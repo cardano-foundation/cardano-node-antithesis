@@ -1,7 +1,7 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
-
 module Adversary.SubmitTransactions.PollFiles where
 
+import Adversary.SubmitTransactions.Log (SubmitLog (..))
+import Adversary.SubmitTransactions.Util (TxId', mkTxId, unsafeFromHex)
 import Cardano.Ledger.Alonzo.Tx ()
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Class.MonadSTM.Strict (atomically, writeTBQueue)
@@ -15,9 +15,8 @@ import Ouroboros.Consensus.HardFork.Combinator.Serialisation.SerialiseNodeToNode
 import Ouroboros.Consensus.Shelley.Node.Serialisation ()
 import System.Directory (doesDirectoryExist, doesFileExist)
 import System.FSNotify (Event (Added, Modified), watchTree, withManager)
-import Adversary.SubmitTransactions.Log (SubmitLog (..))
-import Adversary.SubmitTransactions.Util (TxId', fromHex, mkTxId)
 
+-- | Poll the given files and directories for new or modified transaction files.
 pollTransactionsFromFiles :: Tracer IO SubmitLog -> [String] -> StrictTBQueue IO (TxId', LazyByteString) -> IO ()
 pollTransactionsFromFiles tracer files txQueue =
   withManager $ \mgr -> do
@@ -44,7 +43,7 @@ pollTransactionsFromFiles tracer files txQueue =
         then do
           traceWith tracer (ReadingTxFile path)
           hexContents <- LBS.readFile path
-          let txBytes = fromHex hexContents
+          let txBytes = unsafeFromHex hexContents
           case mkTxId txBytes of
             Left err -> traceWith tracer (FailedToComputeTxId path err)
             Right txid -> do
