@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE NumericUnderscores #-}
 
 module Adversary.SubmitTransactions.Client where
 
@@ -43,12 +44,16 @@ import Ouroboros.Network.Mux
 import Ouroboros.Network.NodeToNode
   ( NodeToNodeVersion (NodeToNodeV_14),
     NodeToNodeVersionData (..),
+    keepAliveMiniProtocolNum,
     nodeToNodeCodecCBORTerm,
     nodeToNodeHandshakeCodec,
     simpleSingletonVersions,
     txSubmissionMiniProtocolNum,
   )
 import Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec, noTimeLimitsHandshake)
+import Ouroboros.Network.Protocol.KeepAlive.Client (KeepAliveClient (..), KeepAliveClientSt (..), keepAliveClientPeer)
+import Ouroboros.Network.Protocol.KeepAlive.Codec (codecKeepAlive_v2)
+import Ouroboros.Network.Protocol.KeepAlive.Type (Cookie (..))
 import Ouroboros.Network.Protocol.TxSubmission2.Client
   ( BlockingReplyList (..),
     ClientStIdle (..),
@@ -63,6 +68,7 @@ import Ouroboros.Network.Protocol.TxSubmission2.Type (SizeInBytes (..), TxSubmis
 import Ouroboros.Network.Snocket (makeSocketBearer, socketSnocket)
 import Ouroboros.Network.Socket (ConnectToArgs (..), HandshakeCallbacks (..), connectToNode, debuggingNetworkConnectTracers)
 import Ouroboros.Network.Util.ShowProxy (ShowProxy)
+import Control.Concurrent (threadDelay)
 
 -- | Connect to a node-to-node tx submission server, and runs the given application
 -- to submit transactions.
@@ -125,22 +131,48 @@ txSubmissionToOuroboros tracer queue =
   OuroborosApplication
     { getOuroborosApplication =
         [ MiniProtocol
+            { miniProtocolNum = keepAliveMiniProtocolNum,
+              miniProtocolStart = StartOnDemand,
+              miniProtocolLimits = maximumMiniProtocolLimits,
+              miniProtocolRun = runKeepAlive
+            },
+          MiniProtocol
             { miniProtocolNum = txSubmissionMiniProtocolNum,
               miniProtocolStart = StartOnDemand,
               miniProtocolLimits = maximumMiniProtocolLimits,
-              miniProtocolRun = run
+              miniProtocolRun = runTxSubmission
             }
         ]
     }
   where
-    run =
+    runTxSubmission =
       InitiatorProtocolOnly $
         mkMiniProtocolCbFromPeer $
           const
-            ( contramap NetworkLog tracer,
+            ( contramap (NetworkLog . show) tracer,
               codecTxSubmission,
               txSubmissionClientPeer $ txSubmissionApplication tracer queue
             )
+
+    runKeepAlive =
+      InitiatorProtocolOnly $
+        mkMiniProtocolCbFromPeer $
+          const
+            ( contramap (NetworkLog . show) tracer,
+              codecKeepAlive_v2,
+              keepAliveClientPeer keepAliveApplication
+            )
+
+keepAliveApplication :: KeepAliveClient IO ()
+keepAliveApplication =
+  KeepAliveClient $ do
+    let cookie = Cookie 17
+    pure $ SendMsgKeepAlive cookie (keepAlive cookie)
+  where
+    keepAlive (Cookie cookie) = do
+      threadDelay 30_000_000
+      let cookie' = Cookie $ cookie * 17
+      pure $ SendMsgKeepAlive cookie' (keepAlive cookie')
 
 txSubmissionApplication ::
   Tracer IO SubmitLog ->
