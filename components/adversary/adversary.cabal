@@ -63,6 +63,7 @@ library
                 , fsnotify
                 , network
                 , network-mux
+                , optparse-applicative
                 , ouroboros-consensus
                 , ouroboros-consensus-cardano   ^>=0.25
                 , ouroboros-consensus-protocol
@@ -118,6 +119,7 @@ test-suite adversary-test
                 , directory
                 , filepath
                 , hspec
+                , optparse-applicative
                 , random
                 , strict-stm
                 , unix
