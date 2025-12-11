@@ -84,6 +84,10 @@ library
     Adversary.ChainSync.Connection
     Adversary.Run
     Adversary.SubmitTransactions
+    Adversary.SubmitTransactions.Client
+    Adversary.SubmitTransactions.Log
+    Adversary.SubmitTransactions.PollFiles
+    Adversary.SubmitTransactions.Util
 
   other-modules:
 

@@ -1,6 +1,5 @@
 module Adversary.SubmitTransactionsSpec where
 
-import Adversary.SubmitTransactions (encodeN2N, fromHex, getTxId, mkGenTx, mkTxId, mkTxN2N, pollTransactionsFromFiles)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (cancel, withAsync)
 import Control.Concurrent.Class.MonadSTM.Strict (atomically, newTBQueueIO)
@@ -17,6 +16,8 @@ import System.FilePath ((</>))
 import System.IO (hClose)
 import System.Posix (mkstemp)
 import Test.Hspec (Spec, it, shouldBe)
+import Adversary.SubmitTransactions.Util (fromHex, mkTxId, getTxId, mkGenTx, mkTxN2N, encodeN2N)
+import Adversary.SubmitTransactions.PollFiles (pollTransactionsFromFiles)
 
 spec :: Spec
 spec = do
