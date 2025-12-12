@@ -1,6 +1,8 @@
 module Adversary.RunSpec where
 
-import Adversary.Run (ChainSyncOptions (..), Command (..), SubmitOptions (..))
+import Adversary (ChainSyncOptions (..))
+import Adversary.Run (Command (..))
+import Adversary.SubmitTransactions (SubmitOptions (..))
 import Data.List.NonEmpty qualified as NE
 import Options.Applicative (ParserResult (..), defaultPrefs, execParserPure)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
@@ -104,8 +106,9 @@ spec = do
       case result of
         Success (SubmitCommand opts) -> do
           submitNetworkMagic opts `shouldBe` 42
-          submitHost opts `shouldBe` "node1"
-          submitPort opts `shouldBe` 3001
+          submitHost opts `shouldBe` Just "node1"
+          submitPort opts `shouldBe` Just 3001
+          submitPeersDatabase opts `shouldBe` Nothing
           NE.toList (submitTxFiles opts) `shouldBe` ["tx1.hex", "tx2.hex"]
         _ -> fail "Expected successful parse of SubmitCommand"
 
@@ -124,7 +127,50 @@ spec = do
       case result of
         Success (SubmitCommand opts) -> do
           submitNetworkMagic opts `shouldBe` 764824073
-          submitHost opts `shouldBe` "mainnet.node"
-          submitPort opts `shouldBe` 30000
+          submitHost opts `shouldBe` Just "mainnet.node"
+          submitPort opts `shouldBe` Just 30000
+          submitPeersDatabase opts `shouldBe` Nothing
+          NE.toList (submitTxFiles opts) `shouldBe` ["tx1.hex"]
+        _ -> fail "Expected successful parse of SubmitCommand"
+
+    it "parses submit command with peers-database only" $ do
+      let args =
+            [ "submit"
+            , "--network-magic"
+            , "42"
+            , "--peers-database"
+            , "peers.db"
+            , "tx1.hex"
+            ]
+      let result = execParserPure defaultPrefs Run.programInfo args
+      case result of
+        Success (SubmitCommand opts) -> do
+          submitNetworkMagic opts `shouldBe` 42
+          submitHost opts `shouldBe` Nothing
+          submitPort opts `shouldBe` Nothing
+          submitPeersDatabase opts `shouldBe` Just "peers.db"
+          NE.toList (submitTxFiles opts) `shouldBe` ["tx1.hex"]
+        _ -> fail "Expected successful parse of SubmitCommand"
+
+    it "parses submit command with both host/port and peers-database" $ do
+      let args =
+            [ "submit"
+            , "-m"
+            , "42"
+            , "-h"
+            , "node1"
+            , "-p"
+            , "3001"
+            , "-d"
+            , "peers.db"
+            , "tx1.hex"
+            ]
+      let result = execParserPure defaultPrefs Run.programInfo args
+      case result of
+        Success (SubmitCommand opts) -> do
+          submitNetworkMagic opts `shouldBe` 42
+          submitHost opts `shouldBe` Just "node1"
+          submitPort opts `shouldBe` Just 3001
+          submitPeersDatabase opts `shouldBe` Just "peers.db"
           NE.toList (submitTxFiles opts) `shouldBe` ["tx1.hex"]
         _ -> fail "Expected successful parse of SubmitCommand"

@@ -58,9 +58,11 @@ library
                 , cardano-ledger-byron
                 , cardano-ledger-core
                 , cborg
+                , containers
                 , contra-tracer
                 , directory
                 , fsnotify
+                , io-classes
                 , network
                 , network-mux
                 , optparse-applicative
@@ -74,8 +76,10 @@ library
                 , ouroboros-network-protocols
                 , random
                 , serialise
+                , sqlite-simple
                 , strict-stm
                 , text
+                , time
                 , typed-protocols
 
   exposed-modules:
@@ -83,6 +87,11 @@ library
     Adversary.Application
     Adversary.ChainSync.Codec
     Adversary.ChainSync.Connection
+    Adversary.FetchPeers
+    Adversary.FetchPeers.Client
+    Adversary.FetchPeers.Database
+    Adversary.FetchPeers.Log
+    Adversary.FetchPeers.PeerList
     Adversary.Run
     Adversary.SubmitTransactions
     Adversary.SubmitTransactions.Client
@@ -119,12 +128,17 @@ test-suite adversary-test
                 , directory
                 , filepath
                 , hspec
+                , network
                 , optparse-applicative
                 , random
+                , sqlite-simple
                 , strict-stm
+                , temporary
+                , time
                 , unix
 
   build-tool-depends: hspec-discover:hspec-discover
   other-modules:
+    Adversary.FetchPeers.DatabaseSpec
     Adversary.RunSpec
     Adversary.SubmitTransactionsSpec

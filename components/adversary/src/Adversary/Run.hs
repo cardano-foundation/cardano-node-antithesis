@@ -1,37 +1,20 @@
-module Adversary.Run (run, Command (..), ChainSyncOptions (..), SubmitOptions (..), programInfo) where
+module Adversary.Run (run, Command (..), programInfo) where
 
-import Adversary (Message (..), adversary)
-import Adversary.SubmitTransactions (submitTxs)
+import Adversary (ChainSyncOptions (..), Message (..), adversary, toString)
+import Adversary.FetchPeers (FetchPeersOptions (..), fetchPeers)
+import Adversary.FetchPeers.Log (FetchLog)
+import Adversary.SubmitTransactions (SubmitOptions (..), submitTxs)
+import Adversary.SubmitTransactions.Log (SubmitLog)
 import Control.Tracer (contramap, stdoutTracer)
-import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
-import Data.Word (Word64)
 import Options.Applicative
+import System.Environment (getArgs)
 
 -- | Command-line options for the adversary program
 data Command
   = ChainSyncCommand ChainSyncOptions
   | SubmitCommand SubmitOptions
-  deriving (Show, Eq)
-
--- | Options for the ChainSync sub-command
-data ChainSyncOptions = ChainSyncOptions
-  { csNetworkMagic :: Word64
-  , csPort :: Int
-  , csSyncLength :: Int
-  , csChainPointsFile :: FilePath
-  , csNumConnections :: Int
-  , csHosts :: NonEmpty String
-  }
-  deriving (Show, Eq)
-
--- | Options for the Submit sub-command
-data SubmitOptions = SubmitOptions
-  { submitNetworkMagic :: Word64
-  , submitHost :: String
-  , submitPort :: Int
-  , submitTxFiles :: NonEmpty FilePath
-  }
+  | FetchPeersCommand FetchPeersOptions
   deriving (Show, Eq)
 
 -- | Parser for ChainSync options
@@ -92,18 +75,30 @@ submitOptionsParser =
           <> metavar "MAGIC"
           <> help "Network magic number (e.g., 42 for testnet, 764824073 for mainnet)"
       )
-    <*> strOption
-      ( long "host"
-          <> short 'h'
-          <> metavar "HOST"
-          <> help "Host to connect to"
+    <*> optional
+      ( strOption
+          ( long "host"
+              <> short 'h'
+              <> metavar "HOST"
+              <> help "Host to connect to (optional if --peers-database is provided)"
+          )
       )
-    <*> option
-      auto
-      ( long "port"
-          <> short 'p'
-          <> metavar "PORT"
-          <> help "Port number to connect to"
+    <*> optional
+      ( option
+          auto
+          ( long "port"
+              <> short 'p'
+              <> metavar "PORT"
+              <> help "Port number to connect to (optional if --peers-database is provided)"
+          )
+      )
+    <*> optional
+      ( strOption
+          ( long "peers-database"
+              <> short 'd'
+              <> metavar "PATH"
+              <> help "Path to peers database for random peer selection (optional)"
+          )
       )
     <*> ( NE.fromList
             <$> some
@@ -113,6 +108,50 @@ submitOptionsParser =
                   )
               )
         )
+
+-- | Parser for FetchPeers options
+fetchPeersOptionsParser :: Parser FetchPeersOptions
+fetchPeersOptionsParser =
+  FetchPeersOptions
+    <$> option
+      auto
+      ( long "network-magic"
+          <> short 'm'
+          <> metavar "MAGIC"
+          <> help "Network magic number (e.g., 42 for testnet, 764824073 for mainnet)"
+      )
+    <*> strOption
+      ( long "initial-peer"
+          <> short 'i'
+          <> metavar "HOST:PORT"
+          <> help "Initial peer to connect to (format: host:port)"
+      )
+    <*> option
+      auto
+      ( long "poll-interval"
+          <> short 't'
+          <> metavar "SECONDS"
+          <> help "Polling interval in seconds"
+          <> value 60
+          <> showDefault
+      )
+    <*> option
+      auto
+      ( long "num-peers"
+          <> short 'n'
+          <> metavar "NUM"
+          <> help "Number of peers to request per poll"
+          <> value 10
+          <> showDefault
+      )
+    <*> strOption
+      ( long "peers-database"
+          <> short 'd'
+          <> metavar "PATH"
+          <> help "Path to SQLite database file for peer persistence"
+          <> value "peers.db"
+          <> showDefault
+      )
 
 -- | Command parser with sub-commands
 commandParser :: Parser Command
@@ -130,6 +169,12 @@ commandParser =
               (SubmitCommand <$> submitOptionsParser)
               (progDesc "Submit transactions by polling transaction files")
           )
+        <> command
+          "fetch-peers"
+          ( info
+              (FetchPeersCommand <$> fetchPeersOptionsParser)
+              (progDesc "Fetch and maintain a list of peers using the PeerSharing protocol")
+          )
     )
 
 -- | Program info with header and description
@@ -142,32 +187,16 @@ programInfo =
         <> header "adversary - Cardano chaos testing tool implementing N2N protocol"
     )
 
--- | Convert options to string arguments for backward compatibility
-chainSyncOptionsToArgs :: ChainSyncOptions -> [String]
-chainSyncOptionsToArgs ChainSyncOptions {..} =
-  [ show csNetworkMagic
-  , show csPort
-  , show csSyncLength
-  , csChainPointsFile
-  , show csNumConnections
-  ]
-    ++ NE.toList csHosts
-
--- | Convert options to string arguments for backward compatibility
-submitOptionsToArgs :: SubmitOptions -> [String]
-submitOptionsToArgs SubmitOptions {..} =
-  [ show submitNetworkMagic
-  , submitHost
-  , show submitPort
-  ]
-    ++ NE.toList submitTxFiles
-
 -- | Main entry point that parses arguments and runs the appropriate command
 run :: IO Message
 run = do
+  args <- getArgs
+  putStrLn $ toString $ Startup args
   cmd <- execParser programInfo
   case cmd of
     ChainSyncCommand opts ->
-      adversary (chainSyncOptionsToArgs opts)
+      adversary opts
     SubmitCommand opts ->
-      submitTxs (contramap show stdoutTracer) (submitOptionsToArgs opts)
+      submitTxs (contramap (show :: SubmitLog -> String) stdoutTracer) opts
+    FetchPeersCommand opts ->
+      fetchPeers (contramap (show :: FetchLog -> String) stdoutTracer) opts

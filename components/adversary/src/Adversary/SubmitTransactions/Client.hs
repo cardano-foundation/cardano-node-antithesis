@@ -196,7 +196,7 @@ txSubmissionApplication tracer txsVar =
               SingBlocking -> do
                 tx <- atomically $ readTBQueue txsVar
                 atomically $ modifyTVar inflight (<> [tx])
-                traceWith tracer $ SendingTxIds (fst tx)
+                traceWith tracer $ SendingTxIds True (fst tx)
                 return $ SendMsgReplyTxIds (BlockingReply $ sized tx :| []) (idle inflight)
               SingNonBlocking -> do
                 mayTx <- atomically $ tryReadTBQueue txsVar
@@ -204,7 +204,7 @@ txSubmissionApplication tracer txsVar =
                   Nothing -> return $ SendMsgReplyTxIds (NonBlockingReply []) (idle inflight)
                   Just tx -> do
                     atomically $ modifyTVar inflight (<> [tx])
-                    traceWith tracer $ SendingTxIds (fst tx)
+                    traceWith tracer $ SendingTxIds False (fst tx)
                     return $ SendMsgReplyTxIds (NonBlockingReply [sized tx]) (idle inflight),
           recvMsgRequestTxs = \reqTxIds -> do
             traceWith tracer $ ReceivedRequestTxs reqTxIds
