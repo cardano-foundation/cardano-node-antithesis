@@ -47,7 +47,7 @@ fetchPeers tracer FetchPeersOptions {..} = do
     traceWith tracer $ LoadedPeersFromDatabase (length existingPeers)
 
     -- Build initial peer list from database + initial peer
-    let dbPeers = map prAddress existingPeers
+    let dbPeers = map address existingPeers
     let initialPeerList =
           if null dbPeers
             then PeerList.singleton initialAddr

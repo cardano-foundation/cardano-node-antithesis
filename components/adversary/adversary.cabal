@@ -128,12 +128,17 @@ test-suite adversary-test
                 , directory
                 , filepath
                 , hspec
+                , network
                 , optparse-applicative
                 , random
+                , sqlite-simple
                 , strict-stm
+                , temporary
+                , time
                 , unix
 
   build-tool-depends: hspec-discover:hspec-discover
   other-modules:
+    Adversary.FetchPeers.DatabaseSpec
     Adversary.RunSpec
     Adversary.SubmitTransactionsSpec

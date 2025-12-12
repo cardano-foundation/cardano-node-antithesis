@@ -8,29 +8,87 @@ module Adversary.FetchPeers.Database
     loadPeers,
     savePeers,
     PeerRecord (..),
+    Migration (..),
+    DatabaseVersionMismatch (..),
   )
 where
 
+import Control.Exception (Exception, throwIO)
+import Data.List (sortBy)
+import Data.Ord (comparing)
+import Data.String (fromString)
 import Data.Time (UTCTime, getCurrentTime)
 import Database.SQLite.Simple
   ( Connection,
+    Only (..),
     close,
     execute,
     execute_,
     open,
     query_,
   )
+import Database.SQLite.Simple.FromRow (FromRow (..), field)
 import Network.Socket (SockAddr (..))
+import System.IO (hPutStrLn, stderr)
 
 -- | Handle to the peer database
 newtype PeerDatabase = PeerDatabase Connection
 
 -- | A peer record with address and discovery timestamp
 data PeerRecord = PeerRecord
-  { prAddress :: SockAddr,
-    prTimestamp :: UTCTime
+  { address :: SockAddr,
+    timestamp :: UTCTime
   }
   deriving (Show, Eq)
+
+-- | A database migration
+data Migration = Migration
+  { version :: Int,
+    title :: String,
+    sql :: String
+  }
+  deriving (Show, Eq)
+
+-- | Exception thrown when database version is newer than code version
+data DatabaseVersionMismatch = DatabaseVersionMismatch
+  { databaseVersion :: Int,
+    codeVersion :: Int
+  }
+  deriving (Show, Eq)
+
+instance Exception DatabaseVersionMismatch
+
+-- | Database migration record from the migrations table
+data MigrationRecord = MigrationRecord
+  { version :: Int,
+    timestamp :: UTCTime,
+    title :: String,
+    sql :: String
+  }
+  deriving (Show, Eq)
+
+instance FromRow MigrationRecord where
+  fromRow = MigrationRecord <$> field <*> field <*> field <*> field
+
+-- | List of all database migrations in ascending version order
+--   New migrations should be appended to the end of this list
+migrations :: [Migration]
+migrations =
+  [ Migration
+      { version = 1,
+        title = "Create peers table",
+        sql =
+          "CREATE TABLE IF NOT EXISTS peers \
+          \(address TEXT PRIMARY KEY, \
+          \ timestamp TEXT NOT NULL)"
+      }
+  ]
+
+-- | Get the latest migration version from the code
+latestMigrationVersion :: Int
+latestMigrationVersion = case migrations of
+  [] -> 0
+  _ -> maximum (map (\Migration {version = v} -> v) migrations)
 
 -- | Open or create a peer database
 openDatabase :: FilePath -> IO PeerDatabase
@@ -43,15 +101,62 @@ openDatabase path = do
 closeDatabase :: PeerDatabase -> IO ()
 closeDatabase (PeerDatabase conn) = close conn
 
--- | Initialize the database schema
+-- | Initialize the database schema and apply migrations
 initializeSchema :: Connection -> IO ()
 initializeSchema conn = do
-  -- Create peers table with address as TEXT (serialized) and timestamp
+  -- Create the migrations table if it doesn't exist
+  createMigrationsTable conn
+
+  -- Get the current database version
+  dbVer <- getDatabaseVersion conn
+
+  -- Get the latest code version
+  let codeVer = latestMigrationVersion
+
+  -- Compare versions and handle accordingly
+  case compare dbVer codeVer of
+    EQ -> pure () -- Versions match, nothing to do
+    LT -> applyPendingMigrations conn dbVer codeVer -- Database is behind, apply migrations
+    GT -> throwIO $ DatabaseVersionMismatch {databaseVersion = dbVer, codeVersion = codeVer} -- Database is ahead of code version
+
+-- | Create the migrations table if it doesn't exist
+createMigrationsTable :: Connection -> IO ()
+createMigrationsTable conn =
   execute_
     conn
-    "CREATE TABLE IF NOT EXISTS peers \
-    \(address TEXT PRIMARY KEY, \
-    \ timestamp TEXT NOT NULL)"
+    "CREATE TABLE IF NOT EXISTS migrations \
+    \(version INTEGER PRIMARY KEY, \
+    \ timestamp TEXT NOT NULL, \
+    \ title TEXT NOT NULL, \
+    \ sql_script TEXT NOT NULL)"
+
+-- | Get the current database version (highest version in migrations table)
+getDatabaseVersion :: Connection -> IO Int
+getDatabaseVersion conn = do
+  result <- query_ conn "SELECT MAX(version) FROM migrations" :: IO [Only (Maybe Int)]
+  case result of
+    [Only (Just v)] -> pure v
+    _ -> pure 0 -- No migrations applied yet
+
+-- | Apply all pending migrations from dbVersion+1 to codeVersion
+applyPendingMigrations :: Connection -> Int -> Int -> IO ()
+applyPendingMigrations conn dbVer codeVer = do
+  let pending = filter (\Migration {version = v} -> v > dbVer && v <= codeVer) migrations
+  let sorted = sortBy (comparing (\Migration {version = v} -> v)) pending
+  mapM_ (applyMigration conn) sorted
+
+-- | Apply a single migration
+applyMigration :: Connection -> Migration -> IO ()
+applyMigration conn Migration {..} = do
+  hPutStrLn stderr $ "Applying migration " ++ show version ++ ": " ++ title
+  -- Execute the migration SQL
+  execute_ conn (fromString sql)
+  -- Record the migration in the migrations table
+  now <- getCurrentTime
+  execute
+    conn
+    "INSERT INTO migrations (version, timestamp, title, sql_script) VALUES (?, ?, ?, ?)"
+    (version, now, title, sql)
 
 -- | Load all peers from the database
 loadPeers :: PeerDatabase -> IO [PeerRecord]

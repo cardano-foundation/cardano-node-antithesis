@@ -99,7 +99,7 @@ selectRandomPeerFromDatabase dbPath = do
       [] -> pure Nothing
       _ -> do
         idx <- randomRIO (0, length peers - 1)
-        let peer = prAddress (peers !! idx)
+        let peer = address (peers !! idx)
         pure $ Just (sockAddrToHostPort peer)
 
 -- | Convert SockAddr to (host, port) pair
