@@ -14,8 +14,9 @@ data SubmitLog
   | FailedToComputeTxId {txFilePath :: FilePath, errorMsg :: String}
   | EnqueuingTx {txFilePath :: FilePath, txid :: TxId'}
   | FileDoesNotExist {path :: FilePath}
+  | ConnectingToPeers {numPeers :: Int}
   | ReceivedRequestTxIds {numToAck :: Word, numToReq :: Word}
-  | SendingTxIds {txid :: TxId'}
+  | SendingTxIds {blocking:: Bool, txid :: TxId'}
   | ReceivedRequestTxs {reqTxIds :: [TxId']}
   | SendingRequestedTxs {numTxs :: Int}
   | NetworkLog {message :: String}

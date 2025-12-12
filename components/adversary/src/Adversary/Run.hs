@@ -75,18 +75,30 @@ submitOptionsParser =
           <> metavar "MAGIC"
           <> help "Network magic number (e.g., 42 for testnet, 764824073 for mainnet)"
       )
-    <*> strOption
-      ( long "host"
-          <> short 'h'
-          <> metavar "HOST"
-          <> help "Host to connect to"
+    <*> optional
+      ( strOption
+          ( long "host"
+              <> short 'h'
+              <> metavar "HOST"
+              <> help "Host to connect to (optional if --peers-database is provided)"
+          )
       )
-    <*> option
-      auto
-      ( long "port"
-          <> short 'p'
-          <> metavar "PORT"
-          <> help "Port number to connect to"
+    <*> optional
+      ( option
+          auto
+          ( long "port"
+              <> short 'p'
+              <> metavar "PORT"
+              <> help "Port number to connect to (optional if --peers-database is provided)"
+          )
+      )
+    <*> optional
+      ( strOption
+          ( long "peers-database"
+              <> short 'd'
+              <> metavar "PATH"
+              <> help "Path to peers database for random peer selection (optional)"
+          )
       )
     <*> ( NE.fromList
             <$> some
