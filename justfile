@@ -68,6 +68,10 @@ attack testnet='cardano_node_master':
         -f testnets/{{testnet}}/docker-compose.yaml exec -T sidecar \
           flaky-chain-sync
 
+# smoke test: start testnet, verify nodes produce blocks, tear down
+smoke-test testnet='cardano_node_master' timeout='120':
+    ./scripts/smoke-test.sh {{ testnet }} {{ timeout }}
+
 ### Build and Format Commands ###
 
 # format code
