@@ -1,6 +1,6 @@
 # Pin cardano-cli version to match the highest node version in the testnet.
 # Using intersectmbo image (the official source) instead of third-party builds.
-FROM ghcr.io/intersectmbo/cardano-node:10.5.3 AS cardano-bin
+FROM ghcr.io/intersectmbo/cardano-node:10.6.2 AS cardano-bin
 
 FROM debian:bookworm-slim
 

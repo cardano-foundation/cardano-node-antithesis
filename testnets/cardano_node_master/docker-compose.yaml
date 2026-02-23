@@ -1,5 +1,5 @@
 x-cardano-node: &cardano-node
-  image: ghcr.io/intersectmbo/cardano-node:latest
+  image: ghcr.io/intersectmbo/cardano-node:10.5.1
   environment:
     CARDANO_BLOCK_PRODUCER: true
   command: >
@@ -32,6 +32,7 @@ services:
       - p3-configs:/configs/3 # configs for p3
       - p4-configs:/configs/4 # configs for p4
       - p5-configs:/configs/5 # configs for p5
+      - p6-configs:/configs/6 # configs for p6
 
   tracer:
     image: ghcr.io/intersectmbo/cardano-tracer:10.6.0
@@ -71,6 +72,7 @@ services:
 
   p4:
     <<: *cardano-node
+    image: ghcr.io/intersectmbo/cardano-node:10.5.3
     container_name: p4
     hostname: p4.example
     volumes:
@@ -79,10 +81,20 @@ services:
 
   p5:
     <<: *cardano-node
+    image: ghcr.io/intersectmbo/cardano-node:10.5.3
     container_name: p5
     hostname: p5.example
     volumes:
       - p5-configs:/configs:ro
+      - tracer:/tracer
+
+  p6:
+    <<: *cardano-node
+    image: ghcr.io/intersectmbo/cardano-node:10.6.2
+    container_name: p6
+    hostname: p6.example
+    volumes:
+      - p6-configs:/configs:ro
       - tracer:/tracer
 
   sidecar:
@@ -91,7 +103,7 @@ services:
       NETWORKMAGIC: 42
       PORT: 3001
       LIMIT: 100
-      POOLS: "5"
+      POOLS: "6"
       NCONNS: 1
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     container_name: sidecar
@@ -112,7 +124,7 @@ services:
     command:
       - "/opt/cardano-tracer/logs"
     environment:
-      POOLS: "5"
+      POOLS: "6"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     volumes:
       - tracer:/opt/cardano-tracer
@@ -128,6 +140,7 @@ volumes:
   p3-configs:
   p4-configs:
   p5-configs:
+  p6-configs:
 
 networks:
   default:
