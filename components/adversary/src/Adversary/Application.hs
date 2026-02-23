@@ -19,6 +19,7 @@ import Control.Concurrent.Async
     ( mapConcurrently_
     )
 import Control.Concurrent.Class.MonadSTM.Strict
+
     ( MonadSTM (..)
     , StrictTVar
     , modifyTVar

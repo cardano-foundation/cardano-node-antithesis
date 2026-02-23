@@ -101,13 +101,13 @@ TraceOptions:
   ChainSync.Client:
     severity: Warning
   Forge.Loop:
-    severity: Info
+    severity: Silence
   Forge.StateInfo:
     severity: Info
   Mempool:
-    severity: Silence
-  Net.ConnectionManager.Remote:
     severity: Info
+  Net.ConnectionManager.Remote:
+    severity: Warning
   Net.ConnectionManager.Remote.ConnectionManagerCounters:
     severity: Silence
   Net.ErrorPolicy:
@@ -117,17 +117,11 @@ TraceOptions:
   Net.InboundGovernor:
     severity: Warning
   Net.InboundGovernor.Remote:
-    severity: Info
+    severity: Warning
   Net.Mux.Remote:
-    severity: Info
+    severity: Warning
   Net.PeerSelection:
     severity: Silence
-  Net.PeerSelection.Actions:
-    severity: Info
-  Net.Subscription.DNS:
-    severity: Info
-  Net.Subscription.IP:
-    severity: Info
   Resources:
     severity: Silence
   Startup.DiffusionInit:
