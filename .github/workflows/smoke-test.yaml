@@ -1,0 +1,25 @@
+name: Compose smoke test
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'testnets/**'
+      - 'scripts/smoke-test.sh'
+      - 'justfile'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke-test:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run smoke test
+        run: ./scripts/smoke-test.sh cardano_node_master 120
