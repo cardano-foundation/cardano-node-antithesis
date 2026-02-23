@@ -1,11 +1,11 @@
-# Blink Labs images are built from source on Debian Bookworm
-FROM ghcr.io/blinklabs-io/cardano-node:latest AS cardano-node
+# Pin cardano-cli version to match the highest node version in the testnet.
+# Using intersectmbo image (the official source) instead of third-party builds.
+FROM ghcr.io/intersectmbo/cardano-node:10.5.3 AS cardano-bin
 
-USER root
-# Install packages required in build stage
+FROM debian:bookworm-slim
 
-RUN apt update && \
-    apt install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         git \
@@ -13,12 +13,15 @@ RUN apt update && \
         tree \
         python3 \
         python3-pip \
-        jq
+        jq && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy pinned cardano binaries from official image
+COPY --from=cardano-bin /usr/local/bin/cardano-node /usr/local/bin/
+COPY --from=cardano-bin /usr/local/bin/cardano-cli /usr/local/bin/
 
 # Install uv (fast Python package manager)
 RUN python3 -m pip install --break-system-packages uv
-# Create cardano-node source directory
-RUN install --directory --owner=root --group=root --mode=0755 /usr/local/src/cardano-node
 
 # Clone testnet-generation-tool.git repository
 WORKDIR /usr/local/src
@@ -26,7 +29,6 @@ RUN git clone --branch main https://github.com/cardano-foundation/testnet-genera
 
 # Download testnet-generation-tool dependencies
 WORKDIR /usr/local/src/testnet-generation-tool
-# dockerfile
 RUN uv sync && mkdir -p cardano-node && ln -sf /usr/local/bin ./cardano-node/bin
 
 COPY configurator.sh /
