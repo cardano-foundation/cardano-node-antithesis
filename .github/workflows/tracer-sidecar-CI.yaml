@@ -27,14 +27,14 @@ jobs:
         with:
           name: cardano-utxo-csmt-image
           path: ./components/tracer-sidecar/output-docker-image
-      - name: Build arx
-        run: nix bundle -o output-linux-tarball
+      - name: Build AppImage
+        run: nix --quiet bundle --bundler github:ralismark/nix-appimage .#tracer-sidecar -o tracer-sidecar.AppImage
         working-directory: ./components/tracer-sidecar
-      - name: Upload tarball Artifact
+      - name: Upload AppImage Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cardano-utxo-csmt
-          path: ./components/tracer-sidecar/output-linux-tarball
+          name: tracer-sidecar-appimage
+          path: ./components/tracer-sidecar/tracer-sidecar.AppImage
   unit:
     name: Run unit Tests
     runs-on: ubuntu-latest

@@ -27,14 +27,14 @@ jobs:
         with:
           name: cardano-utxo-csmt-image
           path: ./components/adversary/output-docker-image
-      - name: Build arx
-        run: nix bundle -o output-linux-tarball
+      - name: Build AppImage
+        run: nix --quiet bundle --bundler github:ralismark/nix-appimage .#adversary -o adversary.AppImage
         working-directory: ./components/adversary
-      - name: Upload tarball Artifact
+      - name: Upload AppImage Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cardano-utxo-csmt
-          path: ./components/adversary/output-linux-tarball
+          name: adversary-appimage
+          path: ./components/adversary/adversary.AppImage
   unit:
     name: Run unit Tests
     runs-on: ubuntu-latest
