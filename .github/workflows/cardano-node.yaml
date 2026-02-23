@@ -69,6 +69,7 @@ jobs:
       uses: pozetroninc/github-action-get-latest-release@master
       with:
         repository: cardano-foundation/moog
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download moog from latest release
       uses: robinraju/release-downloader@v1.10
