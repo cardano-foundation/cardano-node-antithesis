@@ -52,8 +52,7 @@ import Data.List
     ( mapAccumL
     )
 import Data.Maybe
-    ( fromJust
-    , fromMaybe
+    ( fromMaybe
     , mapMaybe
     )
 import Data.Set
@@ -80,7 +79,7 @@ mkSpec nPools = do
     forM_ [1 :: Int .. nPools] $ \i -> do
         let pool = "p" <> T.pack (show i)
         sometimes ("Any " <> pool <> " log") $ \_s LogMessage{host} ->
-            fromJust (T.stripSuffix ".example" host) == pool
+            fromMaybe host (T.stripSuffix ".example" host) == pool
 
     alwaysOrUnreachable "no critical logs" $ \_s msg@LogMessage{sev} ->
         justANodeKill msg || sev < Critical
