@@ -1,88 +1,63 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# -------------------------- CONFIG --------------------------
-REPO_URL="https://github.com/cardano-foundation/cardano-node-antithesis.git"
-CLONE_DIR="/tmp/cardano-node-antithesis-build"
+# Build and push all component images from the current checkout.
+# Images are tagged with both the short and full commit hash.
+# Updates docker-compose.yaml to reference the new short hash tags.
+
 REGISTRY="ghcr.io/cardano-foundation/cardano-node-antithesis"
-TEST="testnets/cardano_node_master"
-# -----------------------------------------------------------
+COMPOSE="testnets/cardano_node_master/docker-compose.yaml"
+COMPONENTS=(configurator sidecar tracer-sidecar adversary)
+SHORT_SHA=$(git rev-parse --short HEAD)
+FULL_SHA=$(git rev-parse HEAD)
 
-# 1. Extract "name tag" pairs  (e.g. configurator 5967670)
-mapfile -t ENTRIES < <(
-  grep -oP 'ghcr\.io/cardano-foundation/cardano-node-antithesis/\K[^ ]+' "$TEST/docker-compose.yaml" |
-  sed 's|.*cardano-node-antithesis/||; s|:| |' |
-  sort -u
-)
+echo "Building all components at ${SHORT_SHA}..."
 
-# 2. Clone / update repo once
-if [[ ! -d "$CLONE_DIR/.git" ]]; then
-  echo "Cloning repository..."
-  git clone "$REPO_URL" "$CLONE_DIR"
-else
-  echo "Updating existing clone..."
-  git -C "$CLONE_DIR" fetch --tags --prune --quiet
-  git -C "$CLONE_DIR" reset --hard --quiet
-  git -C "$CLONE_DIR" clean -fdx --quiet
-fi
-
-# 3. Process **each** entry independently
-for entry in "${ENTRIES[@]}"; do
-  NAME="${entry%% *}"
-  TAG="${entry#* }"
-  BUILD_DIR="$CLONE_DIR/components/$NAME"
+for NAME in "${COMPONENTS[@]}"; do
+  BUILD_DIR="components/$NAME"
 
   echo
   echo "=================================================="
-  echo "Processing: $NAME  (tag: $TAG)"
+  echo "Processing: $NAME (${SHORT_SHA})"
   echo "=================================================="
 
-  # ---- Resolve tag → commit ----
-  COMMIT=$(git -C "$CLONE_DIR" rev-list -n 1 "$TAG" 2>/dev/null || true)
-  if [[ -z "$COMMIT" ]]; then
-    echo "Error: Tag '$TAG' not found in repo. Skipping $NAME."
-    continue
-  fi
-  echo "→ Tag $TAG resolves to commit ${COMMIT:0:8}"
-
-  # ---- Checkout exact commit (detached HEAD) ----
-  git -C "$CLONE_DIR" checkout "$COMMIT" --quiet
-
-  # ---- Verify component directory exists ----
   if [[ ! -d "$BUILD_DIR" ]]; then
-    echo "Warning: Directory $BUILD_DIR does not exist. Skipping $NAME."
+    echo "Warning: $BUILD_DIR not found, skipping."
     continue
   fi
 
-  cd "$BUILD_DIR"
-  echo "Current directory: $(pwd)"
-  ls -la
+  (
+    cd "$BUILD_DIR"
 
-  # try to use nix build .#docker-image if possible or fallback to docker build
-  if nix eval --raw ".#docker-image" >/dev/null 2>&1; then
-      echo "Building $NAME using from $CLONE_DIR using nix ..."
-        nix build ".#docker-image" --out-link "/tmp/${NAME}-docker-image" --print-out-paths
-        docker load -i "/tmp/${NAME}-docker-image"
-        version=$(nix eval --raw ".#version")
-        docker tag "$REGISTRY/$NAME:$version" "$REGISTRY/$NAME:$TAG"
-        docker tag "$REGISTRY/$NAME:$version" "$REGISTRY/$NAME:$COMMIT"
+    if nix eval --raw ".#docker-image" >/dev/null 2>&1; then
+      echo "Building $NAME with nix..."
+      nix build ".#docker-image" --out-link "/tmp/${NAME}-docker-image" --print-out-paths
+      docker load -i "/tmp/${NAME}-docker-image"
+      version=$(nix eval --raw ".#version")
+      docker tag "$REGISTRY/$NAME:$version" "$REGISTRY/$NAME:$SHORT_SHA"
+      docker tag "$REGISTRY/$NAME:$version" "$REGISTRY/$NAME:$FULL_SHA"
     else
-    # ---- Build image ----
-    echo "Building $NAME from $BUILD_DIR using docker ..."
-    docker build \
-        --pull \
-        -t "$REGISTRY/$NAME:$TAG" \
-        -t "$REGISTRY/$NAME:$COMMIT" \
+      echo "Building $NAME with docker..."
+      docker build --pull \
+        -t "$REGISTRY/$NAME:$SHORT_SHA" \
+        -t "$REGISTRY/$NAME:$FULL_SHA" \
         .
-  fi
-  # ---- Push both tags ----
-  echo "Pushing $NAME ..."
-  docker push "$REGISTRY/$NAME:$TAG"
-  docker push "$REGISTRY/$NAME:$COMMIT"
+    fi
 
-  echo "Done: $NAME"
+    echo "Pushing $NAME..."
+    docker push "$REGISTRY/$NAME:$SHORT_SHA"
+    docker push "$REGISTRY/$NAME:$FULL_SHA"
+    echo "Done: $NAME"
+  )
+done
+
+# Update docker-compose.yaml with new image tags
+echo
+echo "Updating $COMPOSE..."
+for NAME in "${COMPONENTS[@]}"; do
+  sed -i "s|\(${REGISTRY}/${NAME}\):[^ ]*|\1:${SHORT_SHA}|g" "$COMPOSE"
 done
 
 echo
-echo "All components processed."
-echo "Images available at: $REGISTRY/<name>:<tag> and $REGISTRY/<name>:<commit>"
+echo "All components built and pushed."
+echo "Images: $REGISTRY/<name>:$SHORT_SHA"

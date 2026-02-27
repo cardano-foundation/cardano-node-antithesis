@@ -2,9 +2,6 @@ name: Compose smoke test
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Build and push component images for cardano-node testnet"]
-    types: [completed]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,12 +12,7 @@ jobs:
     name: Smoke test
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - name: Run smoke test
         run: ./scripts/smoke-test.sh cardano_node_master 120
