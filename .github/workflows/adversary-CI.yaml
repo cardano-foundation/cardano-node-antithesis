@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: sudo rm -rf /opt&
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: paolino/dev-assets/setup-nix@v0.0.1
         with:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -23,7 +23,7 @@ jobs:
         run: nix build .#docker-image -o output-docker-image
         working-directory: ./components/adversary
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cardano-utxo-csmt-image
           path: ./components/adversary/output-docker-image
@@ -31,7 +31,7 @@ jobs:
         run: nix --quiet bundle --bundler github:ralismark/nix-appimage .#adversary -o adversary.AppImage
         working-directory: ./components/adversary
       - name: Upload AppImage Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: adversary-appimage
           path: ./components/adversary/adversary.AppImage
@@ -39,7 +39,7 @@ jobs:
     name: Run unit Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: paolino/dev-assets/setup-nix@v0.0.1
         with:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -50,7 +50,7 @@ jobs:
   #   name: Run Benchmarks
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v6
   #     - uses: cachix/install-nix-action@v31
   #       with:
   #         extra_nix_config: |
@@ -67,7 +67,7 @@ jobs:
     name: Check code quality
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: paolino/dev-assets/setup-nix@v0.0.1
         with:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
