@@ -57,13 +57,16 @@ services:
       - tracer:/tracer
   p2:
     <<: *cardano-node
+    image: ghcr.io/intersectmbo/cardano-node:10.5.3
     container_name: p2
     hostname: p2.example
     volumes:
       - p2-configs:/configs:ro
       - tracer:/tracer
+
   p3:
     <<: *cardano-node
+    image: ghcr.io/intersectmbo/cardano-node:10.6.2
     container_name: p3
     hostname: p3.example
     volumes:
@@ -72,7 +75,7 @@ services:
 
   p4:
     <<: *cardano-node
-    image: ghcr.io/intersectmbo/cardano-node:10.5.3
+    image: ghcr.io/intersectmbo/cardano-node:10.6.2
     container_name: p4
     hostname: p4.example
     volumes:
@@ -81,7 +84,7 @@ services:
 
   p5:
     <<: *cardano-node
-    image: ghcr.io/intersectmbo/cardano-node:10.5.3
+    image: ghcr.io/intersectmbo/cardano-node:10.7.1
     container_name: p5
     hostname: p5.example
     volumes:
@@ -90,7 +93,7 @@ services:
 
   p6:
     <<: *cardano-node
-    image: ghcr.io/intersectmbo/cardano-node:10.6.2
+    image: ghcr.io/intersectmbo/cardano-node:10.7.1
     container_name: p6
     hostname: p6.example
     volumes:
