@@ -128,12 +128,15 @@ def query_utxos(address):
 
 
 def pick_utxo(utxos):
-    """Pick a UTxO using Antithesis deterministic random."""
+    """Pick a UTxO using Antithesis deterministic random. Returns (key, lovelace)."""
     keys = list(utxos.keys())
     if not keys:
-        return None
+        return None, 0
     idx = get_random() % len(keys)
-    return keys[idx]
+    key = keys[idx]
+    value = utxos[key].get("value", {})
+    lovelace = value.get("lovelace", 0) if isinstance(value, dict) else 0
+    return key, lovelace
 
 
 def random_sleep():
@@ -143,22 +146,37 @@ def random_sleep():
     time.sleep(seconds)
 
 
-def build_sign_submit(era, address, utxo_key, protocol_params_path, skey_path):
-    """Build a self-transfer, sign it, and submit."""
+MIN_SPLIT_OUTPUTS = 1
+MAX_SPLIT_OUTPUTS = 5
+SPLIT_AMOUNT = 2_000_000  # 2 ADA per extra output
+
+
+def build_sign_submit(era, address, utxo_key, utxo_value, protocol_params_path, skey_path):
+    """Build a transaction with random extra outputs to grow the UTxO set."""
     tip = json.loads(run_cli("query", "tip", *NETWORK_ID.split()))
     current_slot = tip.get("slot", tip.get("slotInEpoch", 0))
     ttl = current_slot + 200
 
+    # Decide how many extra outputs (Antithesis deterministic random)
+    n_extra = MIN_SPLIT_OUTPUTS + (get_random() % (MAX_SPLIT_OUTPUTS - MIN_SPLIT_OUTPUTS + 1))
+    # Only split if the UTxO has enough funds
+    needed = n_extra * SPLIT_AMOUNT + 5_000_000  # extra outputs + min change + fees
+    if utxo_value < needed:
+        n_extra = 0
+
     tx_raw = os.path.join(WORK_DIR, "tx.raw")
     tx_signed = os.path.join(WORK_DIR, "tx.signed")
 
-    # Build
-    run_cli(era, "transaction", "build",
-            *NETWORK_ID.split(),
-            "--tx-in", utxo_key,
-            "--change-address", address,
-            "--invalid-hereafter", str(ttl),
-            "--out-file", tx_raw)
+    # Build with extra outputs
+    build_args = [era, "transaction", "build",
+                  *NETWORK_ID.split(),
+                  "--tx-in", utxo_key]
+    for _ in range(n_extra):
+        build_args += ["--tx-out", f"{address}+{SPLIT_AMOUNT}"]
+    build_args += ["--change-address", address,
+                   "--invalid-hereafter", str(ttl),
+                   "--out-file", tx_raw]
+    run_cli(*build_args)
 
     # Sign
     run_cli(era, "transaction", "sign",
@@ -203,10 +221,10 @@ def main():
                 time.sleep(10)
                 continue
 
-            utxo_key = pick_utxo(utxos)
-            log.info("Using UTxO: %s", utxo_key)
+            utxo_key, utxo_value = pick_utxo(utxos)
+            log.info("Using UTxO: %s (%d lovelace, %d UTxOs total)", utxo_key, utxo_value, len(utxos))
 
-            tx_id = build_sign_submit(era, address, utxo_key, protocol_params, skey_path)
+            tx_id = build_sign_submit(era, address, utxo_key, utxo_value, protocol_params, skey_path)
             tx_count += 1
             log.info("Submitted tx %d: %s", tx_count, tx_id)
 
