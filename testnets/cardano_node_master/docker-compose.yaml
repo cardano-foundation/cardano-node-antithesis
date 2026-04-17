@@ -42,7 +42,7 @@ x-cardano-relay: &cardano-relay
 
 services:
   configurator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:0b69c18
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:tx-gen-v1
     container_name: configurator
     volumes:
       - ./testnet.yaml:/testnet.yaml #  source of configurations
@@ -126,7 +126,7 @@ services:
         condition: service_started
 
   tx-generator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:0b69c18
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:tx-gen-v1
     container_name: tx-generator
     hostname: tx-generator.example
     environment:
@@ -142,7 +142,7 @@ services:
         condition: service_started
 
   ogmios:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/ogmios:0b69c18
+    image: docker.io/cardanosolutions/ogmios:latest
     container_name: ogmios
     hostname: ogmios.example
     command:
@@ -161,7 +161,7 @@ services:
         condition: service_started
 
   kupo:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/kupo:0b69c18
+    image: docker.io/cardanosolutions/kupo:latest
     container_name: kupo
     hostname: kupo.example
     command:
