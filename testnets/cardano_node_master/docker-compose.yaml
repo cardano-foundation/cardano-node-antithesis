@@ -1,5 +1,5 @@
 x-cardano-node: &cardano-node
-  image: ghcr.io/intersectmbo/cardano-node:10.5.1
+  image: ghcr.io/intersectmbo/cardano-node:10.5.3
   environment:
     CARDANO_BLOCK_PRODUCER: true
   command: >
@@ -21,6 +21,25 @@ x-cardano-node: &cardano-node
     tracer-sidecar:
       condition: service_started
 
+x-cardano-relay: &cardano-relay
+  environment:
+    CARDANO_BLOCK_PRODUCER: false
+  command: >
+    run --topology /configs/configs/topology.json
+      --config /configs/configs/config.json
+      --database-path /state
+      --socket-path /state/node.socket
+      --tracer-socket-path-connect /tracer/tracer.socket
+      --port 3001
+      --host-addr 0.0.0.0
+      +RTS -N -A16m -qg -qb -RTS
+  restart: always
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
+
 services:
   configurator:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:aa43ea4
@@ -30,9 +49,6 @@ services:
       - p1-configs:/configs/1 # configs for p1
       - p2-configs:/configs/2 # configs for p2
       - p3-configs:/configs/3 # configs for p3
-      - p4-configs:/configs/4 # configs for p4
-      - p5-configs:/configs/5 # configs for p5
-      - p6-configs:/configs/6 # configs for p6
 
   tracer:
     image: ghcr.io/intersectmbo/cardano-tracer:10.6.0
@@ -55,9 +71,10 @@ services:
     volumes:
       - p1-configs:/configs:ro
       - tracer:/tracer
+
   p2:
     <<: *cardano-node
-    image: ghcr.io/intersectmbo/cardano-node:10.5.3
+    image: ghcr.io/intersectmbo/cardano-node:10.6.2
     container_name: p2
     hostname: p2.example
     volumes:
@@ -66,39 +83,44 @@ services:
 
   p3:
     <<: *cardano-node
-    image: ghcr.io/intersectmbo/cardano-node:10.6.2
+    image: ghcr.io/intersectmbo/cardano-node:10.7.1
     container_name: p3
     hostname: p3.example
     volumes:
       - p3-configs:/configs:ro
       - tracer:/tracer
 
-  p4:
-    <<: *cardano-node
+  relay1:
+    <<: *cardano-relay
     image: ghcr.io/intersectmbo/cardano-node:10.6.2
-    container_name: p4
-    hostname: p4.example
+    container_name: relay1
+    hostname: relay1.example
     volumes:
-      - p4-configs:/configs:ro
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
       - tracer:/tracer
 
-  p5:
-    <<: *cardano-node
+  relay2:
+    <<: *cardano-relay
     image: ghcr.io/intersectmbo/cardano-node:10.7.1
-    container_name: p5
-    hostname: p5.example
+    container_name: relay2
+    hostname: relay2.example
     volumes:
-      - p5-configs:/configs:ro
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
       - tracer:/tracer
 
-  p6:
-    <<: *cardano-node
-    image: ghcr.io/intersectmbo/cardano-node:10.7.1
-    container_name: p6
-    hostname: p6.example
+  oura:
+    image: ghcr.io/txpipe/oura:latest
+    container_name: oura
+    hostname: oura.example
+    command: daemon --config /etc/oura/daemon.toml
     volumes:
-      - p6-configs:/configs:ro
-      - tracer:/tracer
+      - ./oura-daemon.toml:/etc/oura/daemon.toml:ro
+    restart: always
+    depends_on:
+      relay1:
+        condition: service_started
 
   sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:452fae1
@@ -106,7 +128,7 @@ services:
       NETWORKMAGIC: 42
       PORT: 3001
       LIMIT: 100
-      POOLS: "6"
+      POOLS: "3"
       NCONNS: 1
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     container_name: sidecar
@@ -127,7 +149,7 @@ services:
     command:
       - "/opt/cardano-tracer/logs"
     environment:
-      POOLS: "6"
+      POOLS: "3"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     volumes:
       - tracer:/opt/cardano-tracer
@@ -141,9 +163,6 @@ volumes:
   p1-configs:
   p2-configs:
   p3-configs:
-  p4-configs:
-  p5-configs:
-  p6-configs:
 
 networks:
   default:
