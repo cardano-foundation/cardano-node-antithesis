@@ -228,6 +228,16 @@ def main():
             tx_count += 1
             log.info("Submitted tx %d: %s", tx_count, tx_id)
 
+            # Wait for the consumed UTxO to disappear (tx included in block)
+            for _ in range(60):
+                time.sleep(2)
+                fresh = query_utxos(address)
+                if utxo_key not in fresh:
+                    log.info("UTxO consumed, %d UTxOs now available", len(fresh))
+                    break
+            else:
+                log.warning("UTxO still present after 120s, proceeding anyway")
+
         except Exception as e:
             error_count += 1
             log.error("Tx failed (error %d): %s", error_count, e)
@@ -236,7 +246,7 @@ def main():
                 era = get_era()
             except Exception:
                 pass
-            time.sleep(5)
+            time.sleep(10)
             continue
 
         random_sleep()
