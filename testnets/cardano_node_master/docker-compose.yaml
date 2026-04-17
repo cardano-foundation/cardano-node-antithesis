@@ -42,7 +42,7 @@ x-cardano-relay: &cardano-relay
 
 services:
   configurator:
-    build: ../../components/configurator
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:6e74198
     container_name: configurator
     volumes:
       - ./testnet.yaml:/testnet.yaml #  source of configurations
@@ -126,7 +126,7 @@ services:
         condition: service_started
 
   tx-generator:
-    build: ../../components/tx-generator
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:6e74198
     container_name: tx-generator
     hostname: tx-generator.example
     environment:
