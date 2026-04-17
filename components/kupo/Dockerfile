@@ -1,0 +1,1 @@
+FROM cardanosolutions/kupo:latest

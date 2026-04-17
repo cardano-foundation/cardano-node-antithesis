@@ -1,0 +1,1 @@
+FROM cardanosolutions/ogmios:latest
