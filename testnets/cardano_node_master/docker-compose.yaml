@@ -145,7 +145,9 @@ services:
     image: docker.io/cardanosolutions/ogmios:latest
     container_name: ogmios
     hostname: ogmios.example
+    entrypoint: ["/harness/harness.sh", "/state/node.socket"]
     command:
+      - "ogmios"
       - "--node-socket"
       - "/state/node.socket"
       - "--node-config"
@@ -155,6 +157,7 @@ services:
     volumes:
       - relay2-state:/state:ro
       - p1-configs:/configs:ro
+      - ../../components/n2c-harness:/harness:ro
     restart: always
     depends_on:
       relay2:
@@ -164,7 +167,9 @@ services:
     image: docker.io/cardanosolutions/kupo:latest
     container_name: kupo
     hostname: kupo.example
+    entrypoint: ["/harness/harness.sh", "/state/node.socket"]
     command:
+      - "kupo"
       - "--node-socket"
       - "/state/node.socket"
       - "--node-config"
@@ -179,6 +184,7 @@ services:
     volumes:
       - relay2-state:/state:ro
       - p1-configs:/configs:ro
+      - ../../components/n2c-harness:/harness:ro
     restart: always
     depends_on:
       relay2:
