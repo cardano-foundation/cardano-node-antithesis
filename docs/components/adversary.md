@@ -3,7 +3,7 @@
 The idea is to create an executable which:
 
 - can be triggered by Antithesis
-- behaves like a node but with unusual (possible adversarial) behaviours
+- behaves like a node but with unusual, potentially adversarial behaviours
 - in order to test the "real" nodes in the cluster run by Antithesis
 
 Cardano protocol details:
@@ -30,7 +30,7 @@ Overall approach:
 Implementation considerations:
 
 - Make a Haskell executable
-- Not absurd to start from scratch but can look at cardano-wallet code for inspiration
+- Feasible to start from scratch; cardano-wallet code as reference
 - Must have [ouroboros-network][Ouroboros] (and possibly ouroboros-consensus-cardano) as dependencies
 - Might need external C libraries (libsodium)
 - All this might make it necessary to use Nix to get all dependencies working
@@ -42,7 +42,7 @@ To be controlled by antithesis we have to create an idling container with script
 
 To test it we have to exec into the container and run the script `parallel_driver_flaky_chain_sync.sh` located at `/opt/antithesis/test/v1/chain-sync-client/`
 
-The scripts is located in the composer directory of this adversary component.
+The scripts are located in the `compose` directory of this adversary component.
 
 ## Build the image
 
@@ -82,7 +82,7 @@ There is a Dockerfile available
     ```
 3. Exec into the adversary container
     ```bash
-    docker compose -f $test exec adversary /bash
+    docker compose -f $test exec adversary /bin/bash
     ```
 4. Run the script
     ```bash
