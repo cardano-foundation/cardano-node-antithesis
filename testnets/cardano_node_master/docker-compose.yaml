@@ -157,7 +157,7 @@ services:
     volumes:
       - relay2-state:/state:ro
       - p1-configs:/configs:ro
-      - ../../components/n2c-harness:/harness:ro
+      - ./harness.sh:/harness/harness.sh:ro
     restart: always
     depends_on:
       relay2:
@@ -184,7 +184,7 @@ services:
     volumes:
       - relay2-state:/state:ro
       - p1-configs:/configs:ro
-      - ../../components/n2c-harness:/harness:ro
+      - ./harness.sh:/harness/harness.sh:ro
     restart: always
     depends_on:
       relay2:
