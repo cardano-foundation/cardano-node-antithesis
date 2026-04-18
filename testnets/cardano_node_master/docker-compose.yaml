@@ -42,13 +42,14 @@ x-cardano-relay: &cardano-relay
 
 services:
   configurator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:aa43ea4
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:tx-gen-v1
     container_name: configurator
     volumes:
       - ./testnet.yaml:/testnet.yaml #  source of configurations
       - p1-configs:/configs/1 # configs for p1
       - p2-configs:/configs/2 # configs for p2
       - p3-configs:/configs/3 # configs for p3
+      - utxo-keys:/utxo-keys # funded address keys for tx-generator
 
   tracer:
     image: ghcr.io/intersectmbo/cardano-tracer:10.6.0
@@ -98,6 +99,7 @@ services:
     volumes:
       - p1-configs:/configs:ro
       - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay1-state:/state
       - tracer:/tracer
 
   relay2:
@@ -117,6 +119,22 @@ services:
     command: daemon --config /etc/oura/daemon.toml
     volumes:
       - ./oura-daemon.toml:/etc/oura/daemon.toml:ro
+    restart: always
+    depends_on:
+      relay1:
+        condition: service_started
+
+  tx-generator:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:tx-gen-v1
+    container_name: tx-generator
+    hostname: tx-generator.example
+    environment:
+      CARDANO_NODE_SOCKET_PATH: /state/node.socket
+      NETWORK_MAGIC: "42"
+    volumes:
+      - relay1-state:/state:ro
+      - p1-configs:/configs:ro
+      - utxo-keys:/utxo-keys:ro
     restart: always
     depends_on:
       relay1:
@@ -163,6 +181,8 @@ volumes:
   p1-configs:
   p2-configs:
   p3-configs:
+  relay1-state:
+  utxo-keys:
 
 networks:
   default:

@@ -144,6 +144,12 @@ mkdir -p /configs
 cp -r /tmp/testnet/pools/* /configs
 cp -r /tmp/testnet/utxos/* /configs
 
+# Preserve UTxO keys for tx-generator before pool-specific keys overwrite them
+if [ -d "/configs/keys" ] && [ -d "/utxo-keys" ]; then
+  echo "preserving UTxO keys to /utxo-keys"
+  cp -r /configs/keys/* /utxo-keys/ 2>/dev/null || true
+fi
+
 echo "removing /configs/keys"; rm -rf /configs/keys
 
 pools=$(ls -d /configs/*)
