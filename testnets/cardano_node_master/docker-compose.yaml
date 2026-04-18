@@ -108,6 +108,7 @@ services:
     volumes:
       - p1-configs:/configs:ro
       - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay2-state:/state
       - tracer:/tracer
 
   oura:
@@ -120,6 +121,33 @@ services:
     restart: always
     depends_on:
       relay1:
+        condition: service_started
+
+  kupo:
+    image: docker.io/cardanosolutions/kupo:latest
+    container_name: kupo
+    hostname: kupo.example
+    entrypoint: ["/harness/harness.sh", "/state/node.socket"]
+    command:
+      - "kupo"
+      - "--node-socket"
+      - "/state/node.socket"
+      - "--node-config"
+      - "/configs/configs/config.json"
+      - "--host"
+      - "0.0.0.0"
+      - "--match"
+      - "*"
+      - "--since"
+      - "origin"
+      - "--in-memory"
+    volumes:
+      - relay2-state:/state:ro
+      - p1-configs:/configs:ro
+      - ./harness.sh:/harness/harness.sh:ro
+    restart: always
+    depends_on:
+      relay2:
         condition: service_started
 
   sidecar:
@@ -163,6 +191,7 @@ volumes:
   p1-configs:
   p2-configs:
   p3-configs:
+  relay2-state:
 
 networks:
   default:
