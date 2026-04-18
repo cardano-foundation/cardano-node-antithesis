@@ -3,7 +3,9 @@
 #
 # Wraps an N2C service (ogmios, kupo) and:
 # - Waits for the node socket before starting
-# - Forwards signals to the child process
+# - Converts SIGTERM to SIGINT for Haskell processes
+#   (GHC handles SIGINT gracefully but not SIGTERM by default,
+#    see: https://github.com/IntersectMBO/cardano-node/issues/2267)
 # - Logs non-zero exits with signal context
 #
 # Usage: harness.sh <socket-path> <command> [args...]
@@ -21,10 +23,11 @@ echo "[harness] socket ready, starting: $*"
 "$@" &
 CHILD=$!
 
-# Forward SIGTERM and SIGINT to child
+# Convert SIGTERM to SIGINT for GHC (Haskell) processes
+# GHC only handles SIGINT (UserInterrupt), SIGTERM kills without cleanup
 SIGNALED=false
-trap 'SIGNALED=true; echo "[harness] received SIGTERM, forwarding to child ($CHILD)"; kill -TERM $CHILD 2>/dev/null' TERM
-trap 'SIGNALED=true; echo "[harness] received SIGINT, forwarding to child ($CHILD)"; kill -INT $CHILD 2>/dev/null' INT
+trap 'SIGNALED=true; echo "[harness] SIGTERM received, sending SIGINT to child ($CHILD)"; kill -INT $CHILD 2>/dev/null' TERM
+trap 'SIGNALED=true; echo "[harness] SIGINT received, forwarding to child ($CHILD)"; kill -INT $CHILD 2>/dev/null' INT
 
 # Wait for child to exit
 wait $CHILD
@@ -36,7 +39,7 @@ if [ $EXIT_CODE -eq 0 ]; then
 fi
 
 if [ "$SIGNALED" = true ]; then
-    echo "[harness] child exited ($EXIT_CODE) after signal — service does not handle graceful shutdown"
+    echo "[harness] child exited ($EXIT_CODE) after signal"
 fi
 
 exit $EXIT_CODE
