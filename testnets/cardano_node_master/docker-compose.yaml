@@ -199,6 +199,19 @@ services:
       tracer:
         condition: service_started
 
+  log-tailer:
+    image: alpine:3
+    container_name: log-tailer
+    hostname: log-tailer.example
+    entrypoint: ["/bin/sh", "/log-tailer.sh"]
+    volumes:
+      - tracer:/tracer:ro
+      - ./log-tailer.sh:/log-tailer.sh:ro
+    restart: always
+    depends_on:
+      tracer:
+        condition: service_started
+
 volumes:
   tracer:
   p1-configs:
