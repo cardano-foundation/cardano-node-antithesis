@@ -1,6 +1,6 @@
 # Testnets
 
-## Just commands
+## Available commands
 
 ```bash
 just
@@ -11,27 +11,34 @@ Available recipes:
     attack testnet='cardano_node_master'            # attack the network with adversarial chain sync clients
     check-convergence testnet='cardano_node_master' # check convergence of nodes in a testnet
     default                                         # just this help message
+    down testnet='cardano_node_master'              # stop a testnet
     exec container testnet='cardano_node_master'    # exec into a container
-    format                                          # format code
     logs container testnet='cardano_node_master'    # view logs of a container
     ps testnet='cardano_node_master'                # list containers in a testnet
     restart testnet='cardano_node_master'           # restart a testnet
-    start testnet='cardano_node_master'             # start a testnet
-    stats testnet='cardano_node_master'             # view resource usage stats of a testnet
-    stop testnet='cardano_node_master'              # stop a testnet
+    up testnet='cardano_node_master'                # start a testnet
 ```
 
-## Command to start the testnet
+## Running locally
 
-It's possible and desirable to run the testnet locally, before submitting them to Antithesis. Nevertheless we have to do some gymnic to actually try the scripts in the sidecar.
+Run the testnet locally before submitting to Antithesis to verify containers start and the chain converges:
 
-The `justfile` contains a command to start the testnet, just some wrappers around docker-compose, which means that all the images are available locally or on public repositories.
+```bash
+# Start
+just up
 
-```asciinema-player
-{
-    "file": "assets/asciinema/run-test.cast",
-    "cols": 150,
-    "rows": 50,
-    "mkap_theme": "none"
-}
+# Verify all containers are running
+just ps
+
+# Watch chain progress
+just logs tracer-sidecar
+
+# Stop and clean up volumes
+just down
 ```
+
+The `justfile` wraps `docker compose` commands. All images must be available locally (built) or published to `ghcr.io`.
+
+## Available testnets
+
+- [cardano_node_master](cardano-node-master.md): Mixed-version testnet with producers, relays, and N2N ecosystem clients

@@ -3,27 +3,36 @@ WARNING: This project is in early development and is not production-ready. Use a
 
 # Cardano Node test assets for Antithesis
 
-This repository contains test assets and configurations for running Antithesis tests against Cardano Node implementations.
+This repository contains test assets and configurations for running [Antithesis](https://antithesis.com/) fault-injection tests against Cardano Node implementations.
 
 ## Structure of the repository
 
-- `testnets/`: Contains configurations for various Cardano test networks.
-- `components/`: Contains reusable components for setting up test environments.
+- `testnets/`: Testnet configurations (docker-compose + genesis parameters).
+- `components/`: Reusable Docker containers for the test environment.
 
 ## Components
 
-These are docker containers useful to set up the test environment for Antithesis. Dependign on their role, they can be simple wrappers around external executables as well as complex services that we think can be useful in an active or passive way to test Cardano Nodes.
+Docker containers that set up and drive the Antithesis test environment. Depending on their role, they range from simple wrappers around external executables to complex services for actively or passively testing Cardano Nodes.
 
-- `adversary/`: A Node 2 Node client that behave maliciously to test the robustness of Cardano Node implementations.
-- `configurator/`: A component that generates configuration files for Cardano Node instances based on test requirements.
-- `config/`: A special components that let antithesis be configured via a container.
-- `sidecar/`: A set of tests that Antithesis is performing to validate the network status.
-- `tracer/`: A component that collects and analyzes trace logs from Cardano Node instances during tests.
-- `tracer-sidecar/`: A sidecar service that runs alongside
+- `adversary/`: A node-to-node client that behaves maliciously to test the robustness of Cardano Node implementations.
+- `configurator/`: Generates genesis files, node configuration, and signing keys for the testnet using the [testnet-generation-tool](https://github.com/cardano-foundation/testnet-generation-tool).
+- `config/`: Antithesis platform configuration container.
+- `sidecar/`: Network health checks and Antithesis assertions that validate testnet status.
+- `tracer-sidecar/`: Processes structured node logs from cardano-tracer into Antithesis assertions (chain convergence, error detection).
+
 ## Testnets
 
-Currently we provide and maintain only one testnet configuration, but we plan to expand this list in the future. Some old famoud testnets are broken in the old-broken directory for historical reference [link](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/old-broken)
+Currently we provide and maintain one testnet configuration. Some old testnets are preserved in the [old-broken](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/old-broken) directory for historical reference.
 
-- `cardano-node-master/`: A mixed-version testnet with 3 block producers (10.5.3, 10.6.2, 10.7.1), 2 relay nodes (10.6.2, 10.7.1), and an Oura N2N client (Rust/Pallas). Includes a tracer, tracer-sidecar, and sidecar for observability and assertions. The topology exercises node-to-node protocol diversity across Haskell and Rust implementations.
-You can find the configuration files in the [testnets/cardano-node-master](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/testnets/cardano_node_master) directory.
+- `cardano_node_master/`: A mixed-version testnet with 3 block producers (10.5.3, 10.6.2, 10.7.1), 2 relay nodes (10.6.2, 10.7.1), and an Oura N2N client (Rust/Pallas). Includes a tracer, tracer-sidecar, and sidecar for observability and assertions. The topology exercises node-to-node protocol diversity across Haskell and Rust implementations. See [cardano-node-master](testnets/cardano-node-master.md) for details.
 
+## Image publishing
+
+Component images are published to `ghcr.io/cardano-foundation/cardano-node-antithesis/` via the `publish-images` workflow. The docker-compose references images by commit hash (e.g., `configurator:aa43ea4`). The publish workflow:
+
+1. Scans `docker-compose.yaml` for image references matching the registry prefix
+2. Resolves each tag (commit hash) to a git revision
+3. Checks out that revision and builds from `components/<name>/`
+4. Pushes the image tagged with both the short hash and full commit hash
+
+To add a new component: create `components/<name>/Dockerfile`, reference it in docker-compose as `ghcr.io/cardano-foundation/cardano-node-antithesis/<name>:<commit>`, and push. The publish workflow builds and pushes it automatically on PR or merge to main.
