@@ -31,15 +31,36 @@ The resulting URL is what `antithesis-triage` consumes.
 
 ```bash
 # snouty
-# see https://github.com/antithesishq/snouty#installation
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/antithesishq/snouty/releases/latest/download/snouty-installer.sh | sh
 
 # agent-browser (>= v0.23.4)
-# see https://github.com/vercel-labs/agent-browser#installation
-agent-browser upgrade   # if already installed
+npm install -g agent-browser
+agent-browser install   # downloads Chrome for Testing
 
 # jq
 # https://jqlang.org/download/
 ```
+
+### NixOS note
+
+`agent-browser install` downloads a Chrome binary that depends on system libraries (`libglib-2.0`, `libnspr4`, etc.) missing from a NixOS host. The simplest workaround: install chromium via nix and connect `agent-browser` to it via CDP instead of letting it auto-launch.
+
+```bash
+nix profile add nixpkgs#chromium
+
+# Start headless chromium with remote debugging
+chromium --headless --disable-gpu --no-sandbox \
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/chrome-agent &
+
+# Point agent-browser at it
+agent-browser connect 9222 --session triage
+agent-browser open "$URL" --session triage
+agent-browser get text body --session triage
+```
+
+See `scripts/agent-browser-nixos.sh` for a wrapper.
 
 ## Using the skill from Claude Code
 
