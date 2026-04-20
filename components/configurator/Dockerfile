@@ -16,6 +16,9 @@ RUN apt-get update && \
         jq && \
     rm -rf /var/lib/apt/lists/*
 
+# Copy Nix store (contains glibc and all cardano binary deps)
+COPY --from=cardano-bin /nix /nix
+
 # Copy pinned cardano binaries from official image
 COPY --from=cardano-bin /usr/local/bin/cardano-node /usr/local/bin/
 COPY --from=cardano-bin /usr/local/bin/cardano-cli /usr/local/bin/
