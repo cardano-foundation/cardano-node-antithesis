@@ -32,4 +32,5 @@ nav:
       - testnets/index.md
       - Cardano Node Master: testnets/cardano-node-master.md
   - Triage: triage.md
+  - Querying logs: query-logs.md
   - Contributing: contributing.md

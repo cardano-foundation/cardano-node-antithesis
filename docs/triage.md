@@ -74,6 +74,15 @@ When prompted, paste the decrypted Antithesis URL from `moog facts test-runs` or
 
 The skill walks through the report, extracts failing Sometimes/Always assertions and bug findings, and can download logs for a specific run.
 
+## Searching indexed stdout
+
+Triage covers the report (assertion findings, bug listings). For the
+complementary task — searching the **indexed stdout** of every
+container in a run (e.g. "did the log-tailer sidecar emit anything
+during run X?") — see [Querying the Logs Explorer](query-logs.md).
+That tool lives at [`tools/query-logs/`](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/tools/query-logs)
+and drives a headless chromium against Logs Explorer.
+
 ## What is not available
 
 - **No structured JSON report export.** Only the in-container SDK log (`ANTITHESIS_SDK_LOCAL_OUTPUT`) is structured; the triage report itself is HTML behind PASETO.
