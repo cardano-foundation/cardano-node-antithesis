@@ -45,6 +45,13 @@ for entry in "${ENTRIES[@]}"; do
   fi
   echo "→ Tag $TAG resolves to commit ${COMMIT:0:8}"
 
+  # ---- Skip if both tags already published ----
+  if docker manifest inspect "$REGISTRY/$NAME:$TAG" >/dev/null 2>&1 \
+     && docker manifest inspect "$REGISTRY/$NAME:$COMMIT" >/dev/null 2>&1; then
+    echo "→ $NAME:$TAG and $NAME:$COMMIT already in registry. Skipping."
+    continue
+  fi
+
   # ---- Checkout exact commit (detached HEAD) ----
   git -C "$CLONE_DIR" checkout "$COMMIT" --quiet
 
