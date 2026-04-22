@@ -126,12 +126,10 @@ services:
         condition: service_started
 
   ogmios:
-    image: docker.io/cardanosolutions/ogmios:latest
+    image: docker.io/cardanosolutions/ogmios:v6.14.0
     container_name: ogmios
     hostname: ogmios.example
-    entrypoint: ["/harness/harness.sh", "/state/node.socket"]
     command:
-      - "ogmios"
       - "--node-socket"
       - "/state/node.socket"
       - "--node-config"
@@ -141,7 +139,6 @@ services:
     volumes:
       - relay2-state:/state:ro
       - p1-configs:/configs:ro
-      - ./harness.sh:/harness/harness.sh:ro
     restart: always
     depends_on:
       relay2:
