@@ -26,24 +26,23 @@ import Control.Concurrent
     , newMVar
     , threadDelay
     )
-import Control.Concurrent.Async (async, link, wait)
+import Control.Concurrent.Async (async, link)
 import Control.Exception (SomeException, try)
 import Control.Monad
-    ( forM
-    , forM_
+    ( forM_
     , forever
     , guard
+    , unless
     , when
     , (<=<)
     )
-import Control.Monad.Fix (fix)
 import Data.Aeson
     ( FromJSON
     , eitherDecode
     )
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
-import Data.Foldable (traverse_)
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.List (isPrefixOf)
 import Data.Maybe (isJust)
 import Data.Set (Set)
@@ -88,33 +87,42 @@ main = do
 
     writeSdkJsonl $ sometimesTracesDeclaration "find log files"
 
-    nodeDirs <- fix $ \loop -> do
-        mls <- try $ listDirectory dir
-        case mls of
-            Left (e :: SomeException) -> do
-                putStrLn $ "Error listing directory " <> dir <> ": " <> show e
-                threadDelay 1000000
-                loop
-            Right _ -> do
-                nodeDirs' <- fmap (dir </>) <$> listDirectory dir
-                if null nodeDirs'
-                    then do
-                        putStrLn "No node log directories found, waiting..."
-                        threadDelay 1000000
-                        loop
-                    else return nodeDirs'
     let spec = mkSpec nPools
-
-    writeSdkJsonl $ sometimesTracesReached "find log files"
-
     mvar <- newMVar =<< initialStateIO spec
-    threads <- forM nodeDirs $ \nodeDir ->
-        async
-            $ tailJsonLinesFromTracerLogDir
-                True
-                nodeDir
-                (modifyMVar_ mvar . flip (processMessageIO spec))
-    traverse_ wait threads
+
+    -- Each cardano-node process gets its own subdirectory under `dir` once it
+    -- handshakes with cardano-tracer. Those subdirectories appear over time
+    -- and may also appear *after* sidecar startup (e.g. slow-starting pool
+    -- containers, or node restarts via fault injection). Scan in a loop,
+    -- spawning a file-tailing watcher the first time we see each subdir.
+    seenRef <- newIORef (Set.empty :: Set FilePath)
+    sdkReachedRef <- newIORef False
+    forever $ do
+        esubs <- try (listDirectory dir)
+        case esubs of
+            Left (e :: SomeException) ->
+                putStrLn
+                    $ "Error listing directory " <> dir <> ": " <> show e
+            Right subs -> do
+                seen <- readIORef seenRef
+                let current = Set.fromList $ fmap (dir </>) subs
+                    new = current `Set.difference` seen
+                unless (null new) $ do
+                    reached <- readIORef sdkReachedRef
+                    unless reached $ do
+                        writeSdkJsonl $ sometimesTracesReached "find log files"
+                        writeIORef sdkReachedRef True
+                    forM_ new $ \nodeDir -> do
+                        putStrLn $ "Tailing node log dir: " <> nodeDir
+                        link
+                            =<< async
+                                ( tailJsonLinesFromTracerLogDir
+                                    True
+                                    nodeDir
+                                    (modifyMVar_ mvar . flip (processMessageIO spec))
+                                )
+                    writeIORef seenRef (seen <> new)
+        threadDelay 1000000
 
 -- | Tails json lines from each file in a directory,
 -- one at a time respecting their lexical order
