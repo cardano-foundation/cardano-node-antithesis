@@ -1,105 +1,91 @@
 #!/usr/bin/env bash
+# eventually_converged.sh — post-fault convergence check.
+#
+# Antithesis stops fault injection before this script starts and kills
+# every other non-anytime command on this timeline. This script runs
+# alone, validates recovery in bounded time, and exits.
+#
+# Total wall time: 15s settle + up to 10×2s retry budget = 35s worst case.
+#
+# Contract (built-in properties enforce this):
+#   - Must complete in significantly less than the test's post-fault window.
+#   - Must emit a Reachable assertion on entry so the report can show
+#     "this command fired on at least one timeline".
+#   - Exit 0 on convergence, 1 on failure to converge.
 
-set -o pipefail
+set -u
 
-SHELL="/bin/bash"
-PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin"
+# shellcheck disable=SC1091
+source "$(dirname "$0")/helper_sdk_lib.sh"
 
-# Environment variables
-POOLS="${POOLS:-}"
-mapfile -t NODES < <(seq -f "p%g" 1 "$POOLS")
-set -f
-NODES+=( $EXTRA_NODES )
-set +f
-
+POOLS="${POOLS:-3}"
 PORT="${PORT:-3001}"
+SLEEP_SETTLE="${SLEEP_SETTLE:-15}"
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-10}"
+RETRY_DELAY="${RETRY_DELAY:-2}"
 
+sdk_reachable "eventually_converged entered"
 
-# echo "Checking for convergence among the following nodes: $(IFS=', '; echo "${NODES[*]}")"
+# Faults are off. Allow the system to settle. 15s is the canonical
+# Antithesis recovery allowance quoted in their etcd example.
+sleep "$SLEEP_SETTLE"
 
-verify_environment_variables() {
-    if [ -z "${POOLS}" ]; then
-        echo "POOLS not defined, exiting..."
-        sleep 60
-        exit 1
+NODES=()
+for i in $(seq 1 "$POOLS"); do
+    NODES+=("p${i}")
+done
+
+query_tip_json() {
+    # $1 = host prefix (e.g. p1)
+    cardano-cli ping -j \
+        --magic 42 --host "${1}.example" --port "$PORT" \
+        --tip --quiet -c1 2>/dev/null
+}
+
+# Populates TIP_DETAILS (jq array), TIP_DISTINCT (count of unique
+# non-null hashes), TIP_COUNT (number of successful responses).
+collect_tips() {
+    local temp_dir node
+    temp_dir="$(mktemp -d)"
+    for node in "${NODES[@]}"; do
+        (query_tip_json "$node" > "$temp_dir/$node") &
+    done
+    wait
+    # Combine into an array of {node, hash, block, slot} entries, dropping
+    # nodes that failed to respond (they have empty / invalid JSON files).
+    TIP_DETAILS="$(for node in "${NODES[@]}"; do
+        jq -c --arg node "$node" \
+            'if .tip[0] then
+                {node:$node, hash:.tip[0].hash, block:.tip[0].blockNo, slot:.tip[0].slotNo}
+             else empty end' \
+            "$temp_dir/$node" 2>/dev/null
+    done | jq -sc '.')"
+    rm -rf "$temp_dir"
+    TIP_COUNT="$(printf '%s' "$TIP_DETAILS" | jq 'length')"
+    TIP_DISTINCT="$(printf '%s' "$TIP_DETAILS" | jq '[.[].hash] | unique | length')"
+}
+
+TIP_DETAILS="[]"
+TIP_COUNT=0
+TIP_DISTINCT=0
+for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+    collect_tips
+    if [ "$TIP_COUNT" = "$POOLS" ] && [ "$TIP_DISTINCT" = "1" ]; then
+        echo "converged on attempt $attempt: $TIP_DETAILS"
+        sdk_sometimes true "eventually_converged succeeded" \
+            "$(jq -nc --argjson tips "$TIP_DETAILS" --argjson attempt "$attempt" \
+                '{attempt:$attempt, tips:$tips}')"
+        exit 0
     fi
-}
+    sleep "$RETRY_DELAY"
+done
 
-validate_block_hash() {
-    temp_dir=$(mktemp -d)
-    pids=()
-
-    # Fetch hashes in parallel
-    for i in "${NODES[@]}"; do
-        (
-            timeout 10 cardano-cli ping -j --magic 42 --host "${i}.example" --port "${PORT}" --tip --quiet -c1 \
-                | jq -r '.tip[0].hash + " " + (.tip[0].blockNo|tostring) + " " + (.tip[0].slotNo|tostring)' >"$temp_dir/hash_${i}"
-        )2>/dev/null &
-        # store background process pid and corresponding node being checked
-        pids+=("$i $!")
-    done
-
-    # Wait for all processes and handle errors
-    for pid in "${pids[@]}"; do
-        # extract pid to wait on and node id
-        read -ra check <<< "$pid"
-        if ! wait "${check[1]}"; then
-            echo "Error: Checking node ${check[0]} failed" >&2
-            status=2
-        fi
-    done
-
-    # Analyze results
-    hash_files=("$temp_dir"/hash_*)
-    hash_count=$(cut -d' ' -f1 "${hash_files[@]}" | sort | uniq | wc -l)
-
-    if [ "${status}" -eq 2 ]; then
-        status=1
-    elif [ "$hash_count" -eq 1 ]; then
-        # All hashes match
-        common_line=$(head -n1 "${hash_files[0]}")
-        read -r hash block slot <<< "$common_line"
-        message="[{\"status\":\"synced\",\"hash\":\"${hash}\",\"block\":\"${block}\",\"slot\":\"${slot}\"}]"
-        status=0
-    else
-        # Hash mismatch detected
-        for file in "${hash_files[@]}"; do
-            pool_id=$(basename "$file" | sed 's/hash_//')
-            read -r hash block slot <<< "$(cat "$file")"
-            message="[{\"status\":\"diverged\",\"hash\":\"${hash}\",\"block\":\"${block}\",\"slot\":\"${slot}\",\"pool_id\":\"${pool_id}\"}]"
-            echo "${message}"
-        done
-        status=1
-    fi
-}
-
-# Establish run order
-main() {
-    verify_environment_variables
-
-    timeout_seconds=$((12*60*60))
-
-    start_ts="$(date -u +%s)"
-    deadline_ts="$(( start_ts + timeout_seconds))"
-
-    echo "will retry convergence check until $deadline_ts"
-
-    while true; do
-        status=1
-        validate_block_hash
-
-        if [ "${status}" -eq 0 ]; then
-            echo "${message}"
-            exit 0
-        fi
-
-        now_ts="$(date -u +%s)"
-        if (( now_ts >= deadline_ts )); then
-            echo "${message}"
-            exit 1
-        fi
-        sleep 2
-    done
-}
-
-main
+# Did not converge within the retry budget. Real recovery failure.
+echo "did not converge after $MAX_ATTEMPTS attempts: count=$TIP_COUNT distinct=$TIP_DISTINCT"
+sdk_unreachable "eventually_converged failed to converge" \
+    "$(jq -nc --argjson attempts "$MAX_ATTEMPTS" \
+              --argjson count "$TIP_COUNT" \
+              --argjson distinct "$TIP_DISTINCT" \
+              --argjson tips "$TIP_DETAILS" \
+        '{attempts:$attempts, responses:$count, distinct_tips:$distinct, tips:$tips}')"
+exit 1
