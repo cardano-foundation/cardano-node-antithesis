@@ -125,6 +125,34 @@ services:
       relay1:
         condition: service_started
 
+  # Ogmios exits with code 255 on SIGINT/SIGTERM — see
+  # CardanoSolutions/ogmios#459 and #49. Antithesis's "No unexpected
+  # container exits" property excludes 137/143 but flags 255, so every
+  # fault-injected stop triggers a finding. Until the upstream fix
+  # lands, send SIGKILL directly: ogmios is stateless (chain-sync'd
+  # JSON-RPC adapter, no on-disk state to flush) so graceful shutdown
+  # isn't needed here, and 137 is excluded by the property.
+  ogmios:
+    image: docker.io/cardanosolutions/ogmios:v6.14.0
+    container_name: ogmios
+    hostname: ogmios.example
+    command:
+      - "--node-socket"
+      - "/state/node.socket"
+      - "--node-config"
+      - "/configs/configs/config.json"
+      - "--host"
+      - "0.0.0.0"
+    volumes:
+      - relay2-state:/state:ro
+      - p1-configs:/configs:ro
+    restart: always
+    stop_signal: SIGKILL
+    stop_grace_period: 0s
+    depends_on:
+      relay2:
+        condition: service_started
+
   tx-generator:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:tx-gen-v1
     container_name: tx-generator
