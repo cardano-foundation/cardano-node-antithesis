@@ -125,25 +125,6 @@ services:
       relay1:
         condition: service_started
 
-  ogmios:
-    image: docker.io/cardanosolutions/ogmios:v6.14.0
-    container_name: ogmios
-    hostname: ogmios.example
-    command:
-      - "--node-socket"
-      - "/state/node.socket"
-      - "--node-config"
-      - "/configs/configs/config.json"
-      - "--host"
-      - "0.0.0.0"
-    volumes:
-      - relay2-state:/state:ro
-      - p1-configs:/configs:ro
-    restart: always
-    depends_on:
-      relay2:
-        condition: service_started
-
   tx-generator:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:tx-gen-v1
     container_name: tx-generator
