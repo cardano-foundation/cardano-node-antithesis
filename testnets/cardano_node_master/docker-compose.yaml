@@ -188,6 +188,75 @@ services:
       tracer:
         condition: service_started
 
+  # ----------------------------------------------
+  # Asteria game (issue #56). Bootstrap is a
+  # one-shot service that deploys validators +
+  # creates the asteria UTxO + spawns pellets.
+  # Players are long-running services that loop
+  # the game decisions, with their RNG sourced
+  # from Antithesis instrumentation so the
+  # hypervisor can drive game state-space
+  # exploration. Iteration 1 wires the pipeline
+  # only — bootstrap and player binaries are
+  # placeholders that emit sdk_reachable.
+  # ----------------------------------------------
+
+  asteria-bootstrap:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-player:dev
+    container_name: asteria-bootstrap
+    hostname: asteria-bootstrap.example
+    # Override the image's `sleep-forever` entrypoint so the
+    # composer driver actually runs and the container exits 0
+    # once the bootstrap is complete.
+    entrypoint: ["/bin/parallel_driver_asteria_bootstrap"]
+    environment:
+      CARDANO_NODE_SOCKET_PATH: /state/node.socket
+      NETWORK_MAGIC: "42"
+      ANTITHESIS_OUTPUT_DIR: /sdk
+    volumes:
+      - relay1-state:/state:ro
+      - utxo-keys:/utxo-keys:ro
+      - asteria-sdk:/sdk
+    depends_on:
+      relay1:
+        condition: service_started
+
+  asteria-player-1:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-player:dev
+    container_name: asteria-player-1
+    hostname: asteria-player-1.example
+    entrypoint: ["/bin/parallel_driver_asteria_player"]
+    environment:
+      ASTERIA_PLAYER_ID: "1"
+      CARDANO_NODE_SOCKET_PATH: /state/node.socket
+      NETWORK_MAGIC: "42"
+      ANTITHESIS_OUTPUT_DIR: /sdk
+    volumes:
+      - relay1-state:/state:ro
+      - asteria-sdk:/sdk
+    restart: always
+    depends_on:
+      asteria-bootstrap:
+        condition: service_completed_successfully
+
+  asteria-player-2:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-player:dev
+    container_name: asteria-player-2
+    hostname: asteria-player-2.example
+    entrypoint: ["/bin/parallel_driver_asteria_player"]
+    environment:
+      ASTERIA_PLAYER_ID: "2"
+      CARDANO_NODE_SOCKET_PATH: /state/node.socket
+      NETWORK_MAGIC: "42"
+      ANTITHESIS_OUTPUT_DIR: /sdk
+    volumes:
+      - relay2-state:/state:ro
+      - asteria-sdk:/sdk
+    restart: always
+    depends_on:
+      asteria-bootstrap:
+        condition: service_completed_successfully
+
 volumes:
   tracer:
   p1-configs:
@@ -196,6 +265,7 @@ volumes:
   relay1-state:
   relay2-state:
   utxo-keys:
+  asteria-sdk:
 
 networks:
   default:
