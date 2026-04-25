@@ -24,6 +24,7 @@ common settings
     -Wredundant-constraints
 
   default-extensions:
+    DataKinds
     DerivingStrategies
     GADTs
     ImportQualifiedPost
@@ -43,11 +44,14 @@ library
     , aeson
     , async
     , base
+    , base16-bytestring
     , bytestring
+    , cardano-ledger-alonzo
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-node-clients
     , directory
+    , file-embed
     , filepath
     , ouroboros-network:api
     , text
@@ -55,6 +59,7 @@ library
   exposed-modules:
     Asteria.Provider
     Asteria.Sdk
+    Asteria.Validators
 
 executable asteria-bootstrap
   import:           settings
@@ -75,5 +80,6 @@ executable asteria-player
     , aeson
     , asteria-player
     , base
+    , cardano-ledger-core
     , cardano-node-clients
     , text
