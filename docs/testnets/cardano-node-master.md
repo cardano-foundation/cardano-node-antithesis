@@ -18,6 +18,8 @@ This testnet exercises the node-to-node protocol across multiple cardano-node ve
 | **tracer** | cardano-tracer daemon collecting structured logs from all nodes |
 | **tracer-sidecar** | Processes tracer logs into Antithesis assertions (chain convergence, error detection) |
 | **sidecar** | Network health checks and Antithesis setup signal |
+| **asteria-bootstrap** | One-shot. Deploys asteria validators and creates the initial game UTxO. See [Asteria Player](../components/asteria-player.md). |
+| **asteria-player-1**, **asteria-player-2** | Long-running asteria game players. Drive realistic tx traffic (spendScript, mint, ref-inputs, validity bounds) through the cluster. |
 
 ## Network topology
 

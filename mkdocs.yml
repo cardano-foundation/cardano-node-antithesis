@@ -28,6 +28,7 @@ nav:
       - Configurator: components/configurator.md
       - Config: components/config.md
       - Adversary: components/adversary.md
+      - Asteria Player: components/asteria-player.md
   - Testnets:
       - testnets/index.md
       - Cardano Node Master: testnets/cardano-node-master.md
