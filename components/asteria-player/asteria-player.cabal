@@ -1,0 +1,70 @@
+cabal-version: 3.0
+name:          asteria-player
+version:       0.1.0.0
+synopsis:      Asteria game player for the antithesis cluster
+description:
+  Long-running container that plays asteria
+  (https://github.com/txpipe/asteria) inside the cardano-node-antithesis
+  test cluster. Iteration 1 only proves the wiring: Nix-built docker
+  image, baked composer scripts, SDK-reachable assertions. Subsequent
+  iterations layer on the cardano-node-clients TxBuild DSL, the
+  parameter-applied Aiken validators, Antithesis-controlled randomness,
+  and the actual move_ship / gather_fuel / mine_asteria game loop.
+
+license:       Apache-2.0
+license-file:  LICENSE
+author:        HAL team
+maintainer:    hal@cardano-foundation.org
+category:      Testing
+build-type:    Simple
+
+common settings
+  ghc-options:
+    -Wall -Wunused-imports -Wunused-packages -Wname-shadowing
+    -Wredundant-constraints
+
+  default-extensions:
+    DerivingStrategies
+    GADTs
+    ImportQualifiedPost
+    LambdaCase
+    NumericUnderscores
+    OverloadedStrings
+    RecordWildCards
+    ScopedTypeVariables
+    StrictData
+    TypeApplications
+
+library
+  import:           settings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  build-depends:
+    , aeson
+    , base
+    , bytestring
+    , directory
+    , filepath
+    , text
+
+  exposed-modules:  Asteria.Sdk
+
+executable asteria-bootstrap
+  import:           settings
+  main-is:          BootstrapMain.hs
+  hs-source-dirs:   app
+  default-language: GHC2021
+  build-depends:
+    , asteria-player
+    , base
+    , text
+
+executable asteria-player
+  import:           settings
+  main-is:          PlayerMain.hs
+  hs-source-dirs:   app
+  default-language: GHC2021
+  build-depends:
+    , asteria-player
+    , base
+    , text
