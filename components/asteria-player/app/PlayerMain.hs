@@ -24,6 +24,8 @@ import System.Environment (lookupEnv)
 
 import Asteria.Provider (settingsFromEnv, withN2C)
 import Asteria.Sdk (sdkReachable, sdkSometimes, sdkUnreachable)
+import Asteria.Validators (asteriaScript, deployScript, pelletScript, spacetimeScript)
+import Cardano.Ledger.Core (hashScript)
 import Cardano.Node.Client.Provider (Provider (..))
 
 main :: IO ()
@@ -34,6 +36,22 @@ main = do
     sdkReachable
         ("asteria_player_started_" <> playerId)
         Nothing
+    -- Touch each validator so the blueprint-load machinery is
+    -- exercised at startup (not lazily on first game action).
+    -- Iteration 4 will swap these unapplied scripts for
+    -- parameter-applied versions and start using their hashes
+    -- as part of bootstrap.
+    let validatorHashes =
+            [ T.pack (show (hashScript asteriaScript))
+            , T.pack (show (hashScript spacetimeScript))
+            , T.pack (show (hashScript pelletScript))
+            , T.pack (show (hashScript deployScript))
+            ]
+    sdkReachable
+        ("asteria_player_validators_loaded_" <> playerId)
+        ( Just $
+            object ["hashes" .= validatorHashes]
+        )
     settings <- settingsFromEnv
     withN2C settings $ \provider _submitter -> do
         sdkReachable
