@@ -1,8 +1,18 @@
-index-state: 2025-08-07T00:00:00Z
+-- Pinned to match cardano-node-clients's cabal.project exactly,
+-- because we depend on its TxBuild DSL + Provider/Submitter
+-- interface and need every transitive source-repository-package
+-- pin available so cabal can resolve the build plan.
+--
+-- When bumping the cardano-node-clients tag below, copy the
+-- updated index-state + SRP block + constraints from
+-- https://github.com/lambdasistemi/cardano-node-clients/blob/<rev>/cabal.project
+-- in the same commit.
+
+index-state: 2026-02-17T10:15:41Z
 
 index-state:
-  , hackage.haskell.org 2025-08-07T00:00:00Z
-  , cardano-haskell-packages 2025-08-07T00:00:00Z
+  , hackage.haskell.org 2026-02-17T10:15:41Z
+  , cardano-haskell-packages 2026-03-23T18:21:55Z
 
 packages: .
 
@@ -16,3 +26,80 @@ repository cardano-haskell-packages
     bcec67e8e99cabfa7764d75ad9b158d72bfacf70ca1d0ec8bc6b4406d1bf8413
     c00aae8461a256275598500ea0e187588c35a5d5d7454fb57eac18d9edb86a56
     d4a35cd3121aa00d18544bb0ac01c3e1691d618f462c46129271bccf39f7e8ee
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/cardano-node-clients
+  tag: f6a31ca6c169810a46e45648a0868d7a48eb1f02
+  --sha256: 0fcblvcqdhlj3kjq7jyarj169grmi6csvmrhpja4sc80ann3nihr
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/chain-follower
+  tag: 371b5930976ac3bb4e8a4ef576d5098d706984ee
+  --sha256: 1rks78zmgmxz5cg4v82vnc6hwib8vrylwk2m7y82iqaymmnskdvf
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/rocksdb-kv-transactions
+  tag: e2e77579888ebbd832ea750ebf2635dfc3307025
+  --sha256: 0nd1yz6k3xh1p7nlswp2jbw74bzqr7bvz11kcfyhhimqmjhkqvwm
+
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/rocksdb-haskell.git
+  tag: a3e86b39f9510fea54abf734ee84aec33d0d683f
+  --sha256: 1gjzqhf81fy3bpc79ndmx3s77x3s1gf0lsk762acbfnpfh6g1hd0
+
+source-repository-package
+  type: git
+  location: https://github.com/cardano-foundation/cardano-ledger-read
+  tag: 34d0767bd5c3648ab77ecbc00db0ad0a2a5316a5
+  --sha256: 0v357pbw2s22lsizxidq67pn4dcjkajips6mlcskd1zna35nyyv6
+
+source-repository-package
+  type: git
+  location: https://github.com/input-output-hk/typed-protocols
+  tag: typed-protocols-1.2.0.0
+  --sha256: 0v9rjf0q8wbhscfyvbwbwpzjq078l4il3i4vyyghqxahy293whwq
+  subdir: typed-protocols
+
+source-repository-package
+  type: git
+  location: https://github.com/stevana/quickcheck-state-machine
+  tag: v0.10.3
+  --sha256: 1v7pk509ysbfkbkvf8sppf0pgp866vyviah5gsihlsvlb08lnrfg
+
+source-repository-package
+  type: git
+  location: https://github.com/input-output-hk/cuddle
+  tag: cuddle-1.1.1.0
+  --sha256: 1f4wk3kgb68bg97gfb9wycv5zkv0dsghlkf9pj64z0bpcr0wkxrc
+
+-- Pin Cardano and Ouroboros packages for the cardano-node 10.7.0 line
+constraints:
+    cardano-ledger-allegra == 1.9.0.0
+  , cardano-ledger-alonzo == 1.15.0.0
+  , cardano-ledger-api == 1.13.0.0
+  , cardano-ledger-babbage == 1.13.0.0
+  , cardano-ledger-byron == 1.3.0.0
+  , cardano-ledger-conway == 1.21.0.0
+  , cardano-ledger-core == 1.19.0.0
+  , cardano-ledger-mary == 1.10.0.0
+  , cardano-ledger-shelley == 1.18.0.0
+  , cardano-crypto-class == 2.3.1.0
+  , cardano-crypto-praos == 2.2.2.0
+  , cardano-protocol-tpraos == 1.5.0.0
+  , cuddle == 1.1.1.0
+  , quickcheck-state-machine == 0.10.3
+  , ouroboros-consensus == 1.0.0.0
+  , ouroboros-network == 1.1.0.0
+  , typed-protocols == 1.2.0.0
+
+package ouroboros-consensus
+  tests: False
+  benchmarks: False
+
+package ouroboros-network
+  tests: False
+  benchmarks: False

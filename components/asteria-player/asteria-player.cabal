@@ -41,13 +41,20 @@ library
   default-language: GHC2021
   build-depends:
     , aeson
+    , async
     , base
     , bytestring
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-node-clients
     , directory
     , filepath
+    , ouroboros-network:api
     , text
 
-  exposed-modules:  Asteria.Sdk
+  exposed-modules:
+    Asteria.Provider
+    Asteria.Sdk
 
 executable asteria-bootstrap
   import:           settings
@@ -65,6 +72,8 @@ executable asteria-player
   hs-source-dirs:   app
   default-language: GHC2021
   build-depends:
+    , aeson
     , asteria-player
     , base
+    , cardano-node-clients
     , text
