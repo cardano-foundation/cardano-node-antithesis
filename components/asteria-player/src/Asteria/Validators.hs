@@ -2,25 +2,26 @@
 
 {- |
 Module      : Asteria.Validators
-Description : Load the four asteria Aiken validators from plutus.json.
+Description : Load the four parameter-applied asteria validators.
 
-Reads the blueprint at @aiken\/plutus.json@ at compile time (via
-'embedFile') and exposes each validator's compiled bytes as a
-'Script' 'ConwayEra'.
+Reads the parameter-applied blueprint at
+@aiken\/plutus-applied.json@ at compile time (via 'embedFile') and
+exposes each validator's compiled bytes as a 'Script' 'ConwayEra'.
 
-Iteration 3 ships the validators *unapplied* — they're still
-parameterized and not usable as-is. Iteration 4 will add a thin
-Aiken-side parameter-application script (admin token, game
-constants, cross-validator hashes) and replace 'unappliedBlueprint'
-with the applied bytes.
+The parameter values baked in are documented in
+@aiken\/apply-params.sh@:
 
-Until then, these helpers exist so:
+  * @admin_token@ = AssetClass with policy @00..00@ (28 zero
+    bytes) and asset name @"asteriaAdmin"@.
+  * Game constants: @ship_mint_lovelace_fee = 3_000_000@,
+    @max_asteria_mining = 50@, @min_asteria_distance = 50@,
+    @initial_fuel = 100@, @max_speed = Speed 1 30000@,
+    @max_ship_fuel = 100@, @fuel_per_step = 5@.
 
-  - The blueprint is committed and reviewable.
-  - The Haskell loading machinery is proven.
-  - Iteration 4 only has to swap the JSON file and add the apply
-    derivation; the player code can already reference each
-    validator by name.
+Iteration 5 will use bootstrap-time data to recompute these values
+(in particular, @admin_token@ should be a one-shot mint tied to a
+specific @TxOutRef@). For now they're hard-wired so the validators
+are usable as-is on devnet.
 -}
 module Asteria.Validators (
     asteriaScript,
@@ -28,7 +29,7 @@ module Asteria.Validators (
     pelletScript,
     deployScript,
     Validator (..),
-    unappliedBlueprint,
+    appliedBlueprint,
 ) where
 
 import Cardano.Ledger.Alonzo.Scripts (fromPlutusScript, mkPlutusScript)
@@ -76,13 +77,13 @@ instance FromJSON Blueprint where
 
 -- | Raw bytes of the blueprint, embedded at build time.
 blueprintBytes :: ByteString
-blueprintBytes = $(embedFile "aiken/plutus.json")
+blueprintBytes = $(embedFile "aiken/plutus-applied.json")
 
 {- | Decoded blueprint. Throws at first use if the JSON has drifted
 from the schema; that's a build-time invariant we want loud.
 -}
-unappliedBlueprint :: Blueprint
-unappliedBlueprint =
+appliedBlueprint :: Blueprint
+appliedBlueprint =
     case eitherDecodeStrict blueprintBytes of
         Left e -> error ("Asteria.Validators: blueprint decode failed: " <> e)
         Right b -> b
@@ -90,7 +91,7 @@ unappliedBlueprint =
 -- | Look up a validator by exact title (e.g. @asteria.asteria.spend@).
 findValidator :: Text -> Validator
 findValidator title =
-    case find (\v -> vTitle v == title) (bpValidators unappliedBlueprint) of
+    case find (\v -> vTitle v == title) (bpValidators appliedBlueprint) of
         Just v -> v
         Nothing ->
             error
