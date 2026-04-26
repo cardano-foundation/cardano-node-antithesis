@@ -28,6 +28,7 @@ module Asteria.Validators (
     spacetimeScript,
     pelletScript,
     deployScript,
+    adminMintScript,
     Validator (..),
     appliedBlueprint,
 ) where
@@ -126,3 +127,7 @@ pelletScript = mkScript (vCompiledCode (findValidator "pellet.pellet.spend"))
 
 deployScript :: Script ConwayEra
 deployScript = mkScript (vCompiledCode (findValidator "deploy.deploy.spend"))
+
+-- | Always-true mint policy whose hash is baked into 'admin_token'.
+adminMintScript :: Script ConwayEra
+adminMintScript = mkScript (vCompiledCode (findValidator "admin_mint.admin_mint.mint"))

@@ -56,9 +56,13 @@ library
     , file-embed
     , filepath
     , ouroboros-network:api
+    , plutus-core
+    , plutus-tx
     , text
 
   exposed-modules:
+    Asteria.Crypto
+    Asteria.Datums
     Asteria.Provider
     Asteria.Sdk
     Asteria.Validators
@@ -77,6 +81,7 @@ executable asteria-bootstrap
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-node-clients
     , containers
     , microlens

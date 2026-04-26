@@ -6,9 +6,13 @@
 # Re-run any time parameters change. The CBOR values below were
 # computed with Python's cbor2 against Plutus Data shapes:
 #
-#   admin_token       = AssetClass { policy: 00..00 (28 zero bytes)
+#   admin_token       = AssetClass { policy: <admin_mint hash>
 #                                  , name:   "asteriaAdmin" }
-#                     = Constr 0 [B 00..00, B "asteriaAdmin"]
+#                     = Constr 0 [B admin_mint, B "asteriaAdmin"]
+#   where <admin_mint> is the deterministic hash of the always-true
+#   admin_mint validator (see validators/admin_mint.ak). Computed
+#   below from plutus.json after `aiken build` so the chain stays
+#   reproducible end-to-end.
 #   max_speed         = Speed { distance: 1, time: 30000 }
 #                     = Constr 0 [I 1, I 30000]
 #   integers are direct CBOR encodings.
@@ -24,7 +28,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # Parameter CBOR (computed once with Python cbor2 — see header).
-ADMIN_TOKEN_CBOR=d87982581c000000000000000000000000000000000000000000000000000000004c6173746572696141646d696e
+# admin_token is built from the admin_mint hash captured below.
 SHIP_MINT_LOVELACE_FEE_CBOR=1a002dc6c0   # 3_000_000
 MAX_ASTERIA_MINING_CBOR=1832             # 50
 MIN_ASTERIA_DISTANCE_CBOR=1832           # 50
@@ -34,6 +38,11 @@ MAX_SHIP_FUEL_CBOR=1864                  # 100
 FUEL_PER_STEP_CBOR=05                    # 5
 
 aiken build
+
+# Compute admin_token from the just-built admin_mint hash.
+ADMIN_MINT_HASH=$(jq -r '.validators[] | select(.title=="admin_mint.admin_mint.mint") | .hash' plutus.json)
+ADMIN_TOKEN_CBOR="d87982581c${ADMIN_MINT_HASH}4c6173746572696141646d696e"
+echo "admin_mint hash: $ADMIN_MINT_HASH"
 
 # 1. Apply admin_token to pellet.
 aiken blueprint apply \
