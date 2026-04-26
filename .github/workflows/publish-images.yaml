@@ -42,3 +42,34 @@ jobs:
       id: images
       run: |
         scripts/push-cardano_node_master_images.sh
+
+    - name: Ensure published packages are public
+      # The Antithesis platform pulls component images
+      # anonymously; ghcr packages default to private on
+      # first push. Walk the docker-compose image list and
+      # PATCH each package's visibility to public — idempotent
+      # for packages already public, no-op for packages that
+      # don't exist yet (they'll be made public the next run
+      # after they're first published).
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        # Extract unique component names from the testnet
+        # compose file (same regex the publish script uses).
+        mapfile -t NAMES < <(
+          grep -oP \
+            'ghcr\.io/cardano-foundation/cardano-node-antithesis/\K[^ :]+' \
+            testnets/cardano_node_master/docker-compose.yaml |
+          sort -u
+        )
+        for name in "${NAMES[@]}"; do
+          enc=$(printf '%s' "cardano-node-antithesis/${name}" |
+                jq -sRr @uri)
+          echo "Setting visibility=public on $name ..."
+          gh api --silent --method PATCH \
+            "/orgs/cardano-foundation/packages/container/${enc}" \
+            -f visibility=public \
+            && echo "  → public" \
+            || echo "  → not yet published or already public; skipping"
+        done
