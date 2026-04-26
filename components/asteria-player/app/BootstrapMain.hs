@@ -1,18 +1,25 @@
 {- |
 Module      : Main
-Description : Iteration-5 bootstrap: real tx submission against the cluster.
+Description : Iteration-5b bootstrap — create the asteria UTxO.
 
-Connects to N2C, reads the genesis signing key from
-@\/utxo-keys\/genesis.3.skey@, builds a no-op self-pay tx through
-the @TxBuild@ DSL, signs with the genesis key, and submits.
-Confirms by polling @queryUTxOs@ for the new tx output (the change
-output's hash and value).
+Uses the genesis wallet from 'Asteria.Wallet' and the
+parameter-applied validators from 'Asteria.Validators' to:
 
-This proves the bootstrap binary can build → sign → submit → confirm
-end-to-end against the antithesis cluster without exploding. The
-actual asteria-shaped bootstrap (admin NFT mint, ref-script deploy,
-asteria UTxO + pellets) lands in iteration 5b on top of the wallet
-plumbing in 'Asteria.Wallet'.
+  1. Mint exactly one @"asteriaAdmin"@ token via the always-true
+     @admin_mint@ policy (whose hash is baked into @admin_token@).
+  2. Lock that admin NFT at the @asteria.spend@ script address with
+     the initial inline @AsteriaDatum {ship_counter=0,
+     shipyard_policy=spacetime_hash}@ — the on-chain "asteria UTxO"
+     that ships will mine and consume.
+  3. Exit 0 so the player containers' @depends_on@ unblocks.
+
+Subsequent iterations layer on:
+
+  * deploy of all four validators as inline ref-scripts at the
+    @deploy.spend@ address (so move_ship / mine / gather txs can
+    reference them instead of re-attaching the script every time);
+  * mint+lock of N pellet UTxOs at known coordinates;
+  * the actual game loop.
 -}
 module Main (main) where
 
@@ -21,18 +28,49 @@ import Control.Exception (SomeException, try)
 import Data.Aeson (object, (.=))
 import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Void (Void)
-import Lens.Micro ((^.))
+import Lens.Micro ((%~), (&), (.~), (^.))
 
-import Cardano.Ledger.Address (Addr)
-import Cardano.Ledger.Api.Tx (bodyTxL)
+import Cardano.Crypto.DSIGN (
+    Ed25519DSIGN,
+    SignKeyDSIGN,
+    deriveVerKeyDSIGN,
+    signedDSIGN,
+ )
+import Cardano.Ledger.Address (Addr (..))
+import Cardano.Ledger.Api.Tx (bodyTxL, txIdTx, witsTxL)
 import Cardano.Ledger.Api.Tx.Body (outputsTxBodyL)
-import Cardano.Ledger.Api.Tx.Out (TxOut, coinTxOutL)
-import Cardano.Ledger.BaseTypes (Inject (..))
+import Cardano.Ledger.Api.Tx.Out (
+    TxOut,
+    coinTxOutL,
+    valueTxOutL,
+ )
+import Cardano.Ledger.Api.Tx.Wits (addrTxWitsL)
+import Cardano.Ledger.BaseTypes (Network (Testnet))
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Ledger.Core (hashScript)
+import Cardano.Ledger.Credential (
+    Credential (ScriptHashObj),
+    StakeReference (StakeRefNull),
+ )
+import Cardano.Ledger.Hashes (ScriptHash (..), extractHash)
+import Cardano.Ledger.Keys (
+    KeyRole (Witness),
+    VKey (..),
+    WitVKey (..),
+    asWitness,
+ )
+import Cardano.Ledger.Mary.Value (
+    AssetName (..),
+    MaryValue (..),
+    MultiAsset (..),
+    PolicyID (..),
+ )
+import Cardano.Ledger.TxIn (TxId (..), TxIn)
+import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.Provider (Provider (..))
 import Cardano.Node.Client.Submitter (
     SubmitResult (..),
@@ -41,13 +79,19 @@ import Cardano.Node.Client.Submitter (
 import Cardano.Node.Client.TxBuild (
     InterpretIO (..),
     TxBuild,
+    attachScript,
     build,
-    payTo,
+    collateral,
+    mint,
+    payTo',
     spend,
  )
 
+import Asteria.Crypto (hashToBuiltinByteString)
+import Asteria.Datums (AsteriaDatum (..))
 import Asteria.Provider (settingsFromEnv, withN2C)
 import Asteria.Sdk (sdkReachable, sdkSometimes, sdkUnreachable)
+import Asteria.Validators (adminMintScript, asteriaScript, spacetimeScript)
 import Asteria.Wallet (
     WalletKey (..),
     genesisKeyPath,
@@ -55,25 +99,6 @@ import Asteria.Wallet (
     readWalletKey,
     walletAddr,
  )
-import Cardano.Crypto.DSIGN (
-    Ed25519DSIGN,
-    SignKeyDSIGN,
-    deriveVerKeyDSIGN,
-    signedDSIGN,
- )
-import Cardano.Ledger.Api.Tx (txIdTx, witsTxL)
-import Cardano.Ledger.Api.Tx.Wits (addrTxWitsL)
-import Cardano.Ledger.Hashes (extractHash)
-import Cardano.Ledger.Keys (
-    KeyRole (Witness),
-    VKey (..),
-    WitVKey (..),
-    asWitness,
- )
-import Cardano.Ledger.TxIn (TxId (..))
-import Cardano.Node.Client.Ledger (ConwayTx)
-import Data.Set qualified as Set
-import Lens.Micro ((%~), (&))
 
 main :: IO ()
 main = do
@@ -83,48 +108,62 @@ main = do
     sdkReachable
         "asteria_bootstrap_wallet_loaded"
         ( Just $
-            object
-                [ "addr" .= T.pack (show (walletAddr walletKey))
-                ]
+            object ["addr" .= T.pack (show (walletAddr walletKey))]
         )
     withN2C settings $ \provider submitter -> do
-        seed@(_, seedOut) <- pickWalletUtxo provider walletKey
-        let inputCoin = seedOut ^. coinTxOutL
+        seed <- pickWalletUtxo provider walletKey
         sdkReachable
             "asteria_bootstrap_seed_picked"
             ( Just $
                 object
-                    ["seed_coin" .= unCoin inputCoin]
+                    [ "seed_coin"
+                        .= unCoin (snd seed ^. coinTxOutL)
+                    ]
             )
-        result <- try (selfPay provider submitter walletKey seed)
+        result <- try (createAsteria provider submitter walletKey seed)
         case result of
             Left (e :: SomeException) -> do
                 sdkUnreachable
-                    "asteria_bootstrap_self_pay_failed"
-                    ( Just $
-                        object ["error" .= T.pack (show e)]
-                    )
+                    "asteria_bootstrap_create_asteria_failed"
+                    (Just $ object ["error" .= T.pack (show e)])
                 error (show e)
             Right () ->
-                sdkSometimes
-                    True
-                    "asteria_bootstrap_self_pay"
-                    Nothing
+                sdkSometimes True "asteria_bootstrap_asteria_created" Nothing
     sdkReachable "asteria_bootstrap_completed" Nothing
 
-selfPay ::
+{- | Build, sign, submit the asteria-creation tx and wait for the
+ship-counter=0 UTxO to land at the asteria spend address.
+-}
+createAsteria ::
     Provider IO ->
     Submitter IO ->
     WalletKey ->
     (TxIn, TxOut ConwayEra) ->
     IO ()
-selfPay provider submitter wk seed@(seedIn, _) = do
+createAsteria provider submitter wk seed@(seedIn, _) = do
     pp <- queryProtocolParams provider
-    let addr = walletAddr wk
+    let asteriaAddr = scriptAddr (hashScript asteriaScript)
+        adminPolicy = PolicyID (hashScript adminMintScript)
+        adminName = AssetName "asteriaAdmin"
+        spacetimeHashBs = case hashScript spacetimeScript of
+            ScriptHash h -> hashToBuiltinByteString h
+        initialDatum =
+            AsteriaDatum
+                { adShipCounter = 0
+                , adShipyardPolicy = spacetimeHashBs
+                }
+        asteriaValue =
+            MaryValue (Coin 5_000_000) $
+                MultiAsset $
+                    Map.singleton adminPolicy $
+                        Map.singleton adminName 1
         prog :: TxBuild NoQ Void ()
         prog = do
             _ <- spend seedIn
-            _ <- payTo addr (inject (Coin 5_000_000))
+            collateral seedIn
+            attachScript adminMintScript
+            mint adminPolicy (Map.singleton adminName 1) ()
+            _ <- payTo' asteriaAddr asteriaValue initialDatum
             pure ()
         eval tx =
             fmap
@@ -132,7 +171,7 @@ selfPay provider submitter wk seed@(seedIn, _) = do
                 (evaluateTx provider tx)
         interpret :: InterpretIO NoQ
         interpret = InterpretIO $ \case {}
-    built <- build pp interpret eval [seed] [] addr prog
+    built <- build pp interpret eval [seed] [] (walletAddr wk) prog
     case built of
         Left err -> error ("build: " <> show err)
         Right tx -> do
@@ -140,28 +179,47 @@ selfPay provider submitter wk seed@(seedIn, _) = do
                 outs = toList (signed ^. bodyTxL . outputsTxBodyL)
             sdkReachable
                 "asteria_bootstrap_tx_built"
-                ( Just $
-                    object
-                        ["outputs" .= length outs]
-                )
+                (Just $ object ["outputs" .= length outs])
             r <- submitTx submitter signed
             case r of
                 Submitted _ ->
-                    waitForConfirmation provider addr 60
+                    -- Cluster cold-start can take a while to forge
+                    -- + propagate the first non-genesis block. Give
+                    -- it 3 minutes before declaring failure.
+                    waitForAsteria
+                        provider
+                        asteriaAddr
+                        adminPolicy
+                        adminName
+                        180
                 Rejected reason ->
                     error ("submit rejected: " <> show reason)
 
-waitForConfirmation ::
-    Provider IO -> Addr -> Int -> IO ()
-waitForConfirmation provider addr attempts
-    | attempts <= 0 = error "timed out waiting for confirmation"
+scriptAddr :: ScriptHash -> Addr
+scriptAddr h = Addr Testnet (ScriptHashObj h) StakeRefNull
+
+waitForAsteria ::
+    Provider IO ->
+    Addr ->
+    PolicyID ->
+    AssetName ->
+    Int ->
+    IO ()
+waitForAsteria provider addr pol an attempts
+    | attempts <= 0 = error "timed out waiting for asteria UTxO"
     | otherwise = do
         outs <- queryUTxOs provider addr
-        if length outs >= 1
+        if any (hasAsset pol an . snd) outs
             then pure ()
             else do
                 threadDelay 1_000_000
-                waitForConfirmation provider addr (attempts - 1)
+                waitForAsteria provider addr pol an (attempts - 1)
+  where
+    hasAsset p n out =
+        let MaryValue _ (MultiAsset ma) = out ^. valueTxOutL
+            polMap = Map.findWithDefault Map.empty p ma
+            qty = Map.findWithDefault 0 n polMap
+         in qty > 0
 
 -- | Phantom query GADT — bootstrap has no @ctx@ queries.
 data NoQ a
