@@ -58,12 +58,14 @@ library
     , ouroboros-network:api
     , plutus-core
     , plutus-tx
+    , random
     , text
 
   exposed-modules:
     Asteria.Crypto
     Asteria.Datums
     Asteria.Provider
+    Asteria.RandomSource
     Asteria.Sdk
     Asteria.Validators
     Asteria.Wallet
@@ -96,6 +98,12 @@ executable asteria-player
     , aeson
     , asteria-player
     , base
+    , cardano-ledger-alonzo
+    , cardano-ledger-api
+    , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-node-clients
+    , hashable
+    , microlens
+    , plutus-tx
     , text
