@@ -51,10 +51,14 @@ library
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-node-clients
+    , cardano-slotting
+    , containers
     , directory
     , file-embed
     , filepath
+    , microlens
     , ouroboros-network:api
     , plutus-core
     , plutus-tx
@@ -64,6 +68,7 @@ library
   exposed-modules:
     Asteria.Crypto
     Asteria.Datums
+    Asteria.Game
     Asteria.Provider
     Asteria.RandomSource
     Asteria.Sdk
@@ -98,12 +103,18 @@ executable asteria-player
     , aeson
     , asteria-player
     , base
+    , bytestring
+    , cardano-crypto-class
     , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-node-clients
+    , cardano-slotting
+    , containers
     , hashable
     , microlens
     , plutus-tx
     , text
+    , time

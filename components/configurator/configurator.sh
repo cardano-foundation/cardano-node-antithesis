@@ -152,6 +152,19 @@ fi
 
 echo "removing /configs/keys"; rm -rf /configs/keys
 
+# Bump Alonzo ExUnits limits to fit asteria's add_new_ship script,
+# which exceeds the cardano-cli default maxTxExUnits.steps of
+# 10_000_000_000 by a few hundred thousand steps. 14B / 14M is
+# comfortable headroom; matching maxBlockExUnits scales by 4x as
+# the upstream defaults do.
+echo "bumping Alonzo maxTxExUnits + maxBlockExUnits for asteria"
+for ag in /configs/*/configs/alonzo-genesis.json; do
+  jq '.maxTxExUnits.exUnitsMem    = 14000000
+    | .maxTxExUnits.exUnitsSteps  = 14000000000
+    | .maxBlockExUnits.exUnitsMem = 80000000
+    | .maxBlockExUnits.exUnitsSteps = 64000000000' "$ag" | write_file "$ag"
+done
+
 pools=$(ls -d /configs/*)
 number_of_pools=$(ls -d /configs/* | wc -l)
 echo "number_of_pools: $number_of_pools"
