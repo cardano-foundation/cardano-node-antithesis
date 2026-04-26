@@ -152,17 +152,19 @@ fi
 
 echo "removing /configs/keys"; rm -rf /configs/keys
 
-# Bump Alonzo ExUnits limits to fit asteria's add_new_ship script,
-# which exceeds the cardano-cli default maxTxExUnits.steps of
-# 10_000_000_000 by a few hundred thousand steps. 14B / 14M is
-# comfortable headroom; matching maxBlockExUnits scales by 4x as
-# the upstream defaults do.
-echo "bumping Alonzo maxTxExUnits + maxBlockExUnits for asteria"
+# Match mainnet's per-tx ExUnits ceilings so Plutus scripts that
+# already run on mainnet — like asteria's @add_new_ship@ — fit
+# under the antithesis cluster's budget too. The default Alonzo
+# genesis ships 10M/10B, but mainnet (Conway, epoch 627+) uses
+# 16_500_000 mem and 10_000_000_000 steps. Block ceilings scale
+# accordingly; we follow mainnet on mem and keep the upstream 4x
+# block-vs-tx step ratio.
+echo "matching mainnet maxTxExUnits + maxBlockExUnits"
 for ag in /configs/*/configs/alonzo-genesis.json; do
-  jq '.maxTxExUnits.exUnitsMem    = 14000000
-    | .maxTxExUnits.exUnitsSteps  = 14000000000
-    | .maxBlockExUnits.exUnitsMem = 80000000
-    | .maxBlockExUnits.exUnitsSteps = 64000000000' "$ag" | write_file "$ag"
+  jq '.maxTxExUnits.exUnitsMem      = 16500000
+    | .maxTxExUnits.exUnitsSteps    = 10000000000
+    | .maxBlockExUnits.exUnitsMem   = 62000000
+    | .maxBlockExUnits.exUnitsSteps = 40000000000' "$ag" | write_file "$ag"
 done
 
 pools=$(ls -d /configs/*)
