@@ -68,13 +68,7 @@ import Cardano.Node.Client.Submitter (
     SubmitResult (..),
     Submitter (..),
  )
-import Cardano.Ledger.Plutus.ExUnits (ExUnits (..))
-import Cardano.Node.Client.TxBuild (
-    BuildOptions (..),
-    InterpretIO (..),
-    buildWith,
-    defaultBuildOptions,
- )
+import Cardano.Node.Client.TxBuild (InterpretIO (..), build)
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Short qualified as SBS
@@ -240,35 +234,14 @@ attemptSpawn provider submitter wk (aIn, aOut) datum spawnedRef playerId = do
                 , sspPelletScript = pelletScript
                 , sspFundingIn = fundingIn
                 , sspValidTo = validToSlot
+                , sspPilotAddr = walletAddr wk
                 }
         eval tx =
             fmap (Map.map (either (Left . show) Right)) (evaluateTx provider tx)
         interpret :: InterpretIO NoQ
         interpret = InterpretIO $ \case {}
-        -- 20 % overshoot mirrors @cardano-cli@'s
-        -- default before submit. Absorbs the
-        -- cardano-ledger version drift between this
-        -- client (CHaP 2026-02-17) and the cluster's
-        -- cardano-node 10.7.1 (CHaP 2026-04-14):
-        -- otherwise the asteria spend script
-        -- overshoots the patched budget by ~751 mem
-        -- at submit time and fails as
-        -- @PlutusFailure@.
-        bumpExUnits (ExUnits m s) =
-            ExUnits
-                ( fromInteger
-                    (toInteger m * 120 `div` 100)
-                )
-                ( fromInteger
-                    (toInteger s * 120 `div` 100)
-                )
-        opts =
-            defaultBuildOptions
-                { boExUnitsMargin = bumpExUnits
-                }
     built <-
-        buildWith
-            opts
+        build
             pp
             interpret
             eval
