@@ -55,11 +55,19 @@ for entry in "${ENTRIES[@]}"; do
   fi
 
   # ---- Need to build → must resolve tag to a commit ----
+  # Try the tag as a bare ref (git tag, commit SHA, or local
+  # branch) first, then fall back to @origin/<tag>@ — fresh
+  # clones expose feature branches only as remote-tracking
+  # refs.
   COMMIT=$(git -C "$CLONE_DIR" rev-list -n 1 "$TAG" 2>/dev/null || true)
   if [[ -z "$COMMIT" ]]; then
+    COMMIT=$(git -C "$CLONE_DIR" rev-list -n 1 "origin/$TAG" 2>/dev/null || true)
+  fi
+  if [[ -z "$COMMIT" ]]; then
     echo "Error: Tag '$TAG' is NOT in the registry AND cannot be" >&2
-    echo "       resolved against this repo — nothing to build" >&2
-    echo "       and nothing to publish." >&2
+    echo "       resolved against this repo (tried '$TAG' and" >&2
+    echo "       'origin/$TAG') — nothing to build and nothing" >&2
+    echo "       to publish." >&2
     SKIPPED+=("$NAME:$TAG (not in registry, tag not resolvable)")
     continue
   fi
