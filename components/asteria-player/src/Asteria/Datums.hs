@@ -14,6 +14,8 @@ module Asteria.Datums (
     AsteriaRedeemer (..),
     ShipRedeemer (..),
     PelletRedeemer (..),
+    ShipyardRedeemer (..),
+    FuelRedeemer (..),
 ) where
 
 import PlutusCore.Data (Data (..))
@@ -147,3 +149,19 @@ data PelletRedeemer = Provide Integer | ConsumePellet
 instance ToData PelletRedeemer where
     toBuiltinData (Provide n) = BuiltinData (Constr 0 [I n])
     toBuiltinData ConsumePellet = BuiltinData (Constr 1 [])
+
+-- | @ShipyardRedeemer = MintShip | BurnShip@ — spacetime mint policy.
+data ShipyardRedeemer = MintShip | BurnShip
+    deriving stock (Eq, Show)
+
+instance ToData ShipyardRedeemer where
+    toBuiltinData MintShip = BuiltinData (Constr 0 [])
+    toBuiltinData BurnShip = BuiltinData (Constr 1 [])
+
+-- | @FuelRedeemer = MintFuel | BurnFuel@ — pellet mint policy.
+data FuelRedeemer = MintFuel | BurnFuel
+    deriving stock (Eq, Show)
+
+instance ToData FuelRedeemer where
+    toBuiltinData MintFuel = BuiltinData (Constr 0 [])
+    toBuiltinData BurnFuel = BuiltinData (Constr 1 [])

@@ -233,6 +233,7 @@ services:
       ANTITHESIS_OUTPUT_DIR: /sdk
     volumes:
       - relay1-state:/state:ro
+      - utxo-keys:/utxo-keys:ro
       - asteria-sdk:/sdk
     restart: always
     depends_on:
@@ -251,6 +252,7 @@ services:
       ANTITHESIS_OUTPUT_DIR: /sdk
     volumes:
       - relay2-state:/state:ro
+      - utxo-keys:/utxo-keys:ro
       - asteria-sdk:/sdk
     restart: always
     depends_on:

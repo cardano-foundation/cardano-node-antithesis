@@ -20,7 +20,7 @@ module Asteria.RandomSource (
     randomInRange,
 ) where
 
-import Data.IORef (IORef, atomicModifyIORef', newIORef)
+import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Word (Word64)
 import System.Random (StdGen, mkStdGen, randomR)
 
