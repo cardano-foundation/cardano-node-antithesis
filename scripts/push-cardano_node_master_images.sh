@@ -9,9 +9,13 @@ TEST="testnets/cardano_node_master"
 # -----------------------------------------------------------
 
 # 1. Extract "name tag" pairs  (e.g. configurator 5967670)
+#    Compose entries may carry a content digest after the tag,
+#    e.g. `sidecar:1362c5b@sha256:abc…` — strip the digest before
+#    splitting tag from name. The digest is what Antithesis pulls;
+#    publish-images only needs the tag to resolve a commit.
 mapfile -t ENTRIES < <(
   grep -oP 'ghcr\.io/cardano-foundation/cardano-node-antithesis/\K[^ ]+' "$TEST/docker-compose.yaml" |
-  sed 's|.*cardano-node-antithesis/||; s|:| |' |
+  sed 's|@sha256:[a-f0-9]\+||; s|:| |' |
   sort -u
 )
 
