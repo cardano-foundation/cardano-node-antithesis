@@ -32,6 +32,16 @@ fi
 
 # 3. Process **each** entry independently
 for entry in "${ENTRIES[@]}"; do
+  # Compose entries pinned by digest-only (`name@sha256:digest`) leave no
+  # tag side after sanitization. The image must already exist at that
+  # digest — nothing to (re)build here.
+  if [[ "$entry" != *" "* ]]; then
+    echo
+    echo "=================================================="
+    echo "Skipping: $entry  (digest-only pin, no tag to resolve)"
+    echo "=================================================="
+    continue
+  fi
   NAME="${entry%% *}"
   TAG="${entry#* }"
   BUILD_DIR="$CLONE_DIR/components/$NAME"
