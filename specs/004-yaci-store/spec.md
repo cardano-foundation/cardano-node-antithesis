@@ -68,7 +68,7 @@ As a maintainer landing this on `main`, I want the yaci-store image referenced i
 - **FR-002**: yaci-store MUST consume the chain from a relay over node-to-node (TCP, port 3001 of either `relay1.example` or `relay2.example`).
 - **FR-003**: yaci-store MUST be configured for the testnet's protocol parameters (magic 42 and the byron/shelley genesis windows produced by the configurator).
 - **FR-004**: yaci-store MUST use an embedded backing store (no separate database container introduced by this feature).
-- **FR-005**: The yaci-store image reference in `docker-compose.yaml` MUST be a content-addressed digest, never `:latest` or `:dev`, and MUST be mirrored by the project's publish-images workflow so it is pullable from Antithesis runners.
+- **FR-005**: The yaci-store image reference in `docker-compose.yaml` MUST be a content-addressed digest sourced directly from upstream (`docker.io/bloxbean/yaci-store@sha256:<digest>`), never `:latest` or `:dev`. The repo's `publish-images` workflow does not mirror external images — it only rebuilds components under `components/` — so yaci-store follows the same direct-pin pattern as `cardano-node`, `cardano-tracer`, and `oura`.
 - **FR-006**: All bind mounts for yaci-store MUST live next to `docker-compose.yaml` (Antithesis cannot resolve relative paths outside the compose directory).
 - **FR-007**: yaci-store MUST NOT block compose start-up of any existing service; its `depends_on` MUST be limited to what it actually needs (configurator and the chosen relay).
 - **FR-008**: A 1-hour Antithesis duration on the feature branch MUST report `findings_new ≤ baseline` against the prior `main` baseline; any new finding MUST be triaged before merge.
@@ -93,8 +93,9 @@ As a maintainer landing this on `main`, I want the yaci-store image referenced i
 
 ## Assumptions
 
-- yaci-store's upstream image (`bloxbean/yaci-store-spring-boot` or equivalent) supports private testnets with custom protocol magic and custom byron/shelley genesis windows. If it does not, this feature is reduced to a no-op or requires upstream changes — surface in `/speckit.plan`.
+- yaci-store's upstream image (`bloxbean/yaci-store`, latest stable `2.0.0`, 2026-02-02) supports private testnets with custom protocol magic and custom byron/shelley/alonzo/conway genesis files via `store.cardano.*` properties (overridable as `STORE_CARDANO_*` env vars). Verified against the upstream `config/application.properties` and the `application-devkit.properties` example. No fork required.
 - The configurator already emits genesis files into `p?-configs:/configs/configs/`; yaci-store will reuse those, mounted read-only.
 - "Pure coverage" means downstream services do not query yaci-store — the feature ships without API consumers and without surface area to break.
-- The publish-images workflow can mirror Docker Hub images to the project's GHCR namespace today; if not, the publish-images change is captured as a separate dependency.
-- Antithesis findings whitelisting is in scope of the harness, not this feature; if a yaci-store-specific exit code requires a harness change, that change ships in the same PR.
+- The image is referenced directly from Docker Hub by digest (`docker.io/bloxbean/yaci-store@sha256:<digest>`). The repo's publish-images workflow only handles in-repo `components/`; upstream images are pinned by digest only. Pattern matches existing `cardano-node`, `cardano-tracer`, and `oura` references.
+- yaci-store inherits Spring Boot's default SIGTERM handling — graceful shutdown, exit 0. If observed behaviour deviates, the harness will be updated in the same PR.
+- Backing store: H2 in-memory (`jdbc:h2:mem:mydb`). No Postgres sidecar.
