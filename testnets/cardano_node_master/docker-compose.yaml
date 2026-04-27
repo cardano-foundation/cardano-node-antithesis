@@ -114,7 +114,7 @@ services:
       - tracer:/tracer
 
   oura:
-    image: ghcr.io/txpipe/oura:latest
+    image: ghcr.io/txpipe/oura:v1.9.4
     container_name: oura
     hostname: oura.example
     command: daemon --config /etc/oura/daemon.toml
