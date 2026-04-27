@@ -176,6 +176,33 @@ services:
       tracer:
         condition: service_started
 
+  # Stub workload host. Long-lived utxo-indexer follows relay1's
+  # chain via N2C, exposes ready/utxos_at/await on /tmp/idx.sock
+  # (the listen socket inside this container). Composer scripts at
+  # /opt/antithesis/test/v1/stub/ query that socket to drive
+  # heartbeat / eventually / finally assertions.
+  #
+  # Restart policy: `restart: always`. The indexer's mux client
+  # currently crashes when relay1 closes the N2C socket
+  # (https://github.com/lambdasistemi/cardano-node-clients/issues/97);
+  # `--db-path` + RocksDB persistence + docker auto-restart resumes
+  # cleanly until the upstream auto-reconnect lands.
+  asteria-stub:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-stub:asteria-stub-v5
+    container_name: asteria-stub
+    hostname: asteria-stub.example
+    environment:
+      INDEXER_SOCK: /tmp/idx.sock
+    volumes:
+      - relay1-state:/state:ro
+      - asteria-stub-db:/idx-db
+    tmpfs:
+      - /tmp
+    restart: always
+    depends_on:
+      relay1:
+        condition: service_started
+
 volumes:
   tracer:
   p1-configs:
@@ -184,6 +211,7 @@ volumes:
   relay1-state:
   relay2-state:
   utxo-keys:
+  asteria-stub-db:
 
 networks:
   default:
