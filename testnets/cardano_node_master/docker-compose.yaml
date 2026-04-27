@@ -1,5 +1,5 @@
 x-cardano-node: &cardano-node
-  image: ghcr.io/intersectmbo/cardano-node:10.5.3
+  image: ghcr.io/intersectmbo/cardano-node:10.5.3@sha256:5ae211f92eac18ed27b9e2f73c190b56bf4c1a7145d282e78ca58597a385d19f
   environment:
     CARDANO_BLOCK_PRODUCER: true
   command: >
@@ -42,7 +42,7 @@ x-cardano-relay: &cardano-relay
 
 services:
   configurator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:tx-gen-v1
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator:tx-gen-v1@sha256:6e6ba428838bf754ad286b62a151c63c683ef27fbdd5dd1bb5bab11ec9a6a34d
     container_name: configurator
     volumes:
       - ./testnet.yaml:/testnet.yaml #  source of configurations
@@ -52,7 +52,7 @@ services:
       - utxo-keys:/utxo-keys # funded address keys for tx-generator
 
   tracer:
-    image: ghcr.io/intersectmbo/cardano-tracer:10.6.0
+    image: ghcr.io/intersectmbo/cardano-tracer:10.6.0@sha256:da628263a851b419c38d020d3a7dc3b65b20ee84e730faeb74babd6d96f28efe
 
     hostname: tracer.example
     container_name: tracer
@@ -75,7 +75,7 @@ services:
 
   p2:
     <<: *cardano-node
-    image: ghcr.io/intersectmbo/cardano-node:10.6.2
+    image: ghcr.io/intersectmbo/cardano-node:10.6.2@sha256:c3cbc5aa0b758ba211567791539a67001e661fbe7a09275e37449e8b1252c4b2
     container_name: p2
     hostname: p2.example
     volumes:
@@ -84,7 +84,7 @@ services:
 
   p3:
     <<: *cardano-node
-    image: ghcr.io/intersectmbo/cardano-node:10.7.1
+    image: ghcr.io/intersectmbo/cardano-node:10.7.1@sha256:45857be8d86b314a05cd46d310b74b24e5f5870469f90c6464994a7f78142271
     container_name: p3
     hostname: p3.example
     volumes:
@@ -93,7 +93,7 @@ services:
 
   relay1:
     <<: *cardano-relay
-    image: ghcr.io/intersectmbo/cardano-node:10.6.2
+    image: ghcr.io/intersectmbo/cardano-node:10.6.2@sha256:c3cbc5aa0b758ba211567791539a67001e661fbe7a09275e37449e8b1252c4b2
     container_name: relay1
     hostname: relay1.example
     volumes:
@@ -104,7 +104,7 @@ services:
 
   relay2:
     <<: *cardano-relay
-    image: ghcr.io/intersectmbo/cardano-node:10.7.1
+    image: ghcr.io/intersectmbo/cardano-node:10.7.1@sha256:45857be8d86b314a05cd46d310b74b24e5f5870469f90c6464994a7f78142271
     container_name: relay2
     hostname: relay2.example
     volumes:
@@ -126,7 +126,7 @@ services:
         condition: service_started
 
   tx-generator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:tx-gen-v1
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:tx-gen-v1@sha256:ce79d589b97e47a44d8c60f78027a1400345c89994763cec926bd6eaf02c62fa
     container_name: tx-generator
     hostname: tx-generator.example
     environment:
@@ -142,7 +142,7 @@ services:
         condition: service_started
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1362c5b
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1362c5b@sha256:248107b6ad54529f596c8484168ba855f193388a7b187c594bc847b27e146b57
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -162,7 +162,7 @@ services:
       - /tmp
 
   tracer-sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:ff408d6
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:ff408d6@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
     container_name: tracer-sidecar
     hostname: tracer-sidecar.example
     command:
@@ -178,7 +178,7 @@ services:
         condition: service_started
 
   log-tailer:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/log-tailer:a7d1d7d
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/log-tailer:a7d1d7d@sha256:a5d23c42408a1003bb14208fd97dd2bdda102e7002e4e2a2804e71a80df56484
     container_name: log-tailer
     hostname: log-tailer.example
     volumes:
