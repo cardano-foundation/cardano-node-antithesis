@@ -113,18 +113,6 @@ services:
       - relay2-state:/state
       - tracer:/tracer
 
-  oura:
-    image: ghcr.io/txpipe/oura@sha256:b67470ccfd16d5d26305fde751accf05789d68387bb17c2ee01ed717cb98b896
-    container_name: oura
-    hostname: oura.example
-    command: daemon --config /etc/oura/daemon.toml
-    volumes:
-      - ./oura-daemon.toml:/etc/oura/daemon.toml:ro
-    restart: always
-    depends_on:
-      relay1:
-        condition: service_started
-
   tx-generator:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator@sha256:ce79d589b97e47a44d8c60f78027a1400345c89994763cec926bd6eaf02c62fa
     container_name: tx-generator
@@ -195,15 +183,14 @@ services:
   # real asteria-player. This image's tag is bootstrapped via a git
   # tag (`asteria-stub-v0`); a follow-up commit pins it by digest.
   asteria-stub:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-stub@sha256:0b3747333041657bead32703bf8c5b8f7cc3312ae268654bb13d186d4c77e625
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-stub:asteria-stub-v1
     container_name: asteria-stub
     hostname: asteria-stub.example
     environment:
-      ANTITHESIS_OUTPUT_DIR: /sdk
       POOLS: "3"
       PORT: "3001"
-    volumes:
-      - asteria-stub-sdk:/sdk
+    tmpfs:
+      - /tmp
     depends_on:
       relay1:
         condition: service_started
@@ -216,7 +203,6 @@ volumes:
   relay1-state:
   relay2-state:
   utxo-keys:
-  asteria-stub-sdk:
 
 networks:
   default:

@@ -24,7 +24,7 @@ sleep "$SLEEP_SETTLE"
 ping_one() {
     cardano-cli ping --magic 42 \
         --host "p${1}.example" --port "$PORT" \
-        --quiet -c1 >/dev/null 2>&1
+        --tip --quiet -c1 >/dev/null 2>&1
 }
 
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
