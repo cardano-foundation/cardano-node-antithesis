@@ -27,15 +27,31 @@ sdk_reachable "stub eventually_alive entered"
 sleep "$SLEEP_SETTLE"
 
 ping_one() {
-    cardano-cli ping --magic 42 \
+    # Match the sidecar's known-working invocation form. Returns
+    # JSON on stdout when the handshake succeeds, exits non-zero
+    # on failure. We capture stderr+exit so the assertion details
+    # carry the actual cardano-cli error if any step fails.
+    cardano-cli ping -j --magic 42 \
         --host "p${1}.example" --port "$PORT" \
-        --tip --quiet -c1 >/dev/null 2>&1
+        --tip --quiet -c1 2>"$LAST_ERR" >/dev/null
 }
+
+LAST_ERR=$(mktemp)
+LAST_RC=0
+LAST_NODE=""
+trap 'rm -f "$LAST_ERR"' EXIT
 
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     ok=true
     for i in $(seq 1 "$POOLS"); do
-        ping_one "$i" || { ok=false; break; }
+        if ping_one "$i"; then
+            :
+        else
+            LAST_RC=$?
+            LAST_NODE="p$i"
+            ok=false
+            break
+        fi
     done
     if $ok; then
         sdk_always true "stub eventually_alive holds" \
@@ -45,6 +61,12 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     sleep "$RETRY_DELAY"
 done
 
+ERR_TEXT="$(head -c 500 "$LAST_ERR" 2>/dev/null || true)"
 sdk_always false "stub eventually_alive holds" \
-    "$(jq -nc --argjson a "$MAX_ATTEMPTS" '{attempts_exhausted:$a}')"
+    "$(jq -nc \
+        --argjson a "$MAX_ATTEMPTS" \
+        --arg node "$LAST_NODE" \
+        --argjson rc "$LAST_RC" \
+        --arg err "$ERR_TEXT" \
+        '{attempts_exhausted:$a, last_node:$node, last_rc:$rc, last_err:$err}')"
 exit 1
