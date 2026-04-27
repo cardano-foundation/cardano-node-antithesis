@@ -97,5 +97,5 @@ As a maintainer landing this on `main`, I want the yaci-store image referenced i
 - The configurator already emits genesis files into `p?-configs:/configs/configs/`; yaci-store will reuse those, mounted read-only.
 - "Pure coverage" means downstream services do not query yaci-store — the feature ships without API consumers and without surface area to break.
 - The image is referenced directly from Docker Hub by digest (`docker.io/bloxbean/yaci-store@sha256:<digest>`). The repo's publish-images workflow only handles in-repo `components/`; upstream images are pinned by digest only. Pattern matches existing `cardano-node`, `cardano-tracer`, and `oura` references.
-- yaci-store inherits Spring Boot's default SIGTERM handling — graceful shutdown, exit 0. If observed behaviour deviates, the harness will be updated in the same PR.
+- yaci-store exits with code **143** under SIGTERM (verified 2026-04-27). This is the standard JVM signal-exit pattern for `java -jar` as PID 1; Spring Boot shutdown hooks still run, but the JVM exits with the signal code rather than 0. Treated as a separate finding (analogous to #49) and absorbed by the harness, not by this feature's compose stanza. See [research.md R-006](./research.md).
 - Backing store: H2 in-memory (`jdbc:h2:mem:mydb`). No Postgres sidecar.

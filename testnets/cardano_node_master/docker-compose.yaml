@@ -125,6 +125,34 @@ services:
       relay1:
         condition: service_started
 
+  yaci-store:
+    image: docker.io/bloxbean/yaci-store@sha256:aa67ee3c222eb2e6371b34dcda198ae9f2c32c90fcaf5ebdd1d8353e3205da87
+    container_name: yaci-store
+    hostname: yaci-store.example
+    environment:
+      STORE_CARDANO_HOST: relay1.example
+      STORE_CARDANO_PORT: 3001
+      STORE_CARDANO_PROTOCOL_MAGIC: 42
+      STORE_CARDANO_BYRON_GENESIS_FILE: /configs/configs/byron-genesis.json
+      STORE_CARDANO_SHELLEY_GENESIS_FILE: /configs/configs/shelley-genesis.json
+      STORE_CARDANO_ALONZO_GENESIS_FILE: /configs/configs/alonzo-genesis.json
+      STORE_CARDANO_CONWAY_GENESIS_FILE: /configs/configs/conway-genesis.json
+      SPRING_DATASOURCE_URL: jdbc:h2:mem:mydb
+    volumes:
+      - p1-configs:/configs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    restart: always
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      relay1:
+        condition: service_started
+
   tx-generator:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator@sha256:ce79d589b97e47a44d8c60f78027a1400345c89994763cec926bd6eaf02c62fa
     container_name: tx-generator

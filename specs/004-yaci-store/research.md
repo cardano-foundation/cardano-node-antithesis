@@ -99,16 +99,23 @@ Do **not** set `STORE_CARDANO_DEVKIT_NODE` (that flag is for yaci-devkit, not a 
 
 ## R-006: Shutdown behaviour and harness implications
 
-**Decision**: Inherit Spring Boot's default SIGTERM handling — graceful shutdown, exit code 0. No `stop_signal`, no `stop_grace_period` override in compose initially. If the first Antithesis run shows non-zero exit codes attributable to yaci-store, this decision is revisited (likely by adding `stop_grace_period: 30s` and possibly `stop_signal: SIGINT`).
+**Decision**: yaci-store exits with code **143** (SIGTERM, i.e. `128 + 15`) under `docker stop`. This is the standard JVM behaviour for a `java -jar` PID 1 that does not explicitly translate SIGTERM into `System.exit(0)`. Spring Boot's shutdown hooks run; the JVM then exits with the signal code. Same family of finding as #49 (Ogmios/Kupo exit 255 on SIGTERM under GHC), different exit code. The harness must absorb code 143 from yaci-store, OR a wrapper must trap SIGTERM and exit 0 — out of scope for this feature.
 
-**Rationale**: `bloxbean/yaci-store`'s Dockerfile uses `ENTRYPOINT ["java","-jar","yaci-store.jar"]`. Spring Boot translates SIGTERM to a graceful shutdown via the `SpringApplication.exit` path; the JVM exits 0 on success. Unlike Ogmios/Kupo (#49), there is no Haskell GHC SIGTERM-handling gap here.
+**Rationale**: Verified empirically on 2026-04-27 against `bloxbean/yaci-store@sha256:aa67ee3c…`. `docker stop yaci-store` then `docker inspect --format '{{.State.ExitCode}}'` returns `143`. No `SERVER_SHUTDOWN=graceful`, no entry-point wrapper, no `stop_signal` / `stop_grace_period` override in compose. The earlier draft of this section claimed "exit 0" — that was extrapolation from "Spring Boot does graceful shutdown" that did not survive contact with a real `docker stop`. Documenting the corrected behaviour here per [Verify before claiming](memory).
+
+**Implications**:
+- The compose stanza in this feature does **not** override `stop_signal` or `stop_grace_period`. The exit-code-absorption belongs in the harness (analogous to how #49's exit 255 is treated for Ogmios), not in the service stanza. If the 1h Antithesis run treats 143 as a failure, file a follow-up to either (a) extend the harness's exit-code allowlist or (b) add a small entrypoint wrapper that traps SIGTERM and calls `System.exit(0)`.
+- **Sub-finding to file as a separate issue**: yaci-store's exit code under SIGTERM is 143, not 0. Comparable to #49.
 
 **Alternatives considered**:
-- Pre-emptively configure `stop_signal: SIGINT` on the assumption JVM behaviour might differ: speculative. Rejected per [Verify before claiming](memory) — we measure first.
+- Add `stop_grace_period: 30s` to give Spring Boot more time: the JVM is not running out of time — it is exiting *with* the signal code, which is independent of grace period. Rejected.
+- Add `SERVER_SHUTDOWN=graceful` env var: opts in to Spring Boot graceful shutdown of the web server, but does not change the JVM's signal-exit code. Rejected.
+- Wrap entrypoint with a SIGTERM-trapping shell: viable, but introduces a build artefact (custom image) for a problem that the harness already solves for similar services. Rejected for now.
 
 **Sources**:
 - [bloxbean/yaci-store Dockerfile](https://github.com/bloxbean/yaci-store/blob/main/Dockerfile)
-- [Issue #49](https://github.com/cardano-foundation/cardano-node-antithesis/issues/49) (for contrast — Ogmios/Kupo SIGTERM regression)
+- [Issue #49](https://github.com/cardano-foundation/cardano-node-antithesis/issues/49) (Ogmios/Kupo SIGTERM exit 255 — same family of finding)
+- Local verification log captured during T021 of `tasks.md`.
 
 ---
 
