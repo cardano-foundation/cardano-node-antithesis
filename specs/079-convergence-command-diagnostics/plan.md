@@ -11,7 +11,7 @@
 
 ## Summary
 
-Keep the current Antithesis Composer shell-command interface, but move repeated tip probing into a shared Bash helper that records structured per-node results. The helper uses Composer's `helper_` support-file prefix so it is ignored by command validation. Update convergence commands to classify DNS, connection, and tip-protocol probe failures separately from reachable tip divergence, and update smoke testing to run the sidecar convergence command.
+Keep the current Antithesis Composer shell-command interface, but move repeated tip probing into a shared Bash helper that records structured per-node results. The helper uses Composer's `helper_` support-file prefix so it is ignored by command validation. Update convergence commands to classify DNS, connection, and tip-protocol probe failures separately from reachable tip divergence. Align sidecar setup readiness with convergence by requiring `cardano-cli ping --tip` before setup completion, and update smoke testing to run the sidecar convergence command.
 
 ## Technical Context
 
@@ -29,13 +29,13 @@ Keep the current Antithesis Composer shell-command interface, but move repeated 
 - Composer-first workload: unchanged; commands remain under `components/sidecar/composer/convergence/`.
 - SDK instrumentation mandatory: improved with more precise failure details and classification.
 - Short-running commands: retry budgets stay bounded; smoke test adds one bounded sidecar convergence call.
-- Duration-robust: clearer post-fault/final assertions reduce ambiguity across scheduled timelines.
+- Duration-robust: clearer post-fault/final assertions reduce ambiguity across scheduled timelines, and setup readiness now checks the same `--tip` protocol path used by convergence.
 - Minimal sidecar image: no new runtime packages.
 - Image tag hygiene: sidecar compose image must be bumped to a branch commit containing the component changes.
 
 ## Design Decision
 
-Bash remains the right short-term command layer because Antithesis Composer discovers shell scripts directly and the current image already provides the needed tools. The risky part is not Bash itself, but repeated ad hoc parsing that drops failure evidence. This PR centralizes that parsing. If future work needs protocol-level diagnostics, timeouts beyond `cardano-cli` behavior, or richer retry policy, open a follow-up to replace the probe helper with a small compiled binary.
+Bash remains the right short-term command layer because Antithesis Composer discovers shell scripts directly and the current image already provides the needed tools. The risky part is not Bash itself, but repeated ad hoc parsing that drops failure evidence and readiness checks that do not match the convergence probe. This PR centralizes parsing and makes setup use the same `--tip` readiness path. If future work needs protocol-level diagnostics, timeouts beyond `cardano-cli` behavior, or richer retry policy, open a follow-up to replace the probe helper with a small compiled binary.
 
 ## Project Structure
 

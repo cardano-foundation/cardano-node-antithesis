@@ -26,13 +26,14 @@ signal_ready() {
         for i in $(seq 1 "${POOLS}"); do
             (
                 while true; do
-                    cardano-cli ping -c1 -q -j --magic 42 --host p${i}.example --port ${PORT} 2>/dev/null
-                    if [ $? -ne 0 ] ; then
-                        sleep 1
-                        continue
-                    else
+                    # Setup readiness must use the same tip protocol path as
+                    # convergence checks; plain ping can succeed before --tip.
+                    if cardano-cli ping -c1 -q -j --tip \
+                        --magic 42 --host "p${i}.example" --port "${PORT}" \
+                        >/dev/null 2>&1; then
                         break
                     fi
+                    sleep 1
                 done
             ) &
         done

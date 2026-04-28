@@ -9,6 +9,10 @@
 - [X] T003 Update `finally_tips_agree.sh` to distinguish producer reachability from tip agreement.
 - [X] T004 Update `serial_driver_tip_agreement.sh` to classify unreachable samples during fault injection.
 
+## Phase 1.5: Setup Readiness
+
+- [X] T012 Update `components/sidecar/sidecar.sh` setup readiness to require sidecar-originated `cardano-cli ping --tip` success.
+
 ## Phase 2: Local Coverage
 
 - [ ] T005 Extend `scripts/smoke-test.sh` to execute sidecar convergence from the sidecar container.
