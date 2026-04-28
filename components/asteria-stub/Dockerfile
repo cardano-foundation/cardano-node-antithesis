@@ -11,6 +11,8 @@ RUN apt-get update && \
         ca-certificates \
         iputils-ping \
         jq \
+        liblmdb0 \
+        netbase \
         netcat-openbsd \
         procps && \
     rm -rf /var/lib/apt/lists/*

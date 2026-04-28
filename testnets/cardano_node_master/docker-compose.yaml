@@ -183,7 +183,7 @@ services:
   # real asteria-player. This image's tag is bootstrapped via a git
   # tag (`asteria-stub-v0`); a follow-up commit pins it by digest.
   asteria-stub:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-stub@sha256:7d36fbe75b5cc354f2dc6b8803ce61ea2499a79ac3fc3aa44e6b824a3e6513e6
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-stub:asteria-stub-v3
     container_name: asteria-stub
     hostname: asteria-stub.example
     environment:
