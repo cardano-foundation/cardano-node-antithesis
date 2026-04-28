@@ -24,7 +24,7 @@ Docker containers that set up and drive the Antithesis test environment. Dependi
 
 Currently we provide and maintain one testnet configuration. Some old testnets are preserved in the [old-broken](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/old-broken) directory for historical reference.
 
-- `cardano_node_master/`: A mixed-version testnet with 3 block producers (10.5.3, 10.6.2, 10.7.1), 2 relay nodes (10.6.2, 10.7.1), and an Oura N2N client (Rust/Pallas). Includes a tracer, tracer-sidecar, and sidecar for observability and assertions. The topology exercises node-to-node protocol diversity across Haskell and Rust implementations. See [cardano-node-master](testnets/cardano-node-master.md) for details.
+- `cardano_node_master/`: A mixed-version testnet with 3 block producers (10.5.3, 10.6.2, 10.7.1) and 2 relay nodes (10.6.2, 10.7.1). Includes a tracer, tracer-sidecar, and sidecar for observability and assertions. The topology exercises node-to-node protocol diversity across supported Cardano Node versions. See [cardano-node-master](testnets/cardano-node-master.md) for details.
 
 ## Image publishing
 
