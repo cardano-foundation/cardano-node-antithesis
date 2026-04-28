@@ -15,8 +15,8 @@
 
 ## Phase 2: Local Coverage
 
-- [ ] T005 Extend `scripts/smoke-test.sh` to execute sidecar convergence from the sidecar container.
-- [ ] T006 Run shell syntax checks, compose config, and local smoke test.
+- [X] T005 Extend `scripts/smoke-test.sh` to execute sidecar convergence from the sidecar container.
+- [X] T006 Run shell syntax checks, compose config, and local smoke test.
 
 ## Phase 3: Image Wiring and Review
 
