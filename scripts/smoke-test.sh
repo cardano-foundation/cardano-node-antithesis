@@ -36,8 +36,10 @@ for i in $(seq 1 "$POOLS"); do
       exit 1
     fi
 
-    # Check the node is still running
-    if ! docker compose -f "$COMPOSE_FILE" ps --format json "$NODE" 2>/dev/null | grep -q '"running"'; then
+    # Check the node did not terminate. Compose may briefly report created or
+    # restarting while dependencies settle, so only terminal states fail.
+    STATE="$(docker inspect -f '{{.State.Status}}' "$NODE" 2>/dev/null || true)"
+    if [ "$STATE" = "exited" ] || [ "$STATE" = "dead" ]; then
       echo "FAIL: ${NODE} crashed"
       docker compose -f "$COMPOSE_FILE" logs --tail 30 "$NODE" 2>&1
       exit 1
@@ -54,5 +56,9 @@ for i in $(seq 1 "$POOLS"); do
     sleep 5
   done
 done
+
+echo "Checking sidecar convergence command..."
+docker exec sidecar \
+  /opt/antithesis/test/v1/convergence/eventually_converged.sh
 
 echo "PASS: all ${POOLS} nodes responding"
