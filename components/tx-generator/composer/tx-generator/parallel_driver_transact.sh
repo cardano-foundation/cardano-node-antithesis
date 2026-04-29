@@ -52,17 +52,21 @@ fi
 case "$REASON" in
     "no-pickable-source"|"index-not-ready"|"faucet-not-known")
         sdk_sometimes false "tx_generator_transact_not_applicable" \
-            "$(printf '{"reason":"%s"}' "$REASON")"
+            "$(jq -nc --arg r "$REASON" '{reason:$r}')"
         exit 1
         ;;
     submit-rejected:*)
+        # Daemon's submit-rejected reason includes the raw
+        # ledger error string, which can contain quotes and
+        # backslashes. Build the details JSON via jq so the
+        # SDK emitter never sees malformed input.
         sdk_unreachable "tx_generator_transact_submit_rejected" \
-            "$(printf '{"reason":"%s"}' "$REASON")"
+            "$(jq -nc --arg r "$REASON" '{reason:$r}')"
         exit 1
         ;;
     *)
         sdk_unreachable "tx_generator_transact_unknown_failure" \
-            "$(printf '{"raw":%s}' "$(printf '%s' "$RSP" | jq -Rs .)")"
+            "$(jq -nc --arg r "$RSP" '{raw:$r}')"
         exit 1
         ;;
 esac
