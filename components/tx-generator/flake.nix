@@ -10,13 +10,11 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     cardano-node-clients = {
-      # Pin to the upstream tx-generator branch tip while the
-      # PR is in flight. Once
+      # Pinned to the merge commit of
       # https://github.com/lambdasistemi/cardano-node-clients/pull/94
-      # merges this should repoint to the merge commit on
-      # main per the *Pins main only* rule.
+      # on main per the *Pins main only* rule.
       url =
-        "github:lambdasistemi/cardano-node-clients/4fca187eac54be032948e3367a26ff8ca60b55b7";
+        "github:lambdasistemi/cardano-node-clients/05814183627ecb37771a70b932d165183cc83042";
     };
   };
 
