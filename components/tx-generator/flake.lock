@@ -281,17 +281,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1777459692,
-        "narHash": "sha256-B/LHtBBXzQRH5OnioxG+LdqdOgIKBQTWKfA9JmjSGUA=",
+        "lastModified": 1777464052,
+        "narHash": "sha256-39eVEfwAa02ask0iuBbP7DR6QYRYB+N3T4pFU8MZCmE=",
         "owner": "lambdasistemi",
         "repo": "cardano-node-clients",
-        "rev": "2714a2f6502d038c3759232217bac200b7e27b09",
+        "rev": "4fca187eac54be032948e3367a26ff8ca60b55b7",
         "type": "github"
       },
       "original": {
         "owner": "lambdasistemi",
         "repo": "cardano-node-clients",
-        "rev": "2714a2f6502d038c3759232217bac200b7e27b09",
+        "rev": "4fca187eac54be032948e3367a26ff8ca60b55b7",
         "type": "github"
       }
     },

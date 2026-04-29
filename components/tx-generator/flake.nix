@@ -16,7 +16,7 @@
       # merges this should repoint to the merge commit on
       # main per the *Pins main only* rule.
       url =
-        "github:lambdasistemi/cardano-node-clients/2714a2f6502d038c3759232217bac200b7e27b09";
+        "github:lambdasistemi/cardano-node-clients/4fca187eac54be032948e3367a26ff8ca60b55b7";
     };
   };
 
