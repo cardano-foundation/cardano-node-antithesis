@@ -56,7 +56,7 @@ in pkgs.dockerTools.buildImage {
       pkgs.bash
       pkgs.jq
       pkgs.gnugrep
-      pkgs.netcat-gnu
+      pkgs.netcat-openbsd
       usrBinEnv
       sleepForever
       antithesis-drivers
