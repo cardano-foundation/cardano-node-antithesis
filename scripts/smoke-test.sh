@@ -61,4 +61,92 @@ echo "Checking sidecar convergence command..."
 docker exec sidecar \
   /opt/antithesis/test/v1/convergence/eventually_converged.sh
 
+# tx-generator: prove the daemon comes up, drives one
+# refill, lets the indexer observe it, then lands a small
+# burst of transacts and grows the population. This is the
+# CI-side counterpart of the docker-compose contract; the
+# Antithesis composer drives the same scripts at much
+# heavier load on the cluster.
+TXGEN_SOCK=/state/tx-generator-control.sock
+txgen_send() {
+  docker exec tx-generator sh -c \
+    "echo '$1' | nc -U -q 1 $TXGEN_SOCK"
+}
+
+echo "Waiting for tx-generator control socket..."
+TXGEN_DEADLINE=$((SECONDS + 90))
+while ! docker exec tx-generator test -S "$TXGEN_SOCK" 2>/dev/null; do
+  if [ "$SECONDS" -ge "$TXGEN_DEADLINE" ]; then
+    echo "FAIL: tx-generator control socket never bound"
+    docker compose -f "$COMPOSE_FILE" logs --tail 50 tx-generator 2>&1
+    exit 1
+  fi
+  sleep 2
+done
+
+echo "Probing tx-generator ready..."
+TXGEN_DEADLINE=$((SECONDS + 180))
+while true; do
+  if [ "$SECONDS" -ge "$TXGEN_DEADLINE" ]; then
+    echo "FAIL: tx-generator never reported ready=true"
+    docker compose -f "$COMPOSE_FILE" logs --tail 50 tx-generator 2>&1
+    exit 1
+  fi
+  RSP="$(txgen_send '{"ready":null}' 2>/dev/null || true)"
+  if [ -n "$RSP" ] && echo "$RSP" | jq -e '.ready == true' >/dev/null 2>&1; then
+    echo "OK: tx-generator ready"
+    break
+  fi
+  sleep 3
+done
+
+echo "Driving initial refill..."
+if ! docker exec tx-generator parallel_driver_refill; then
+  echo "FAIL: parallel_driver_refill returned non-zero"
+  docker compose -f "$COMPOSE_FILE" logs --tail 50 tx-generator 2>&1
+  exit 1
+fi
+
+echo "Waiting for indexer to observe refill (populationSize > 0)..."
+TXGEN_DEADLINE=$((SECONDS + 120))
+while true; do
+  if [ "$SECONDS" -ge "$TXGEN_DEADLINE" ]; then
+    echo "FAIL: indexer never observed refill"
+    txgen_send '{"snapshot":null}' || true
+    exit 1
+  fi
+  SNAP="$(txgen_send '{"snapshot":null}' 2>/dev/null || true)"
+  POP="$(echo "$SNAP" | jq -r '.populationSize // 0' 2>/dev/null || echo 0)"
+  if [ "$POP" -gt 0 ]; then
+    echo "OK: populationSize=$POP after refill"
+    break
+  fi
+  sleep 3
+done
+
+echo "Driving 5 transacts..."
+TXGEN_OK=0
+for _ in 1 2 3 4 5; do
+  if docker exec tx-generator parallel_driver_transact; then
+    TXGEN_OK=$((TXGEN_OK + 1))
+  fi
+  sleep 2
+done
+
+echo "Final tx-generator snapshot:"
+SNAP="$(txgen_send '{"snapshot":null}')"
+echo "$SNAP" | jq .
+
+POP="$(echo "$SNAP" | jq -r '.populationSize // 0')"
+if [ "$TXGEN_OK" -lt 1 ]; then
+  echo "FAIL: no transacts landed"
+  exit 1
+fi
+if [ "$POP" -lt 2 ]; then
+  echo "FAIL: populationSize did not grow past refill ($POP < 2)"
+  exit 1
+fi
+
+echo "OK: tx-generator drove $TXGEN_OK/5 transacts, populationSize=$POP"
+
 echo "PASS: all ${POOLS} nodes responding"
