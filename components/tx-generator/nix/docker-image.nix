@@ -13,6 +13,23 @@ let
                $out/opt/antithesis/test/v1/*/finally_*.sh
   '';
 
+  # Wrapper that converts a TextEnvelope-shaped skey
+  # (the cluster configurator emits this format) to the
+  # 32-byte raw seed cardano-tx-generator expects, then
+  # execs the daemon.
+  entrypoint = pkgs.writeShellApplication {
+    name = "tx-generator-entrypoint";
+    runtimeInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.jq
+      pkgs.gnugrep
+      pkgs.unixtools.xxd
+      tx-generator-bin
+    ];
+    text = builtins.readFile ../entrypoint.sh;
+  };
+
   # Wrapper bins so docker-compose's `command:` and
   # `exec` can invoke the drivers by short name without
   # knowing the path.
@@ -47,7 +64,7 @@ in pkgs.dockerTools.buildImage {
   name = "ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator";
   tag = version;
   config = {
-    EntryPoint = [ "/bin/cardano-tx-generator" ];
+    EntryPoint = [ "/bin/tx-generator-entrypoint" ];
   };
   copyToRoot = pkgs.buildEnv {
     name = "tx-generator-image-root";
@@ -57,6 +74,7 @@ in pkgs.dockerTools.buildImage {
       pkgs.jq
       pkgs.gnugrep
       pkgs.netcat-openbsd
+      pkgs.unixtools.xxd
       usrBinEnv
       sleepForever
       antithesis-drivers
@@ -64,6 +82,7 @@ in pkgs.dockerTools.buildImage {
       parallel-driver-refill
       eventually-population-grew
       finally-pressure-summary
+      entrypoint
       tx-generator-bin
     ];
   };
