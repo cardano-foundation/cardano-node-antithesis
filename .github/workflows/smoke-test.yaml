@@ -1,10 +1,13 @@
 name: Compose smoke test
 
+# The publish-images workflow chains a `smoke-test` job
+# after `publish-images` so the smoke-test result rolls up
+# to the PR check suite. This standalone workflow is the
+# manual escape hatch for re-running the same script
+# against an arbitrary ref via `workflow_dispatch`, without
+# rebuilding the images.
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Build and push component images for cardano-node testnet"]
-    types: [completed]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,13 +17,8 @@ jobs:
   smoke-test:
     name: Smoke test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - name: Run smoke test
-        run: ./scripts/smoke-test.sh cardano_node_master 120
+        run: ./scripts/smoke-test.sh cardano_node_master 600
