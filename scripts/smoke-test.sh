@@ -107,18 +107,23 @@ if ! docker exec tx-generator parallel_driver_refill; then
   exit 1
 fi
 
-echo "Waiting for indexer to observe refill (populationSize > 0)..."
-TXGEN_DEADLINE=$((SECONDS + 120))
+echo "Waiting for indexer to observe refill UTxO (p50_lovelace != null)..."
+# populationSize is the count of HD-derived addresses
+# (incremented by refill on disk before the UTxO lands).
+# p50_lovelace is null until the indexer actually sees a
+# UTxO on chain, so it's the right gate for "ready to
+# transact".
+TXGEN_DEADLINE=$((SECONDS + 180))
 while true; do
   if [ "$SECONDS" -ge "$TXGEN_DEADLINE" ]; then
-    echo "FAIL: indexer never observed refill"
+    echo "FAIL: indexer never observed refill UTxO"
     txgen_send '{"snapshot":null}' || true
     exit 1
   fi
   SNAP="$(txgen_send '{"snapshot":null}' 2>/dev/null || true)"
-  POP="$(echo "$SNAP" | jq -r '.populationSize // 0' 2>/dev/null || echo 0)"
-  if [ "$POP" -gt 0 ]; then
-    echo "OK: populationSize=$POP after refill"
+  P50="$(echo "$SNAP" | jq -r '.p50_lovelace' 2>/dev/null || echo null)"
+  if [ "$P50" != "null" ] && [ -n "$P50" ]; then
+    echo "OK: indexer observed UTxO (p50_lovelace=$P50)"
     break
   fi
   sleep 3
@@ -126,9 +131,23 @@ done
 
 echo "Driving 5 transacts..."
 TXGEN_OK=0
-for _ in 1 2 3 4 5; do
-  if docker exec tx-generator parallel_driver_transact; then
+TXGEN_TMP="$(mktemp -d)"
+trap 'rm -rf "$TXGEN_TMP"; cleanup' EXIT
+for i in 1 2 3 4 5; do
+  STDERR="$TXGEN_TMP/transact-$i.err"
+  if docker exec tx-generator parallel_driver_transact 2>"$STDERR"; then
     TXGEN_OK=$((TXGEN_OK + 1))
+  fi
+  # The composer-side semantics treat exit 1 as
+  # "not applicable, retry next tick", so we don't fail
+  # the smoke-test on a non-zero exit. But a `jq:` line
+  # on stderr means the driver itself crashed (malformed
+  # JSON, missing field, etc.) — that's a real bug and
+  # the smoke-test must surface it.
+  if grep -q '^jq:' "$STDERR"; then
+    echo "FAIL: parallel_driver_transact emitted jq error on transact #$i:"
+    cat "$STDERR"
+    exit 1
   fi
   sleep 2
 done
