@@ -121,7 +121,7 @@ services:
     # `nix build` from components/tx-generator/ produces
     # the exact tag and `docker load` makes compose pick
     # it up without a pull.
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:cd750e8
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:de9091a
     container_name: tx-generator
     hostname: tx-generator.example
     command:
