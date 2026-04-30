@@ -13,6 +13,10 @@
 
 - [X] T012 Update `components/sidecar/sidecar.sh` setup readiness to require sidecar-originated `cardano-cli ping --tip` success.
 
+## Phase 1.6: Pre-Readiness Final Check Race
+
+- [X] T013 Treat an all-`tip_protocol_deserialise_failure` `finally_tips_agree.sh` retry window with zero successful tip responses as a non-failing startup readiness miss.
+
 ## Phase 2: Local Coverage
 
 - [X] T005 Extend `scripts/smoke-test.sh` to execute sidecar convergence from the sidecar container.

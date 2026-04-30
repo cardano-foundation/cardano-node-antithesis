@@ -42,6 +42,19 @@ As a maintainer, I need Antithesis setup completion to wait for the same produce
 1. **Given** producers are starting, **When** the sidecar signals Antithesis setup complete, **Then** every producer has already answered a sidecar-originated `cardano-cli ping --tip`.
 2. **Given** a producer accepts TCP before tip probing is ready, **When** the sidecar setup loop checks readiness, **Then** setup continues polling instead of declaring completion.
 
+### User Story 4 - Suppress Pre-Readiness Final Checks (Priority: P1)
+
+As a maintainer reading a branch Antithesis report, I need a `finally_tips_agree.sh` invocation that runs before any producer has ever served the tip protocol to be treated as a startup readiness miss, so that the report does not classify an early Composer scheduling race as a final convergence failure.
+
+**Why this priority**: The Composer can schedule a `finally_` command before the producer tip protocol is ready. When all producers return `tip_protocol_deserialise_failure` and no producer returns a tip during the whole retry window, the command has not observed enough state to assert final reachability or final agreement.
+
+**Independent Test**: Run `finally_tips_agree.sh` with a stubbed `cardano-cli` that always fails with `PingClientFindIntersectDeserialiseFailure`; verify the command exits 0 and does not emit false `all producer tips reachable at final check` or `finally_tips_agree holds` assertions.
+
+**Acceptance Scenarios**:
+
+1. **Given** every producer probe fails with `tip_protocol_deserialise_failure` for the entire retry window, **When** `finally_tips_agree.sh` exhausts its attempts, **Then** it exits 0 as a readiness miss.
+2. **Given** at least one producer returned a tip during the retry window, **When** the final check still ends incomplete or divergent, **Then** the command keeps the existing failure behavior and emits structured failure details.
+
 ## Requirements
 
 ### Functional Requirements
@@ -52,6 +65,8 @@ As a maintainer, I need Antithesis setup completion to wait for the same produce
 - **FR-004**: Local smoke tests MUST execute a convergence command from the sidecar container.
 - **FR-005**: The implementation MUST stay within the current sidecar runtime dependencies unless a follow-up issue replaces the shell command layer.
 - **FR-006**: Sidecar setup readiness MUST use `cardano-cli ping --tip`, not plain ping, so setup and convergence share the same readiness definition.
+- **FR-007**: `finally_tips_agree.sh` MUST treat a retry window with zero successful tip responses and only `tip_protocol_deserialise_failure` outcomes as a non-failing readiness miss.
+- **FR-008**: `finally_tips_agree.sh` MUST continue failing incomplete or divergent final checks once it has observed at least one producer tip response during the retry window.
 
 ## Success Criteria
 
@@ -61,6 +76,7 @@ As a maintainer, I need Antithesis setup completion to wait for the same produce
 - **SC-002**: A healthy local cluster passes sidecar convergence from `scripts/smoke-test.sh`.
 - **SC-003**: Maintainers can tell from report text/details whether a failure is name resolution, connection failure, tip-protocol failure, missing tip data, or tip divergence.
 - **SC-004**: Antithesis setup completion is not emitted until sidecar-originated `--tip` probes succeed for all producers.
+- **SC-005**: The no-tip-protocol startup-race case exits 0 without writing false final-check SDK assertions, while reachable divergence still exits 1.
 
 ## Assumptions
 
