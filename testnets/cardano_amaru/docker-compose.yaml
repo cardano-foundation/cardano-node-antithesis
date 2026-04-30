@@ -131,7 +131,7 @@ services:
       - tracer:/tracer
 
   tx-generator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:2012360
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:577c05d
     container_name: tx-generator
     hostname: tx-generator.example
     command:
