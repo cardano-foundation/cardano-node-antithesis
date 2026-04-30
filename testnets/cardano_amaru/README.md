@@ -67,6 +67,12 @@ configurator -> p1/p2/p3/relay1/relay2
              p1 ChainDB
                   |
                   v
+       bootstrap-state-snapshot
+                  |
+                  v
+          bootstrap ChainDB copy
+                  |
+                  v
           bootstrap-producer
                   |
                   v
@@ -76,10 +82,13 @@ configurator -> p1/p2/p3/relay1/relay2
       amaru-relay-1   amaru-relay-2
 ```
 
-`bootstrap-producer` mounts the producer node's ChainDB read-write at
-`/cardano/state`. This is a cardano-node 10.7.1 consensus API
-requirement: immutable chunk validation opens files with write
-permissions. The producer contract remains immutable-only by behavior.
+`bootstrap-state-snapshot` waits for `p1` to reach slot `360` through
+the local node socket, then copies `p1`'s ChainDB into an isolated
+`bootstrap-state` volume. `bootstrap-producer` mounts that copy
+read-write at `/cardano/state`. This preserves the cardano-node 10.7.1
+consensus API requirement that immutable chunk validation has write
+permissions, while avoiding a second process opening the live `p1`
+ChainDB during Antithesis fault scheduling.
 
 Each relay-only Amaru entrypoint copies the final bundle into its private
 state volume before it execs `amaru run`, so the two Amaru nodes do not

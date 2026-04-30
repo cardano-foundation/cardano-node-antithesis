@@ -87,7 +87,9 @@ flowchart LR
     relay2 -.N2N.-> p1
 
     p1 --> chain[(p1-state ChainDB)]
-    chain --> producer[bootstrap-producer]
+    chain --> snap[bootstrap-state-snapshot]
+    snap --> copy[(bootstrap-state ChainDB copy)]
+    copy --> producer[bootstrap-producer]
     producer --> bundle[(amaru-bundle)]
     bundle --> a1[(a1-state)]
     bundle --> a2[(a2-state)]
@@ -104,14 +106,18 @@ volume, and then execs `amaru run`.
 
 ## Bootstrap Contract
 
+`bootstrap-state-snapshot` runs first. It polls `p1` through the local
+node socket until the chain reaches slot `360`, copies the mature ChainDB
+into the isolated `bootstrap-state` volume, and exits `0`.
+
 `bootstrap-producer` runs once:
 
 ```text
 bootstrap-producer /cardano/state /cardano/config/configs /srv/amaru testnet_42
 ```
 
-It waits for the producer node's immutable ChainDB to be era-ready, emits
-three ledger snapshots for the target window, converts them through
+It opens the copied ChainDB, verifies that the immutable tip is era-ready,
+emits three ledger snapshots for the target window, converts them through
 Amaru, extracts headers and nonces, imports all data into Amaru stores,
 and atomically commits:
 
@@ -124,16 +130,18 @@ and atomically commits:
 `-- nonces.json
 ```
 
-The ChainDB mount is intentionally read-write:
+The producer ChainDB mount is intentionally read-write:
 
 ```yaml
 volumes:
-  - p1-state:/cardano/state
+  - bootstrap-state:/cardano/state
 ```
 
-This is not a write contract for the producer. It is required because
+This is not a live-node write contract. It is required because
 cardano-node 10.7.1's consensus ImmutableDB validation path opens chunk
-files through APIs that reject read-only filesystems.
+files through APIs that reject read-only filesystems. The live `p1`
+ChainDB is mounted read-only by the snapshot service only, and the
+producer never opens it directly.
 
 ## Local Verification
 
@@ -164,11 +172,13 @@ For a bootstrap-specific cluster run, watch:
 
 ```bash
 docker compose -f testnets/cardano_amaru/docker-compose.yaml logs -f bootstrap-producer
-docker compose -f testnets/cardano_amaru/docker-compose.yaml ps bootstrap-producer amaru-relay-1 amaru-relay-2
+docker compose -f testnets/cardano_amaru/docker-compose.yaml ps bootstrap-state-snapshot bootstrap-producer amaru-relay-1 amaru-relay-2
 ```
 
 The success evidence is:
 
+- `bootstrap-state-snapshot` prints `copied p1 ChainDB at slot ...` and
+  exits `0`;
 - `bootstrap-producer` prints `wrote /srv/amaru/testnet_42` and exits
   `0`;
 - `amaru-relay-1` and `amaru-relay-2` copy the bundle into private state

@@ -157,6 +157,71 @@ services:
       configurator:
         condition: service_completed_successfully
 
+  bootstrap-state-snapshot:
+    image: ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+    container_name: bootstrap-state-snapshot
+    hostname: bootstrap-state-snapshot.example
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        min_slot="$${AMARU_BOOTSTRAP_COPY_MIN_SLOT:-360}"
+        deadline="$${AMARU_BOOTSTRAP_COPY_DEADLINE_SECONDS:-1200}"
+        start="$$(date +%s)"
+
+        while :; do
+          now="$$(date +%s)"
+          if [ "$$((now - start))" -ge "$${deadline}" ]; then
+            echo "bootstrap-state-snapshot: p1 did not reach slot $${min_slot} within $${deadline}s" >&2
+            exit 1
+          fi
+
+          tip_json=""
+          if [ -S /live/node.socket ]; then
+            tip_json="$$(cardano-cli query tip --socket-path /live/node.socket --testnet-magic 42 2>/dev/null || true)"
+          fi
+          slot=""
+          case "$${tip_json}" in
+            *'"slot"'*)
+              value="$${tip_json#*\"slot\"}"
+              value="$${value#*:}"
+              value="$${value%%,*}"
+              slot="$$(printf '%s' "$${value}" | tr -dc '0-9')"
+              ;;
+          esac
+
+          if [ -n "$${slot}" ] && [ "$${slot}" -ge "$${min_slot}" ]; then
+            rm -rf /snapshot/.copy-tmp /snapshot/*
+            mkdir -p /snapshot/.copy-tmp
+            if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock /snapshot/.copy-tmp/; then
+              rm -rf /snapshot/immutable /snapshot/ledger /snapshot/volatile /snapshot/protocolMagicId /snapshot/lock
+              mv /snapshot/.copy-tmp/immutable /snapshot/
+              mv /snapshot/.copy-tmp/ledger /snapshot/
+              mv /snapshot/.copy-tmp/volatile /snapshot/
+              mv /snapshot/.copy-tmp/protocolMagicId /snapshot/
+              mv /snapshot/.copy-tmp/lock /snapshot/
+              rmdir /snapshot/.copy-tmp
+              echo "bootstrap-state-snapshot: copied p1 ChainDB at slot $${slot}"
+              exit 0
+            fi
+            echo "bootstrap-state-snapshot: copy raced with p1 writes; retrying" >&2
+            rm -rf /snapshot/.copy-tmp
+          fi
+
+          sleep 5
+        done
+    environment:
+      AMARU_BOOTSTRAP_COPY_MIN_SLOT: "360"
+      AMARU_BOOTSTRAP_COPY_DEADLINE_SECONDS: "1200"
+    volumes:
+      - p1-state:/live:ro
+      - bootstrap-state:/snapshot
+    restart: "no"
+    depends_on:
+      p1:
+        condition: service_started
+
   bootstrap-producer:
     image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
     container_name: bootstrap-producer
@@ -172,12 +237,12 @@ services:
       AMARU_WAIT_DEADLINE_SECONDS: "1200"
       AMARU_POLL_INTERVAL_SECONDS: "5"
     volumes:
-      - p1-state:/cardano/state
+      - bootstrap-state:/cardano/state
       - p1-configs:/cardano/config:ro
       - amaru-bundle:/srv/amaru
     depends_on:
-      p1:
-        condition: service_started
+      bootstrap-state-snapshot:
+        condition: service_completed_successfully
     restart: "no"
 
   amaru-relay-1:
@@ -287,6 +352,7 @@ volumes:
   p1-state:
   p2-state:
   p3-state:
+  bootstrap-state:
   relay1-state:
   relay2-state:
   utxo-keys:

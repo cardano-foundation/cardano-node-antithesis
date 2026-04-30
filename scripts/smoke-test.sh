@@ -185,6 +185,33 @@ if [ "$TESTNET" = "cardano_amaru" ]; then
   BOOTSTRAP_TIMEOUT="${AMARU_BOOTSTRAP_SMOKE_TIMEOUT:-1200}"
   BOOTSTRAP_DEADLINE=$((SECONDS + BOOTSTRAP_TIMEOUT))
 
+  echo "Waiting for bootstrap-state-snapshot to complete (timeout ${BOOTSTRAP_TIMEOUT}s)..."
+  while true; do
+    STATE="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' bootstrap-state-snapshot 2>/dev/null || true)"
+    STATUS="${STATE%% *}"
+    EXIT_CODE="${STATE#* }"
+    if [ "$STATUS" = "exited" ]; then
+      if [ "$EXIT_CODE" = "0" ]; then
+        echo "OK: bootstrap-state-snapshot completed"
+        break
+      fi
+      echo "FAIL: bootstrap-state-snapshot exited with code ${EXIT_CODE}"
+      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-state-snapshot 2>&1
+      exit 1
+    fi
+    if [ "$STATUS" = "dead" ]; then
+      echo "FAIL: bootstrap-state-snapshot is dead"
+      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-state-snapshot 2>&1
+      exit 1
+    fi
+    if [ "$SECONDS" -ge "$BOOTSTRAP_DEADLINE" ]; then
+      echo "FAIL: bootstrap-state-snapshot did not complete within ${BOOTSTRAP_TIMEOUT}s"
+      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-state-snapshot 2>&1
+      exit 1
+    fi
+    sleep 5
+  done
+
   echo "Waiting for bootstrap-producer to complete (timeout ${BOOTSTRAP_TIMEOUT}s)..."
   while true; do
     STATE="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' bootstrap-producer 2>/dev/null || true)"
