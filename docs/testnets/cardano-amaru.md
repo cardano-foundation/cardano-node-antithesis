@@ -25,6 +25,21 @@ CI and published the runtime image:
 ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
 ```
 
+The tx-generator image is also pinned deliberately:
+
+```text
+ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:94100c6
+```
+
+That image rebuilds the daemon against
+`lambdasistemi/cardano-node-clients@898a2c470ced6a82fa5a32b18cbaf195e1cce927`,
+the merge commit for
+`https://github.com/lambdasistemi/cardano-node-clients/pull/105`. The
+pin matters for Antithesis because the daemon now supervises its N2C
+connection and turns GHC's `BlockedIndefinitelyOnSTM` detection on
+in-flight LSQ/LTxS calls into the typed `ConnectionLost` path. Composer
+requests then get a retryable control response instead of a daemon exit.
+
 ## Stake Roles
 
 Amaru is relay-only in this testnet. It is not assigned stake, and it is

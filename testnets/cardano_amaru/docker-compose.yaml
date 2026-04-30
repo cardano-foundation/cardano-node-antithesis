@@ -131,7 +131,11 @@ services:
       - tracer:/tracer
 
   tx-generator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:577c05d
+    # Tag 94100c6 rebuilds the daemon from
+    # lambdasistemi/cardano-node-clients@898a2c4: the N2C
+    # reconnect supervisor plus typed recovery for
+    # BlockedIndefinitelyOnSTM under Antithesis faulting.
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:94100c6
     container_name: tx-generator
     hostname: tx-generator.example
     command:
