@@ -168,4 +168,70 @@ fi
 
 echo "OK: tx-generator drove $TXGEN_OK/5 transacts, populationSize=$POP"
 
+if [ "$TESTNET" = "cardano_amaru" ]; then
+  BOOTSTRAP_TIMEOUT="${AMARU_BOOTSTRAP_SMOKE_TIMEOUT:-1200}"
+  BOOTSTRAP_DEADLINE=$((SECONDS + BOOTSTRAP_TIMEOUT))
+
+  echo "Waiting for bootstrap-producer to complete (timeout ${BOOTSTRAP_TIMEOUT}s)..."
+  while true; do
+    STATE="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' bootstrap-producer 2>/dev/null || true)"
+    STATUS="${STATE%% *}"
+    EXIT_CODE="${STATE#* }"
+    if [ "$STATUS" = "exited" ]; then
+      if [ "$EXIT_CODE" = "0" ]; then
+        echo "OK: bootstrap-producer completed"
+        break
+      fi
+      echo "FAIL: bootstrap-producer exited with code ${EXIT_CODE}"
+      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-producer 2>&1
+      exit 1
+    fi
+    if [ "$STATUS" = "dead" ]; then
+      echo "FAIL: bootstrap-producer is dead"
+      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-producer 2>&1
+      exit 1
+    fi
+    if [ "$SECONDS" -ge "$BOOTSTRAP_DEADLINE" ]; then
+      echo "FAIL: bootstrap-producer did not complete within ${BOOTSTRAP_TIMEOUT}s"
+      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-producer 2>&1
+      exit 1
+    fi
+    sleep 5
+  done
+
+  for RELAY in amaru-relay-1 amaru-relay-2; do
+    echo "Waiting for ${RELAY} to consume bootstrap bundle..."
+    RELAY_DEADLINE=$((SECONDS + 180))
+    while ! docker exec "$RELAY" sh -c \
+        'test -d /srv/amaru/ledger.testnet_42.db/live \
+          && test -d /srv/amaru/chain.testnet_42.db \
+          && test -f /srv/amaru/nonces.json' 2>/dev/null; do
+      STATE="$(docker inspect -f '{{.State.Status}}' "$RELAY" 2>/dev/null || true)"
+      if [ "$STATE" = "exited" ] || [ "$STATE" = "dead" ]; then
+        echo "FAIL: ${RELAY} stopped before consuming bootstrap bundle"
+        docker compose -f "$COMPOSE_FILE" logs --tail 80 "$RELAY" 2>&1
+        exit 1
+      fi
+      if [ "$SECONDS" -ge "$RELAY_DEADLINE" ]; then
+        echo "FAIL: ${RELAY} did not copy bootstrap bundle"
+        docker compose -f "$COMPOSE_FILE" logs --tail 80 "$RELAY" 2>&1
+        exit 1
+      fi
+      sleep 5
+    done
+
+    RESTARTS_BEFORE="$(docker inspect -f '{{.RestartCount}}' "$RELAY")"
+    sleep 20
+    STATE="$(docker inspect -f '{{.State.Status}}' "$RELAY" 2>/dev/null || true)"
+    RESTARTS_AFTER="$(docker inspect -f '{{.RestartCount}}' "$RELAY" 2>/dev/null || echo unknown)"
+    if [ "$STATE" != "running" ] || [ "$RESTARTS_AFTER" != "$RESTARTS_BEFORE" ]; then
+      echo "FAIL: ${RELAY} did not stay running after bootstrap bundle load"
+      echo "state=${STATE} restarts_before=${RESTARTS_BEFORE} restarts_after=${RESTARTS_AFTER}"
+      docker compose -f "$COMPOSE_FILE" logs --tail 80 "$RELAY" 2>&1
+      exit 1
+    fi
+    echo "OK: ${RELAY} consumed bundle and stayed running"
+  done
+fi
+
 echo "PASS: all ${POOLS} nodes responding"

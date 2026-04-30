@@ -41,7 +41,7 @@ To add a new component: create `components/<name>/Dockerfile`, reference it in d
 The `cardano_amaru` testnet consumes an external image instead:
 
 ```text
-ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6
+ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
 ```
 
 That image is produced by `lambdasistemi/amaru-bootstrap` and is pinned

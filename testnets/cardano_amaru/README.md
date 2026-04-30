@@ -16,10 +16,28 @@ producers are the three cardano-node services `p1`, `p2`, and `p3`.
 `amaru-relay-1` and `amaru-relay-2` receive no KES key, VRF key, cold
 key, operational certificate, or stake-pool genesis assignment.
 
+This testnet uses a fast bootstrap profile:
+
+```yaml
+protocolConsts:
+  k: 10
+epochLength: 120
+securityParam: 10
+activeSlotsCoeff: 0.2
+TestConwayHardForkAtEpoch: 0
+```
+
+The producer requires two complete Conway epochs behind the immutable
+tip. These values make that proof bounded for local and CI runs without
+changing the cardano-node release target or giving Amaru producer
+credentials. Dense block production is part of the profile because the
+producer reads immutable chunks only; sparse block production can leave
+the immutable tip at genesis for too long.
+
 The producer image is pinned by full source commit SHA:
 
 ```text
-ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6
+ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
 ```
 
 The cardano-node release image is pinned by tag and digest:
@@ -70,10 +88,10 @@ Run the standard node smoke test:
 ```
 
 The standard smoke test proves the cardano-node network, sidecar, and
-tx-generator still start and converge. It does not force the bootstrap
-producer to complete, because a fresh local testnet needs two complete
-Conway epochs behind the immutable tip before the producer can write the
-bundle.
+tx-generator still start and converge. For `cardano_amaru`, it also
+waits for `bootstrap-producer` to complete and checks that both
+relay-only Amaru nodes copied the bundle into private state and stayed
+running after `amaru run` opened the stores.
 
 For the bootstrap-specific proof, inspect:
 
@@ -88,7 +106,8 @@ Expected completion sequence:
    `0`.
 2. `amaru-relay-1` and `amaru-relay-2` copy the bundle into their private state
    volumes.
-3. `amaru-relay-1` and `amaru-relay-2` start with `amaru run`.
+3. `amaru-relay-1` and `amaru-relay-2` start with `amaru run` and stay
+   running without a restart during the smoke gate.
 
 ## Compatibility Constraint
 

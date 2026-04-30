@@ -11,11 +11,17 @@ testnetDomain: example
 
 --- # Optional Byron Genesis Overide
 protocolConsts:
-  k: 432
+  k: 10
 
 --- # Optional Shelley Genesis Overide
-epochLength: 86400
-securityParam: 432
+# Fast-bootstrap profile for the Amaru relay proof. The producer waits
+# until two complete Conway epochs are behind the immutable tip, so the
+# production-like 86400-slot epoch would make the local/CI proof wait
+# roughly 48 hours. Keep this scoped to cardano_amaru; do not copy it
+# back to cardano_node_master.
+epochLength: 120
+securityParam: 10
+activeSlotsCoeff: 0.2
 maxLovelaceSupply: 45000000000000000
 protocolParams:
   decentralisationParam: 0

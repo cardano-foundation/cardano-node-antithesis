@@ -16,7 +16,7 @@ The producer image is pinned to the `amaru-bootstrap` commit that passed
 CI and published the runtime image:
 
 ```text
-ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6
+ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
 ```
 
 ## Stake Roles
@@ -33,6 +33,28 @@ The only stake-bearing block producers are:
 The Amaru services receive no KES key, VRF key, cold key, operational
 certificate, or stake-pool genesis assignment. They start with
 `amaru run` and an upstream peer only.
+
+## Fast Bootstrap Profile
+
+This testnet intentionally shortens the epoch/security window:
+
+```yaml
+protocolConsts:
+  k: 10
+epochLength: 120
+securityParam: 10
+activeSlotsCoeff: 0.2
+TestConwayHardForkAtEpoch: 0
+```
+
+The producer needs two complete Conway epochs behind the immutable tip.
+With the production-like `86400` slot epoch this local proof would take
+roughly 48 hours. In `cardano_amaru`, Conway starts at epoch 0 and the
+producer can become ready around slot `240`, so local and CI runs can
+wait for the real producer completion instead of only proving cluster
+startup. The dense active slot coefficient makes enough blocks immutable
+inside that short window; without it the immutable ChainDB tip can remain
+at genesis even after the slot threshold has passed.
 
 ## Topology
 
@@ -114,10 +136,11 @@ Run the standard smoke test:
 ```
 
 That smoke test proves the cardano-node network, sidecar, and
-tx-generator still work with the Amaru services present. A fresh local
-testnet usually does not make the bootstrap producer finish within the
-smoke-test window because the producer waits until two complete Conway
-epochs are behind the immutable tip.
+tx-generator still work with the Amaru services present. For
+`cardano_amaru`, it additionally waits for `bootstrap-producer` to exit
+`0`, then checks that `amaru-relay-1` and `amaru-relay-2` copied the
+bundle into private state volumes and stayed running after `amaru run`
+opened those stores.
 
 The same smoke command runs in both the PR image-publish workflow and
 the manual smoke workflow, after the existing `cardano_node_master`
@@ -136,7 +159,8 @@ The success evidence is:
   `0`;
 - `amaru-relay-1` and `amaru-relay-2` copy the bundle into private state
   volumes;
-- `amaru-relay-1` and `amaru-relay-2` enter `amaru run`.
+- `amaru-relay-1` and `amaru-relay-2` enter `amaru run` and remain
+  running without a restart during the smoke gate.
 
 ## What This Does Not Prove
 
@@ -145,8 +169,6 @@ Moving beyond cardano-node 10.7.1 requires a deliberate upstream
 retarget, because ledger CBOR and ChainDB APIs drift laterally across
 node releases.
 
-The standard local smoke test also does not prove that the bootstrap
-bundle contains transaction-heavy history. It proves the node network and
-drivers still operate while the Amaru bootstrap wiring is present. The
-bootstrap producer itself consumes the immutable ChainDB window available
-when its era-readiness predicate finally passes.
+The smoke proof runs on a deliberately short-epoch testnet. It proves the
+producer and relay load path for the target node release, but it is not a
+production-epoch-duration soak test and does not assign stake to Amaru.

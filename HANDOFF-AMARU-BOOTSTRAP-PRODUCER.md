@@ -41,6 +41,10 @@ Current implementation status:
 - Amaru is relay-only here. It receives no stake assignment, KES key, VRF key,
   cold key, or operational certificate. The only stake-bearing block producers
   are the three cardano-node services `p1`, `p2`, and `p3`.
+- `cardano_amaru` now uses a fast bootstrap profile (`k=10`,
+  `securityParam=10`, `epochLength=120`, `activeSlotsCoeff=0.2`, Conway at
+  epoch 0) so local and CI smoke can wait for the actual producer completion
+  and Amaru relay load path.
 - CI smoke workflows now run both `cardano_node_master` and `cardano_amaru`.
 
 ## Upstream Bootstrap Producer
@@ -48,20 +52,20 @@ Current implementation status:
 Source repository:
 https://github.com/lambdasistemi/amaru-bootstrap
 
-Merged producer/docs PR:
-https://github.com/lambdasistemi/amaru-bootstrap/pull/28
+Merged producer/golden-test PR:
+https://github.com/lambdasistemi/amaru-bootstrap/pull/30
 
 Published image:
-`ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6`
+`ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e`
 
 Producer source commit:
-https://github.com/lambdasistemi/amaru-bootstrap/commit/83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6
+https://github.com/lambdasistemi/amaru-bootstrap/commit/d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
 
 Main CI proof:
-https://github.com/lambdasistemi/amaru-bootstrap/actions/runs/25161788913
+https://github.com/lambdasistemi/amaru-bootstrap/actions/runs/25172449567
 
 Image publish proof:
-https://github.com/lambdasistemi/amaru-bootstrap/actions/runs/25161869625
+https://github.com/lambdasistemi/amaru-bootstrap/actions/runs/25172636074
 
 Published docs:
 https://lambdasistemi.github.io/amaru-bootstrap/
@@ -128,7 +132,7 @@ https://github.com/lambdasistemi/amaru-bootstrap/issues/17
 2. Added a new `testnets/cardano_amaru` sibling copied from
    `cardano_node_master`.
 3. Added a `bootstrap-producer` service using the published producer image:
-   `ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6`.
+   `ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e`.
 4. Mounted the selected producer node's ChainDB state and generated config into
    the producer container, plus a shared bundle volume for Amaru.
 5. Wired Amaru services to wait inside their entrypoints for the atomically
@@ -136,9 +140,11 @@ https://github.com/lambdasistemi/amaru-bootstrap/issues/17
    `amaru run`. These services are relay-only and carry no stake assignment.
    This preserves the runtime gate without making `docker compose up -d` block
    during local smoke.
-6. Ran the repo's local compose smoke path before pushing the implementation.
-7. Left the minimal Antithesis assertion that observes Amaru successfully
-   loading the bootstrap bundle as the next implementation step.
+6. Extended the local/CI smoke path for `cardano_amaru` so it waits for
+   `bootstrap-producer` to exit `0`, then checks both Amaru relays copied the
+   bundle and stayed running after opening their private stores.
+7. Ran the repo's local compose smoke path against the published producer image
+   before pushing the implementation.
 
 ## Local Evidence
 
@@ -146,17 +152,20 @@ https://github.com/lambdasistemi/amaru-bootstrap/issues/17
   rendered successfully.
 - `nix develop --command mkdocs build --strict` built the docs successfully and
   the Mermaid diagram renders as a `pre.mermaid` block.
-- `./scripts/smoke-test.sh cardano_amaru 600` passed locally:
-  p1/p2/p3 answered `cardano-cli ping`, sidecar convergence succeeded on the
-  first attempt, tx-generator observed refill UTxO, and 5/5 transacts landed
-  with `populationSize=19`.
+- `AMARU_BOOTSTRAP_SMOKE_TIMEOUT=1800 ./scripts/smoke-test.sh cardano_amaru 600`
+  passed locally with the published image
+  `ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e`.
+  The run waited for `bootstrap-producer` to exit `0`, verified both Amaru
+  relays copied the bundle, and ensured both relays remained running after
+  opening the stores.
+- During that run, `bootstrap-producer` satisfied readiness at target slot
+  `250`, emitted ledger states at slots `10`, `130`, and `250`, imported
+  ledger state, headers, and nonces, and printed
+  `wrote /srv/amaru/testnet_42`.
 
-This smoke does not prove that Amaru loaded the bootstrap bundle. On a fresh
-local network the producer waits for two complete Conway epochs behind the
-immutable tip, so the smoke proves the cluster can start and transact with the
-Amaru bootstrap wiring present. The upstream `amaru-bootstrap` CI still carries
-the Docker-level proof that the published producer image can create a bundle
-from a 10.7.1 ChainDB held open by the official node and start Amaru from it.
+The fast profile keeps the release target fixed at cardano-node 10.7.1 and does
+not assign stake to Amaru. It only changes the testnet timing constants so the
+bundle/load proof is bounded.
 
 ## Non-Goals For This Branch
 
