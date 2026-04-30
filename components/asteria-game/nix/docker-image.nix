@@ -1,15 +1,15 @@
-{ pkgs, utxo-indexer, version, ... }:
+{ pkgs, project, version, utxo-indexer, ... }:
 let
-  # Bake composer scripts under the canonical Antithesis composer
-  # path. Antithesis discovers parallel_driver_*, eventually_*,
-  # finally_* by walking /opt/antithesis/test/v1/<template>/.
-  composer = pkgs.runCommand "asteria-stub-composer" { } ''
-    mkdir -p $out/opt/antithesis/test/v1
+  # Bake the antithesis composer scripts under the canonical
+  # /opt/antithesis/test/v1/<template>/ path. The Antithesis composer
+  # discovers parallel_driver_*, eventually_*, finally_* by walking
+  # this tree.
+  antithesis-drivers = pkgs.runCommand "antithesis-drivers" { } ''
+    mkdir -p $out/opt/antithesis/test/v1/
     cp -r ${../composer}/. $out/opt/antithesis/test/v1
     chmod 0755 $out/opt/antithesis/test/v1/*/*.sh
   '';
 
-  # /usr/bin/env shim — many shebangs assume it.
   usrBinEnv = pkgs.runCommand "usr-bin-env" { } ''
     mkdir -p $out/usr/bin
     ln -s ${pkgs.coreutils}/bin/env $out/usr/bin/env
@@ -17,10 +17,9 @@ let
 
   # Default args for utxo-indexer on this testnet (slot=1s,
   # magic=42, byron-epoch-slots=86400 per testnet.yaml +
-  # oura-daemon.toml). Compose can override individual flags via
-  # `command:`. --db-path enables RocksDB persistence so the
-  # daemon resumes from last applied block on restart (which is
-  # how we mitigate upstream issue #97 until a fix lands).
+  # oura-daemon.toml). Compose can override via `command:`.
+  # --db-path enables RocksDB persistence so the daemon resumes
+  # from last applied block on restart.
   defaultIndexerArgs = [
     "--relay-socket"          "/state/node.socket"
     "--listen"                "/tmp/idx.sock"
@@ -32,7 +31,7 @@ let
   ];
 in
 pkgs.dockerTools.buildImage {
-  name = "ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-stub";
+  name = "ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game";
   tag = version;
   copyToRoot = pkgs.buildEnv {
     name = "image-root";
@@ -44,8 +43,10 @@ pkgs.dockerTools.buildImage {
       pkgs.netcat-openbsd
       pkgs.socat
       utxo-indexer
-      composer
+      antithesis-drivers
       usrBinEnv
+      project.packages.asteria-game
+      project.packages.asteria-bootstrap
     ];
   };
   config = {
