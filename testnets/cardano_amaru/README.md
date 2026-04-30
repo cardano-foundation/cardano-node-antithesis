@@ -34,6 +34,11 @@ credentials. Dense block production is part of the profile because the
 producer reads immutable chunks only; sparse block production can leave
 the immutable tip at genesis for too long.
 
+The Amaru relay containers are intentionally quiet for Antithesis log
+ingestion: compose sets `AMARU_LOG=warn`, `AMARU_TRACE=warn`, and
+`AMARU_COLOR=never`, and the wrapper loop does not print bundle-wait
+heartbeats.
+
 The producer image is pinned by full source commit SHA:
 
 ```text

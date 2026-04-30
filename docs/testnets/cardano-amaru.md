@@ -56,6 +56,14 @@ startup. The dense active slot coefficient makes enough blocks immutable
 inside that short window; without it the immutable ChainDB tip can remain
 at genesis even after the slot threshold has passed.
 
+## Log Budget
+
+Antithesis log ingestion is deliberately kept small. The Amaru relay
+containers set `AMARU_LOG=warn`, `AMARU_TRACE=warn`, and
+`AMARU_COLOR=never`, and their shell wrapper does not print polling
+heartbeats while waiting for the bootstrap bundle. The smoke test asserts
+those environment settings before accepting the relay load proof.
+
 ## Topology
 
 ```mermaid

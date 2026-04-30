@@ -47,6 +47,13 @@ x-amaru: &amaru
   image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
   entrypoint:
     - /bin/sh
+  environment:
+    # Antithesis log ingestion is intentionally narrow: keep Amaru below
+    # warning/error quiet by default. Upstream Amaru uses AMARU_LOG rather
+    # than RUST_LOG for its tracing EnvFilter.
+    AMARU_LOG: warn
+    AMARU_TRACE: warn
+    AMARU_COLOR: never
   restart: always
   depends_on:
     bootstrap-producer:
@@ -185,7 +192,6 @@ services:
           until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
              && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
              && [ -f /bundle/testnet_42/nonces.json ]; do
-            echo "waiting for bootstrap bundle"
             sleep 10
           done
           find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
@@ -212,7 +218,6 @@ services:
           until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
              && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
              && [ -f /bundle/testnet_42/nonces.json ]; do
-            echo "waiting for bootstrap bundle"
             sleep 10
           done
           find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +

@@ -41,6 +41,9 @@ Current implementation status:
 - Amaru is relay-only here. It receives no stake assignment, KES key, VRF key,
   cold key, or operational certificate. The only stake-bearing block producers
   are the three cardano-node services `p1`, `p2`, and `p3`.
+- Amaru relay logs are intentionally warning/error only for Antithesis:
+  `AMARU_LOG=warn`, `AMARU_TRACE=warn`, and `AMARU_COLOR=never` are set in
+  compose, and the relay wrapper does not emit polling heartbeats.
 - `cardano_amaru` now uses a fast bootstrap profile (`k=10`,
   `securityParam=10`, `epochLength=120`, `activeSlotsCoeff=0.2`, Conway at
   epoch 0) so local and CI smoke can wait for the actual producer completion
@@ -157,7 +160,8 @@ https://github.com/lambdasistemi/amaru-bootstrap/issues/17
   `ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e`.
   The run waited for `bootstrap-producer` to exit `0`, verified both Amaru
   relays copied the bundle, and ensured both relays remained running after
-  opening the stores.
+  opening the stores. The smoke now also asserts the Amaru warning/error log
+  environment before accepting those relay checks.
 - During that run, `bootstrap-producer` satisfied readiness at target slot
   `250`, emitted ledger states at slots `10`, `130`, and `250`, imported
   ledger state, headers, and nonces, and printed

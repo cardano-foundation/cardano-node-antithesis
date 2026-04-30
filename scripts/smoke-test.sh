@@ -200,6 +200,15 @@ if [ "$TESTNET" = "cardano_amaru" ]; then
   done
 
   for RELAY in amaru-relay-1 amaru-relay-2; do
+    for ENV_REQUIREMENT in AMARU_LOG=warn AMARU_TRACE=warn AMARU_COLOR=never; do
+      if ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$RELAY" \
+          | grep -Fxq "$ENV_REQUIREMENT"; then
+        echo "FAIL: ${RELAY} missing ${ENV_REQUIREMENT}"
+        docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$RELAY" 2>&1
+        exit 1
+      fi
+    done
+
     echo "Waiting for ${RELAY} to consume bootstrap bundle..."
     RELAY_DEADLINE=$((SECONDS + 180))
     while ! docker exec "$RELAY" sh -c \
