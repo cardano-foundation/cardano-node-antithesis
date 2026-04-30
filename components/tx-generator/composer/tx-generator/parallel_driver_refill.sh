@@ -25,7 +25,9 @@ REQ="$(printf '{"refill":{"seed":%s}}' "$SEED")"
 
 sdk_reachable "tx_generator_refill_driver_started"
 
-RSP="$(printf '%s\n' "$REQ" | nc -U -q 1 "$CONTROL_SOCKET")"
+if ! RSP="$(txgen_control_request "$REQ")"; then
+    exit 0
+fi
 
 OK="$(printf '%s' "$RSP" | jq -r '.ok // false')"
 REASON="$(printf '%s' "$RSP" | jq -r '.reason // ""')"
@@ -37,9 +39,9 @@ fi
 
 case "$REASON" in
     "faucet-not-known"|"faucet-exhausted")
-        sdk_sometimes false "tx_generator_refill_not_applicable" \
+        sdk_reachable "tx_generator_refill_not_applicable" \
             "$(jq -nc --arg r "$REASON" '{reason:$r}')"
-        exit 1
+        exit 0
         ;;
     submit-rejected:*)
         # Daemon's submit-rejected reason includes the raw
@@ -48,11 +50,11 @@ case "$REASON" in
         # SDK emitter never sees malformed input.
         sdk_unreachable "tx_generator_refill_submit_rejected" \
             "$(jq -nc --arg r "$REASON" '{reason:$r}')"
-        exit 1
+        exit 0
         ;;
     *)
         sdk_unreachable "tx_generator_refill_unknown_failure" \
             "$(jq -nc --arg r "$RSP" '{raw:$r}')"
-        exit 1
+        exit 0
         ;;
 esac

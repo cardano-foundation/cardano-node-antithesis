@@ -12,7 +12,9 @@ source "$(dirname "$0")/helper_sdk_lib.sh"
 
 CONTROL_SOCKET="${CONTROL_SOCKET:-/state/tx-generator-control.sock}"
 
-RSP="$(printf '{"snapshot":null}\n' | nc -U -q 1 "$CONTROL_SOCKET" || echo '{}')"
+RSP="$(printf '{"snapshot":null}\n' \
+    | nc -U -w "${TX_GEN_CONTROL_TIMEOUT:-55}" "$CONTROL_SOCKET" \
+    || echo '{}')"
 
 sdk_reachable "tx_generator_pressure_summary" "$RSP"
 exit 0
