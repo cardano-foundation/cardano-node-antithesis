@@ -150,7 +150,7 @@ services:
         condition: service_completed_successfully
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar@sha256:5e363f5d99da044c551e148ecb782fb1a195af81f1e0a00167b2f95bad1dcee0
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:f889dbc
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
