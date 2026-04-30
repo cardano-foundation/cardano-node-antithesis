@@ -14,11 +14,13 @@ This repository contains test assets and configurations for running [Antithesis]
 
 Docker containers that set up and drive the Antithesis test environment. Depending on their role, they range from simple wrappers around external executables to complex services for actively or passively testing Cardano Nodes.
 
-- `adversary/`: A node-to-node client that behaves maliciously to test the robustness of Cardano Node implementations.
+- `adversary/`: A node-to-node downstream chain-sync client that connects to producers from a random intersection point, pulls a bounded number of blocks, then disconnects. Today's surface is downstream-only; the long-term plan is a long-running daemon with parallel-driver fan-out (see [adversary roadmap](components/adversary-roadmap.md)).
+- `asteria-player/`: Long-running container that plays the [asteria](https://github.com/txpipe/asteria) game inside the cluster, driving real Plutus traffic (spend script, mint, reference inputs, validity bounds) under fault injection.
 - `configurator/`: Generates genesis files, node configuration, and signing keys for the testnet using the [testnet-generation-tool](https://github.com/cardano-foundation/testnet-generation-tool).
 - `config/`: Antithesis platform configuration container.
 - `sidecar/`: Network health checks and Antithesis assertions that validate testnet status.
 - `tracer-sidecar/`: Processes structured node logs from cardano-tracer into Antithesis assertions (chain convergence, error detection).
+- `tx-generator/`: Long-running daemon that submits well-formed ADA transfers via N2C; composer drivers fire `transact` and `refill` requests over its control socket.
 
 ## Testnets
 

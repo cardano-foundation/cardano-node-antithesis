@@ -16,7 +16,8 @@ This testnet exercises the node-to-node protocol across multiple cardano-node ve
 | **configurator** | Generates genesis files, node configs, and signing keys at startup |
 | **tracer** | cardano-tracer daemon collecting structured logs from all nodes |
 | **tracer-sidecar** | Processes tracer logs into Antithesis assertions (chain convergence, error detection) |
-| **sidecar** | Network health checks and Antithesis setup signal |
+| **sidecar** | Network health checks, the Antithesis setup signal, and the host of the chain-sync `adversary` driver (see [Adversary](../components/adversary.md)). |
+| **tx-generator** | Long-running daemon submitting well-formed ADA transfers via N2C (see `components/tx-generator/`). |
 | **asteria-bootstrap** | One-shot. Deploys asteria validators and creates the initial game UTxO. See [Asteria Player](../components/asteria-player.md). |
 | **asteria-player-1**, **asteria-player-2** | Long-running asteria game players. Drive realistic tx traffic (spendScript, mint, ref-inputs, validity bounds) through the cluster. |
 
