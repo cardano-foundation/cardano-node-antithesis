@@ -172,7 +172,7 @@ services:
   # that bakes the antithesis composer driver alongside the
   # daemon binary.
   adversary:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:15daf1b
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:a328953
     container_name: adversary
     hostname: adversary.example
     command:
