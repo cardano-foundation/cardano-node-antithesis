@@ -1,65 +1,45 @@
 {
-  description = "adversary";
+  description =
+    "adversary — Antithesis docker image for the cardano-node-clients adversary daemon";
   nixConfig = {
     extra-substituters = [ "https://cache.iog.io" ];
     extra-trusted-public-keys =
       [ "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=" ];
   };
   inputs = {
-    haskellNix.url = "github:input-output-hk/haskell.nix";
-    nixpkgs.follows = "haskellNix/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    iohkNix = {
-      url = "github:input-output-hk/iohk-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    CHaP = {
-      url = "github:intersectmbo/cardano-haskell-packages?ref=repo";
-      flake = false;
-    };
-    cardano-node-runtime = {
-      url = "github:IntersectMBO/cardano-node?ref=10.1.4";
+    cardano-node-clients = {
+      # Pinned to the merge commit of
+      # https://github.com/lambdasistemi/cardano-node-clients/pull/106
+      # on main per the *Pins main only* rule.
+      url =
+        "github:lambdasistemi/cardano-node-clients/60ef7733f13c29882d936c87565b64edde189975";
     };
   };
 
-  outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, CHaP, iohkNix
-    , cardano-node-runtime, ... }:
+  outputs = inputs@{ self, nixpkgs, flake-parts, cardano-node-clients, ... }:
     let
-      version = self.dirtyShortRev or self.shortRev;
+      version = self.dirtyShortRev or self.shortRev or "dev";
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
         systems = [ "x86_64-linux" "aarch64-darwin" ];
         perSystem = { system, ... }:
           let
-            node = cardano-node-runtime.project.${system};
-            pkgs = import nixpkgs {
-              overlays = [
-                iohkNix.overlays.crypto
-                haskellNix.overlay
-                iohkNix.overlays.haskell-nix-crypto
-                iohkNix.overlays.cardano-lib
-              ];
-              inherit system;
-            };
-            project = import ./nix/project.nix {
-              indexState = "2025-08-07T00:00:00Z";
-              inherit CHaP;
-              inherit pkgs;
-            };
+            pkgs = import nixpkgs { inherit system; };
+            adversary-bin =
+              cardano-node-clients.packages.${system}.cardano-adversary;
             docker-image = pkgs.callPackage ./nix/docker-image.nix {
-              inherit project version;
+              inherit adversary-bin version;
             };
-          in rec {
+          in {
             packages = {
-              inherit (node.pkgs) cardano-node cardano-cli;
-              inherit (project.packages) adversary adversary-tests;
-              inherit docker-image;
-              default = packages.adversary;
+              inherit docker-image adversary-bin;
+              default = docker-image;
             };
-            inherit (project) devShells;
           };
       };
     in {
-      inherit (parts) packages devShells;
+      inherit (parts) packages;
       inherit version;
     };
 }
