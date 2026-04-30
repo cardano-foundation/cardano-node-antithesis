@@ -1,6 +1,6 @@
 name: "Antithesis on cardano-node testnet"
 env:
-  TESTNET: "cardano_node_master"
+  TESTNET: ${{ inputs.test || 'cardano_node_master' }}
   REGISTRY: ghcr.io/cardano-foundation/cardano-node-antithesis
   EMAILS: 'antithesis@cardanofoundation.org'
   DURATION: ${{ inputs.duration || 3 }}
