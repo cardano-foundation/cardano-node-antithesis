@@ -1,0 +1,294 @@
+x-cardano-node-10-7-1: &cardano-node-10-7-1
+  image: ghcr.io/intersectmbo/cardano-node:10.7.1-amd64@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+  environment:
+    CARDANO_BLOCK_PRODUCER: true
+  command: >
+    run --topology /configs/configs/topology.json
+      --config /configs/configs/config.json
+      --database-path /state
+      --socket-path /state/node.socket
+      --tracer-socket-path-connect /tracer/tracer.socket
+      --shelley-operational-certificate /configs/keys/opcert.cert
+      --shelley-kes-key /configs/keys/kes.skey
+      --shelley-vrf-key /configs/keys/vrf.skey
+      --port 3001
+      --host-addr 0.0.0.0
+      +RTS -N -A16m -qg -qb -RTS
+  restart: always
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
+
+x-cardano-relay-10-7-1: &cardano-relay-10-7-1
+  image: ghcr.io/intersectmbo/cardano-node:10.7.1-amd64@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+  environment:
+    CARDANO_BLOCK_PRODUCER: false
+  command: >
+    run --topology /configs/configs/topology.json
+      --config /configs/configs/config.json
+      --database-path /state
+      --socket-path /state/node.socket
+      --tracer-socket-path-connect /tracer/tracer.socket
+      --port 3001
+      --host-addr 0.0.0.0
+      +RTS -N -A16m -qg -qb -RTS
+  restart: always
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
+
+x-amaru: &amaru
+  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6
+  entrypoint:
+    - /bin/sh
+  restart: always
+  depends_on:
+    bootstrap-producer:
+      condition: service_started
+
+services:
+  configurator:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator@sha256:6e6ba428838bf754ad286b62a151c63c683ef27fbdd5dd1bb5bab11ec9a6a34d
+    container_name: configurator
+    volumes:
+      - ./testnet.yaml:/testnet.yaml
+      - p1-configs:/configs/1
+      - p2-configs:/configs/2
+      - p3-configs:/configs/3
+      - utxo-keys:/utxo-keys
+
+  tracer:
+    image: ghcr.io/intersectmbo/cardano-tracer@sha256:da628263a851b419c38d020d3a7dc3b65b20ee84e730faeb74babd6d96f28efe
+    hostname: tracer.example
+    container_name: tracer
+    volumes:
+      - tracer:/opt/cardano-tracer
+      - ./tracer-config.yaml:/tracer-config.yaml:ro
+    entrypoint: cardano-tracer
+    command:
+      - "--config"
+      - "/tracer-config.yaml"
+    restart: always
+
+  p1:
+    <<: *cardano-node-10-7-1
+    container_name: p1
+    hostname: p1.example
+    volumes:
+      - p1-configs:/configs:ro
+      - p1-state:/state
+      - tracer:/tracer
+
+  p2:
+    <<: *cardano-node-10-7-1
+    container_name: p2
+    hostname: p2.example
+    volumes:
+      - p2-configs:/configs:ro
+      - p2-state:/state
+      - tracer:/tracer
+
+  p3:
+    <<: *cardano-node-10-7-1
+    container_name: p3
+    hostname: p3.example
+    volumes:
+      - p3-configs:/configs:ro
+      - p3-state:/state
+      - tracer:/tracer
+
+  relay1:
+    <<: *cardano-relay-10-7-1
+    container_name: relay1
+    hostname: relay1.example
+    volumes:
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay1-state:/state
+      - tracer:/tracer
+
+  relay2:
+    <<: *cardano-relay-10-7-1
+    container_name: relay2
+    hostname: relay2.example
+    volumes:
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay2-state:/state
+      - tracer:/tracer
+
+  tx-generator:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:2012360
+    container_name: tx-generator
+    hostname: tx-generator.example
+    command:
+      - --relay-socket
+      - /state/node.socket
+      - --control-socket
+      - /state/tx-generator-control.sock
+      - --state-dir
+      - /state/txgen
+      - --master-seed-file
+      - /state/txgen/master.seed
+      - --faucet-skey-file
+      - /utxo-keys/genesis.1.skey
+      - --network-magic
+      - "42"
+    volumes:
+      - relay1-state:/state
+      - utxo-keys:/utxo-keys:ro
+    restart: always
+    depends_on:
+      relay1:
+        condition: service_started
+      configurator:
+        condition: service_completed_successfully
+
+  bootstrap-producer:
+    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6
+    container_name: bootstrap-producer
+    hostname: bootstrap-producer.example
+    command:
+      - /cardano/state
+      - /cardano/config/configs
+      - /srv/amaru
+      - testnet_42
+    environment:
+      AMARU_NETWORK: testnet_42
+      AMARU_CLUSTER_READY_DEADLINE_SECONDS: "600"
+      AMARU_WAIT_DEADLINE_SECONDS: "5400"
+      AMARU_POLL_INTERVAL_SECONDS: "10"
+    volumes:
+      - p1-state:/cardano/state
+      - p1-configs:/cardano/config:ro
+      - amaru-bundle:/srv/amaru
+    depends_on:
+      p1:
+        condition: service_started
+    restart: "no"
+
+  amaru-1:
+    <<: *amaru
+    container_name: amaru-1
+    hostname: amaru-1.example
+    command:
+      - -c
+      - |
+        set -eu
+        if [ ! -d /srv/amaru/ledger.testnet_42.db ] || [ ! -d /srv/amaru/chain.testnet_42.db ]; then
+          until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
+             && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
+             && [ -f /bundle/testnet_42/nonces.json ]; do
+            echo "waiting for bootstrap bundle"
+            sleep 10
+          done
+          find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          cp -a /bundle/testnet_42/. /srv/amaru/
+        fi
+        exec /bin/amaru run \
+          --network testnet_42 \
+          --ledger-dir /srv/amaru/ledger.testnet_42.db \
+          --chain-dir /srv/amaru/chain.testnet_42.db \
+          --peer-address p1.example:3001
+    volumes:
+      - amaru-bundle:/bundle:ro
+      - a1-state:/srv/amaru
+
+  amaru-2:
+    <<: *amaru
+    container_name: amaru-2
+    hostname: amaru-2.example
+    command:
+      - -c
+      - |
+        set -eu
+        if [ ! -d /srv/amaru/ledger.testnet_42.db ] || [ ! -d /srv/amaru/chain.testnet_42.db ]; then
+          until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
+             && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
+             && [ -f /bundle/testnet_42/nonces.json ]; do
+            echo "waiting for bootstrap bundle"
+            sleep 10
+          done
+          find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          cp -a /bundle/testnet_42/. /srv/amaru/
+        fi
+        exec /bin/amaru run \
+          --network testnet_42 \
+          --ledger-dir /srv/amaru/ledger.testnet_42.db \
+          --chain-dir /srv/amaru/chain.testnet_42.db \
+          --peer-address amaru-1:3000
+    volumes:
+      - amaru-bundle:/bundle:ro
+      - a2-state:/srv/amaru
+
+  sidecar:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar@sha256:5e363f5d99da044c551e148ecb782fb1a195af81f1e0a00167b2f95bad1dcee0
+    environment:
+      NETWORKMAGIC: 42
+      PORT: 3001
+      LIMIT: 100
+      POOLS: "3"
+      NCONNS: 1
+      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+    container_name: sidecar
+    hostname: sidecar.example
+    volumes:
+      - tracer:/opt/cardano-tracer
+    depends_on:
+      tracer-sidecar:
+        condition: service_started
+    restart: always
+    tmpfs:
+      - /tmp
+
+  tracer-sidecar:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
+    container_name: tracer-sidecar
+    hostname: tracer-sidecar.example
+    command:
+      - "/opt/cardano-tracer/logs"
+    environment:
+      POOLS: "3"
+      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+    volumes:
+      - tracer:/opt/cardano-tracer
+    restart: always
+    depends_on:
+      tracer:
+        condition: service_started
+
+  log-tailer:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/log-tailer@sha256:a5d23c42408a1003bb14208fd97dd2bdda102e7002e4e2a2804e71a80df56484
+    container_name: log-tailer
+    hostname: log-tailer.example
+    volumes:
+      - tracer:/tracer:ro
+    restart: always
+    depends_on:
+      tracer:
+        condition: service_started
+
+volumes:
+  tracer:
+  p1-configs:
+  p2-configs:
+  p3-configs:
+  p1-state:
+  p2-state:
+  p3-state:
+  relay1-state:
+  relay2-state:
+  utxo-keys:
+  amaru-bundle:
+  a1-state:
+  a2-state:
+
+networks:
+  default:
+    name: cardano-amaru-testnet
+    driver: bridge
+    internal: ${INTERNAL_NETWORK}
