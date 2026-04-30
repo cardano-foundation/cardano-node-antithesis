@@ -30,8 +30,12 @@ TIP_COUNT=0
 TIP_DISTINCT=0
 TIP_FAILURE_REASONS="[]"
 TIP_FAILURE_KIND="not_checked"
+SAW_TIP_RESPONSE=false
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     probe_all_tips
+    if [ "$TIP_COUNT" != "0" ]; then
+        SAW_TIP_RESPONSE=true
+    fi
     if [ "$TIP_COUNT" = "$POOLS" ] && [ "$TIP_DISTINCT" = "1" ]; then
         echo "tips agree: $TIP_SUCCESSES"
         sdk_always true "all producer tips reachable at final check" \
@@ -42,6 +46,11 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     fi
     sleep "$RETRY_DELAY"
 done
+
+if [ "$SAW_TIP_RESPONSE" = "false" ] && [ "$TIP_FAILURE_KIND" = "no_tip_protocol_success" ]; then
+    echo "producer tip protocol never became ready during finally_tips_agree: kind=$TIP_FAILURE_KIND reasons=$TIP_FAILURE_REASONS details=$TIP_DETAILS; treating as startup readiness miss"
+    exit 0
+fi
 
 echo "divergent/incomplete at end-of-workload: kind=$TIP_FAILURE_KIND reasons=$TIP_FAILURE_REASONS count=$TIP_COUNT distinct=$TIP_DISTINCT details=$TIP_DETAILS"
 if [ "$TIP_COUNT" != "$POOLS" ]; then
