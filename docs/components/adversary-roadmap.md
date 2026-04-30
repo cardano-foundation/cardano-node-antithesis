@@ -1,29 +1,40 @@
 # Adversary roadmap
 
 Long-term plan for adversarial workload against the testnet. The
-[adversary component][adversary-doc] today is a one-shot chain-sync
-client; this page is the north star for where it is going.
+[adversary component][adversary-doc] is now a long-running daemon
+(see Tier 1.1 below); this page tracks where it goes next.
+
+## Status
+
+| Tier | Archetype | Status |
+|---|---|---|
+| 1.1 | `chain_sync_flap` | **landed** ([clients PR #103][pr-103] scaffold, [#106][pr-106] real impl, [antithesis PR #99][pr-99] consumer) |
+| 1.2 | `chain_sync_thrash` | next — see [`specs/036-cardano-adversary-thrash/`][thrash-spec] in cardano-node-clients |
+| 1.3 | `chain_sync_slow_loris` | not started |
+| 2 | `block_fetch_replay`, `tx_submission_*`, `keepalive_abuse` | not started |
+| 3 | upstream-peer Byzantine adversary | epic [#91][issue-91], not started |
+| 4 | `lsq_flood`, `local_tx_submission_garbage` | not started |
 
 ## Goals
 
-1. **Move the adversary from one-shot to long-running.** Mirror the
-   [tx-generator][tx-generator-doc] design: a daemon listening on a
-   UNIX control socket, with composer scripts firing one NDJSON
-   request per Antithesis tick.
-2. **Cover more of the protocol surface than chain-sync.** Add
-   block-fetch, tx-submission, keep-alive, handshake, and N2C
-   adversaries — and an upstream-peer (server) mode for the canonical
-   "Byzantine peer" tests.
-3. **Steer adversarial choices with the Antithesis hypervisor.** Every
-   randomness draw must come from an injectable `RandomSource` so
-   Antithesis can bias the run.
+1. **Move the adversary from one-shot to long-running.** ✅ Done in
+   [PR #99][pr-99]. The daemon now listens on a UNIX control socket,
+   composer drivers fire one NDJSON request per Antithesis tick.
+2. **Cover more of the protocol surface than chain-sync.** In
+   progress: `chain_sync_flap` lives; thrash + slow-loris next; then
+   block-fetch, tx-submission, keep-alive, handshake, and upstream
+   (responder).
+3. **Steer adversarial choices with the Antithesis hypervisor.** ✅
+   In place since PR #103. Every randomness draw routes through the
+   `RandomSource` typeclass; default impl shells out to
+   `antithesis_random` when present and falls back to `System.Random`
+   otherwise.
 4. **Move the daemon home to [`lambdasistemi/cardano-node-clients`][cnc].**
-   The tx-generator daemon already lives there; adversary inherits
-   the same `Provider`, `Submitter`, `TxBuild`, and control-wire
-   conventions, and the same release flow. This repo keeps only the
-   image-tag pin, the composer drivers, and the compose wiring.
+   ✅ Done. The package lives next to `cardano-tx-generator` and
+   shares its `Provider` / `Submitter` / `TxBuild` library surface
+   plus the same release flow.
 
-## Architecture target
+## Architecture
 
 ```
                    +---------------------------------+
@@ -31,44 +42,44 @@ client; this page is the north star for where it is going.
                    |    (Haskell, in cardano-node-   |
                    |    clients)                     |
                    |                                 |
-   composer        |   - keeps a pool of N2N         |
-   parallel_       |     initiator connections to    |
-   driver_*.sh --->|     producers                   |
-   over NDJSON     |   - keeps a pool of N2C         |
-   on UNIX socket  |     connections to relays       |
-                   |   - exposes /state/adversary-   |
+   composer        |   - per-request N2N initiator   |
+   parallel_       |     connections to producers    |
+   driver_*.sh --->|   - reads chain points from     |
+   over NDJSON     |     tracer-sidecar's file       |
+   on UNIX socket  |   - exposes /state/adversary-   |
                    |     control.sock                |
                    |   - one request → one           |
                    |     adversarial action          |
-                   |   - emits SDK reachable/        |
-                   |     sometimes/always per action |
                    +---------------------------------+
 ```
 
-### Mapping from tx-generator
+### Mapping from tx-generator (now established)
 
-| tx-generator (today) | cardano-adversary (planned) |
+| tx-generator | cardano-adversary |
 |---|---|
 | `cardano-tx-generator` daemon | `cardano-adversary` daemon |
 | `/state/tx-generator-control.sock` | `/state/adversary-control.sock` |
-| `parallel_driver_transact.sh` / `_refill.sh` | one driver script per misbehaviour archetype |
-| `eventually_population_grew.sh` | `eventually_adversary_active.sh` |
-| `finally_pressure_summary.sh` | `finally_adversary_summary.sh` |
-| Wire spec at `specs/034-cardano-tx-generator/contracts/control-wire.md` | Wire spec at `specs/0XX-cardano-adversary/contracts/control-wire.md` |
+| `parallel_driver_transact.sh` / `_refill.sh` | `parallel_driver_flaky_chain_sync.sh` (Tier 1.1) |
+| `eventually_population_grew.sh` | (Tier 2 will add an `eventually_adversary_active.sh`) |
+| `finally_pressure_summary.sh` | (Tier 2 will add a `finally_adversary_summary.sh`) |
+| Wire spec at [`specs/034-cardano-tx-generator/contracts/control-wire.md`][txg-wire] | Wire spec at [`specs/036-cardano-adversary/contracts/control-wire.md`][adv-wire] |
 
-### Implementation seams to reuse from `cardano-node-clients`
+### Implementation seams that exist today
 
-- `Cardano.Node.Client.Provider` / `Submitter` / `TxBuild` — for the
-  N2C-side adversaries (mempool flooding, malformed tx submission).
-- `Adversary.ChainSync.Connection` from this repo becomes the
-  initiator-library half of an N2N adversary library; we add a
-  responder-library half for upstream-peer mode.
-- A single `RandomSource` typeclass — the one already used by the
-  asteria-player at
-  [`components/asteria-player/src/Asteria/RandomSource.hs`][rs] —
-  with an `antithesis_random` CLI implementation and a
-  `System.Random` fallback. Every adversarial decision draws from
-  it.
+- `Cardano.Node.Client.Adversary.{Application,ChainSync.Codec,ChainSync.Connection,ChainPoints}`
+  — the lifted N2N initiator library that backs `chain_sync_flap`
+  and will back the rest of Tier 1.
+- `Cardano.Node.Client.Adversary.RandomSource` — typeclass +
+  Antithesis-aware default (`antithesis_random` CLI when present,
+  `System.Random` fallback). Per-request determinism via
+  `splitFromSeed :: Word64 -> StdGen`.
+- `Cardano.Node.Client.Adversary.Server` — NDJSON dispatcher. New
+  endpoints register themselves by extending `ServerHooks`.
+- `Cardano.Node.Client.Provider` / `Submitter` / `TxBuild` —
+  available for the N2C-side adversaries (mempool flooding,
+  malformed tx submission) when Tier 2/4 lands.
+- A responder-library half for upstream-peer mode is **not** in the
+  tree yet; it arrives with Tier 3.
 
 ## Tier list of misbehaviour archetypes
 
@@ -78,13 +89,14 @@ preserve under it. Order is implementation order, easiest first.
 
 ### Tier 1 — port the existing surface into the daemon
 
-1. **`chain_sync_flap`** — what we have today: pick random
-   intersection point, sync `LIMIT` blocks, disconnect. Becomes a
-   single endpoint of the new daemon. Removes the stand-alone
-   `adversary` binary.
+1. **`chain_sync_flap`** ✅ — pick random intersection point, sync
+   `LIMIT` blocks, disconnect. Replaces the stand-alone `adversary`
+   binary that lived in `cardano-foundation/cardano-node-antithesis`.
 2. **`chain_sync_thrash`** — same connection, repeatedly
-   `MsgFindIntersect` to a different random point without finishing
-   the sync. Stresses the producer's intersection-finding cache.
+   `MsgFindIntersect` to a different random point without
+   completing the sync. Stresses the producer's intersection-finding
+   cache. Spec lives in
+   [`lambdasistemi/cardano-node-clients/specs/036-cardano-adversary-thrash/`][thrash-spec].
 3. **`chain_sync_slow_loris`** — open the connection, complete
    handshake, then send `MsgRequestNext` at a deliberately slow
    cadence; assert the connection is kept alive (or assert it gets
@@ -105,9 +117,9 @@ preserve under it. Order is implementation order, easiest first.
 
 ### Tier 3 — upstream-peer mode (the canonical Byzantine peer)
 
-This is the big one — promised by the original component pitch, never
-implemented. Cluster nodes must dial the adversary, so the adversary
-becomes a node-to-node *server*. Then:
+Tracked as its own epic ([#91][issue-91]). Cluster nodes must dial
+the adversary, so the adversary becomes a node-to-node *server*.
+Then:
 
 8. **`upstream_fork_serve`** — announce a tip on the honest chain's
    history but `MsgRollForward` with a fabricated header. ChainSel
@@ -131,54 +143,50 @@ disturb the current `cardano_node_master` testnet.
 
 ## Sequenced PR plan
 
-- **PR A (this repo, doc-only)** — refresh
-  `docs/components/adversary.md` to match implementation; publish
-  this roadmap. *No behaviour change.*
-- **PR B (cardano-node-clients)** — scaffold `cardano-adversary`
-  package next to `cardano-tx-generator`, with `Provider`/`Submitter`
-  reuse, control-wire spec, daemon skeleton emitting
-  `sdk_reachable` only.
-- **PR C (cardano-node-clients)** — implement `chain_sync_flap`
-  endpoint by porting `Adversary.Application` into the daemon. Add
-  `RandomSource` plumbing.
-- **PR D (this repo)** — switch `components/adversary/` to consume
-  the new image, update compose + composer drivers to the daemon
-  shape; delete the stand-alone Haskell binary.
-- **PR E (cardano-node-clients)** — `chain_sync_thrash` +
-  `chain_sync_slow_loris` endpoints. Tier 1 complete.
-- After Tier 1 is green on Antithesis: start Tier 2 issues, one
-  endpoint per PR.
-- Tier 3 starts when there is appetite for the topology variant;
-  track as its own parent epic with sub-issues per archetype.
+| # | Repo | Description | Status |
+|---|---|---|---|
+| A | antithesis | Refresh `docs/components/adversary.md`, publish this roadmap | ✅ [#88][pr-88] |
+| B | clients | Scaffold `cardano-adversary` daemon | ✅ [#103][pr-103] |
+| C | clients | `chain_sync_flap` endpoint (port from antithesis-side) | ✅ [#106][pr-106] |
+| D | antithesis | Switch `components/adversary/` to consume the new image; delete the standalone binary | ✅ [#99][pr-99] |
+| E | clients | `chain_sync_thrash` endpoint (Tier 1.2) | spec written, impl next |
+| F | clients | `chain_sync_slow_loris` endpoint (Tier 1.3) | not started |
+
+After Tier 1 is fully green on Antithesis: start Tier 2 issues, one
+endpoint per PR. Tier 3 waits on appetite for the topology variant.
 
 ## Tickets
 
-Filed in
-[`cardano-foundation/cardano-node-antithesis`][repo]:
+Filed in [`cardano-foundation/cardano-node-antithesis`][repo]:
 
-- "Adversary roadmap: long-running daemon + parallel-driver fan-out
-  (epic)" — links to this page.
-- "Move adversary daemon home to cardano-node-clients; keep only
-  image + composer drivers here" (PR D driver).
-- "Tier 3: upstream-peer Byzantine adversary testnet variant"
-  (separate epic).
+- ✅ [#87][issue-87] — refresh adversary docs (closed by PR #88).
+- [#89][issue-89] — adversary roadmap epic (still open; tracks the rest of Tier 1+).
+- ✅ [#90][issue-90] — switch to consuming the upstream daemon image (closed by PR #99).
+- [#91][issue-91] — Tier 3 upstream-peer epic.
 
-To be filed in
-[`lambdasistemi/cardano-node-clients`][cnc]:
+Filed in [`lambdasistemi/cardano-node-clients`][cnc]:
 
-- "Scaffold cardano-adversary daemon (PR B)".
-- "Port chain_sync_flap into adversary daemon (Tier 1.1)".
-- "chain_sync_thrash endpoint (Tier 1.2)".
-- "chain_sync_slow_loris endpoint (Tier 1.3)".
-- "block_fetch_replay endpoint (Tier 2.4)".
-- "tx_submission_{flood,garbage} endpoints (Tier 2.5–2.6)".
-- "keepalive_abuse endpoint (Tier 2.7)".
-- "Upstream-peer responder library + topology variant (Tier 3 epic)".
+- ✅ [#102][cli-102] — daemon scaffold (closed by PR #103).
+- ✅ [#104][cli-104] — `chain_sync_flap` (closed by PR #106).
+- [#107][cli-107] — `chain_sync_thrash` (Tier 1.2, next up).
 
 <!-- MARKDOWN LINKS & IMAGES -->
 
 [adversary-doc]: adversary.md
 [tx-generator-doc]: https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/components/tx-generator
 [cnc]: https://github.com/lambdasistemi/cardano-node-clients
-[rs]: https://github.com/cardano-foundation/cardano-node-antithesis/blob/main/components/asteria-player/src/Asteria/RandomSource.hs
 [repo]: https://github.com/cardano-foundation/cardano-node-antithesis
+[adv-wire]: https://github.com/lambdasistemi/cardano-node-clients/blob/main/specs/036-cardano-adversary/contracts/control-wire.md
+[txg-wire]: https://github.com/lambdasistemi/cardano-node-clients/blob/main/specs/034-cardano-tx-generator/contracts/control-wire.md
+[thrash-spec]: https://github.com/lambdasistemi/cardano-node-clients/tree/main/specs/036-cardano-adversary-thrash
+[pr-88]: https://github.com/cardano-foundation/cardano-node-antithesis/pull/88
+[pr-99]: https://github.com/cardano-foundation/cardano-node-antithesis/pull/99
+[pr-103]: https://github.com/lambdasistemi/cardano-node-clients/pull/103
+[pr-106]: https://github.com/lambdasistemi/cardano-node-clients/pull/106
+[issue-87]: https://github.com/cardano-foundation/cardano-node-antithesis/issues/87
+[issue-89]: https://github.com/cardano-foundation/cardano-node-antithesis/issues/89
+[issue-90]: https://github.com/cardano-foundation/cardano-node-antithesis/issues/90
+[issue-91]: https://github.com/cardano-foundation/cardano-node-antithesis/issues/91
+[cli-102]: https://github.com/lambdasistemi/cardano-node-clients/issues/102
+[cli-104]: https://github.com/lambdasistemi/cardano-node-clients/issues/104
+[cli-107]: https://github.com/lambdasistemi/cardano-node-clients/issues/107
