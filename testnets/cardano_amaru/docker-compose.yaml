@@ -42,6 +42,8 @@ x-cardano-relay-10-7-1: &cardano-relay-10-7-1
       condition: service_started
 
 x-amaru: &amaru
+  # Amaru is relay-only in this testnet. It receives no stake pool keys,
+  # no KES/VRF/opcert material, and no block-producing command.
   image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6
   entrypoint:
     - /bin/sh
@@ -171,10 +173,10 @@ services:
         condition: service_started
     restart: "no"
 
-  amaru-1:
+  amaru-relay-1:
     <<: *amaru
-    container_name: amaru-1
-    hostname: amaru-1.example
+    container_name: amaru-relay-1
+    hostname: amaru-relay-1.example
     command:
       - -c
       - |
@@ -198,10 +200,10 @@ services:
       - amaru-bundle:/bundle:ro
       - a1-state:/srv/amaru
 
-  amaru-2:
+  amaru-relay-2:
     <<: *amaru
-    container_name: amaru-2
-    hostname: amaru-2.example
+    container_name: amaru-relay-2
+    hostname: amaru-relay-2.example
     command:
       - -c
       - |
@@ -220,7 +222,7 @@ services:
           --network testnet_42 \
           --ledger-dir /srv/amaru/ledger.testnet_42.db \
           --chain-dir /srv/amaru/chain.testnet_42.db \
-          --peer-address amaru-1:3000
+          --peer-address amaru-relay-1:3000
     volumes:
       - amaru-bundle:/bundle:ro
       - a2-state:/srv/amaru

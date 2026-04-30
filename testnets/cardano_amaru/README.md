@@ -8,8 +8,13 @@ bootstrap path:
 - two relays, also pinned to the same node release;
 - the published `amaru-bootstrap-producer` image from
   `lambdasistemi/amaru-bootstrap`;
-- two Amaru nodes whose entrypoints wait until the producer has
-  committed a complete `testnet_42` bootstrap bundle.
+- two relay-only Amaru nodes whose entrypoints wait until the producer
+  has committed a complete `testnet_42` bootstrap bundle.
+
+Amaru is not assigned stake in this testnet. The only stake-bearing block
+producers are the three cardano-node services `p1`, `p2`, and `p3`.
+`amaru-relay-1` and `amaru-relay-2` receive no KES key, VRF key, cold
+key, operational certificate, or stake-pool genesis assignment.
 
 The producer image is pinned by full source commit SHA:
 
@@ -38,7 +43,7 @@ configurator -> p1/p2/p3/relay1/relay2
            amaru-bundle volume
              |             |
              v             v
-          amaru-1       amaru-2
+      amaru-relay-1   amaru-relay-2
 ```
 
 `bootstrap-producer` mounts the producer node's ChainDB read-write at
@@ -46,9 +51,9 @@ configurator -> p1/p2/p3/relay1/relay2
 requirement: immutable chunk validation opens files with write
 permissions. The producer contract remains immutable-only by behavior.
 
-Each Amaru entrypoint copies the final bundle into its private state
-volume before it execs `amaru run`, so the two Amaru nodes do not share
-writable chain or ledger stores.
+Each relay-only Amaru entrypoint copies the final bundle into its private
+state volume before it execs `amaru run`, so the two Amaru nodes do not
+share writable chain or ledger stores.
 
 ## Local Commands
 
@@ -74,16 +79,16 @@ For the bootstrap-specific proof, inspect:
 
 ```bash
 docker compose -f testnets/cardano_amaru/docker-compose.yaml logs -f bootstrap-producer
-docker compose -f testnets/cardano_amaru/docker-compose.yaml ps bootstrap-producer amaru-1 amaru-2
+docker compose -f testnets/cardano_amaru/docker-compose.yaml ps bootstrap-producer amaru-relay-1 amaru-relay-2
 ```
 
 Expected completion sequence:
 
 1. `bootstrap-producer` prints `wrote /srv/amaru/testnet_42` and exits
    `0`.
-2. `amaru-1` and `amaru-2` copy the bundle into their private state
+2. `amaru-relay-1` and `amaru-relay-2` copy the bundle into their private state
    volumes.
-3. `amaru-1` and `amaru-2` start with `amaru run`.
+3. `amaru-relay-1` and `amaru-relay-2` start with `amaru run`.
 
 ## Compatibility Constraint
 

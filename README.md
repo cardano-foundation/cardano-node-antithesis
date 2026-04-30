@@ -9,7 +9,7 @@ This repository contains material to test a cardano network of cardano nodes on 
 Current testnets:
 
 - `cardano_node_master`: mixed-version cardano-node network with relays, sidecars, and transaction generation.
-- `cardano_amaru`: cardano-node 10.7.1 network with the published `amaru-bootstrap-producer` image and two Amaru nodes gated on the produced bootstrap bundle.
+- `cardano_amaru`: cardano-node 10.7.1 network with the published `amaru-bootstrap-producer` image and two relay-only Amaru nodes gated on the produced bootstrap bundle. Amaru receives no stake assignment or producer credentials.
 
 It is maintained by the Cardano Foundation as part of the [Moog project][Moog].
 

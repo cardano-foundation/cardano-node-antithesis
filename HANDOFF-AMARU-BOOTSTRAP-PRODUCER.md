@@ -34,10 +34,13 @@ Current implementation status:
 - `bootstrap-producer` consumes `p1-state` at `/cardano/state`,
   `p1-configs` at `/cardano/config/configs`, and writes
   `/srv/amaru/testnet_42` on the `amaru-bundle` volume.
-- `amaru-1` and `amaru-2` start immediately as waiting shell entrypoints, then
-  copy `/bundle/testnet_42` into private `a1-state` / `a2-state` volumes and
-  exec `amaru run` once the bundle exists. This avoids blocking
-  `docker compose up -d` on a long producer readiness window.
+- `amaru-relay-1` and `amaru-relay-2` start immediately as waiting shell
+  entrypoints, then copy `/bundle/testnet_42` into private `a1-state` /
+  `a2-state` volumes and exec `amaru run` once the bundle exists. This avoids
+  blocking `docker compose up -d` on a long producer readiness window.
+- Amaru is relay-only here. It receives no stake assignment, KES key, VRF key,
+  cold key, or operational certificate. The only stake-bearing block producers
+  are the three cardano-node services `p1`, `p2`, and `p3`.
 - CI smoke workflows now run both `cardano_node_master` and `cardano_amaru`.
 
 ## Upstream Bootstrap Producer
@@ -130,8 +133,9 @@ https://github.com/lambdasistemi/amaru-bootstrap/issues/17
    the producer container, plus a shared bundle volume for Amaru.
 5. Wired Amaru services to wait inside their entrypoints for the atomically
    committed bundle, copy it into private state volumes, and then exec
-   `amaru run`. This preserves the runtime gate without making
-   `docker compose up -d` block during local smoke.
+   `amaru run`. These services are relay-only and carry no stake assignment.
+   This preserves the runtime gate without making `docker compose up -d` block
+   during local smoke.
 6. Ran the repo's local compose smoke path before pushing the implementation.
 7. Left the minimal Antithesis assertion that observes Amaru successfully
    loading the bootstrap bundle as the next implementation step.

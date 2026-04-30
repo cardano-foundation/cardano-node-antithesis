@@ -1,7 +1,7 @@
 # Cardano Amaru
 
-`cardano_amaru` is the first Antithesis testnet that starts Amaru from
-a bootstrap bundle produced inside the cluster.
+`cardano_amaru` is the first Antithesis testnet that starts relay-only
+Amaru nodes from a bootstrap bundle produced inside the cluster.
 
 The integration deliberately pins the node release. The
 `amaru-bootstrap-producer` image used here emits an Amaru bootstrap
@@ -18,6 +18,21 @@ CI and published the runtime image:
 ```text
 ghcr.io/lambdasistemi/amaru-bootstrap-producer:83e2f7af6b915e805f4c231f0d5bfe4ad5fa14d6
 ```
+
+## Stake Roles
+
+Amaru is relay-only in this testnet. It is not assigned stake, and it is
+not given producer credentials.
+
+The only stake-bearing block producers are:
+
+- `p1`
+- `p2`
+- `p3`
+
+The Amaru services receive no KES key, VRF key, cold key, operational
+certificate, or stake-pool genesis assignment. They start with
+`amaru run` and an upstream peer only.
 
 ## Topology
 
@@ -40,14 +55,14 @@ flowchart LR
     producer --> bundle[(amaru-bundle)]
     bundle --> a1[(a1-state)]
     bundle --> a2[(a2-state)]
-    a1 --> amaru1[amaru-1]
-    a2 --> amaru2[amaru-2]
+    a1 --> amaru1[amaru-relay-1]
+    a2 --> amaru2[amaru-relay-2]
 
     amaru1 -.upstream.-> p1
     amaru2 -.upstream.-> amaru1
 ```
 
-The Amaru nodes do not share writable stores. Each Amaru entrypoint
+The Amaru relay nodes do not share writable stores. Each relay entrypoint
 waits for the atomically committed bundle, copies it into a private state
 volume, and then execs `amaru run`.
 
@@ -112,15 +127,16 @@ For a bootstrap-specific cluster run, watch:
 
 ```bash
 docker compose -f testnets/cardano_amaru/docker-compose.yaml logs -f bootstrap-producer
-docker compose -f testnets/cardano_amaru/docker-compose.yaml ps bootstrap-producer amaru-1 amaru-2
+docker compose -f testnets/cardano_amaru/docker-compose.yaml ps bootstrap-producer amaru-relay-1 amaru-relay-2
 ```
 
 The success evidence is:
 
 - `bootstrap-producer` prints `wrote /srv/amaru/testnet_42` and exits
   `0`;
-- `amaru-1` and `amaru-2` copy the bundle into private state volumes;
-- `amaru-1` and `amaru-2` enter `amaru run`.
+- `amaru-relay-1` and `amaru-relay-2` copy the bundle into private state
+  volumes;
+- `amaru-relay-1` and `amaru-relay-2` enter `amaru run`.
 
 ## What This Does Not Prove
 
