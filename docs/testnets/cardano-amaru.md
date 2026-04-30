@@ -9,8 +9,14 @@ projection for cardano-node 10.7.1 ledger state, so every cardano-node
 service in this testnet uses:
 
 ```text
-ghcr.io/intersectmbo/cardano-node:10.7.1-amd64@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
 ```
+
+The digest is verified against the upstream
+`ghcr.io/intersectmbo/cardano-node:10.7.1-amd64` tag. The compose file
+uses the digest-only spelling because Antithesis image parameters accept
+tag or digest references, but reject Docker's combined
+`repo:tag@sha256:digest` form before any images are pulled.
 
 The producer image is pinned to the `amaru-bootstrap` commit that passed
 CI and published the runtime image:

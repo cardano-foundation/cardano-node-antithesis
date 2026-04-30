@@ -13,6 +13,19 @@ MAGIC=42
 
 export INTERNAL_NETWORK=true
 
+echo "Validating Antithesis-compatible image references..."
+while IFS= read -r IMAGE; do
+  if [ -z "$IMAGE" ]; then
+    echo "FAIL: compose produced an empty image reference"
+    exit 1
+  fi
+  if [[ "$IMAGE" =~ :[^/@]+@sha256: ]]; then
+    echo "FAIL: Antithesis rejects tag-plus-digest image references: $IMAGE"
+    echo "Use either repo:tag or repo@sha256:digest; prefer digest-only for release pins."
+    exit 1
+  fi
+done < <(docker compose --progress quiet -f "$COMPOSE_FILE" config --images)
+
 cleanup() {
   echo "Tearing down..."
   docker compose --progress quiet -f "$COMPOSE_FILE" down --volumes --remove-orphans 2>/dev/null || true

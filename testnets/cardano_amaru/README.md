@@ -45,11 +45,18 @@ The producer image is pinned by full source commit SHA:
 ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
 ```
 
-The cardano-node release image is pinned by tag and digest:
+The cardano-node release image is pinned in Compose by digest only:
 
 ```text
-ghcr.io/intersectmbo/cardano-node:10.7.1-amd64@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
 ```
+
+That digest is the manifest digest for the upstream
+`ghcr.io/intersectmbo/cardano-node:10.7.1-amd64` tag. Compose must not
+use the Docker-valid `repo:tag@sha256:digest` spelling here because the
+Antithesis image parameter validator accepts image names by tag or by
+digest, but rejects the combined tag-plus-digest form before the cluster
+is built.
 
 ## Runtime Flow
 

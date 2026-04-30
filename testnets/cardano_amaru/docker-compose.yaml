@@ -1,5 +1,5 @@
 x-cardano-node-10-7-1: &cardano-node-10-7-1
-  image: ghcr.io/intersectmbo/cardano-node:10.7.1-amd64@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+  image: ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
   environment:
     CARDANO_BLOCK_PRODUCER: true
   command: >
@@ -22,7 +22,7 @@ x-cardano-node-10-7-1: &cardano-node-10-7-1
       condition: service_started
 
 x-cardano-relay-10-7-1: &cardano-relay-10-7-1
-  image: ghcr.io/intersectmbo/cardano-node:10.7.1-amd64@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+  image: ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
   environment:
     CARDANO_BLOCK_PRODUCER: false
   command: >
