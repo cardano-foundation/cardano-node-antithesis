@@ -74,6 +74,14 @@ When prompted, paste the decrypted Antithesis URL from `moog facts test-runs` or
 
 The skill walks through the report, extracts failing Sometimes/Always assertions and bug findings, and can download logs for a specific run.
 
+## Multi-run overview
+
+If you don't yet know which run to triage and want a digest of the
+last N hours across the repo's recent runs, see
+[Multi-run overview](overview.md). That tool lives at
+[`tools/antithesis-overview/`](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/tools/antithesis-overview)
+and publishes a clickable Markdown table as a GitHub gist.
+
 ## Searching indexed stdout
 
 Triage covers the report (assertion findings, bug listings). For the
