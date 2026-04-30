@@ -45,7 +45,6 @@ import Cardano.Node.Client.TxBuild (
     attachScript,
     collateral,
     mint,
-    payTo,
     payTo',
     spend,
     spendScript,
@@ -78,10 +77,6 @@ data SpawnShipParams = SpawnShipParams
     , sspPelletScript :: Script ConwayEra
     , sspFundingIn :: TxIn
     , sspValidTo :: SlotNo
-    , sspPilotAddr :: Addr
-    -- ^ Where the new PILOT NFT lands. Conventional asteria
-    -- off-chain code sends it to the player's wallet so the
-    -- pilot doubles as proof of ship ownership.
     }
 
 {- | Hard-coded spawn position. Asteria's add_new_ship rule
@@ -160,13 +155,11 @@ spawnShipProgram SpawnShipParams{..} = do
     -- Pellet mint: initial_fuel FUEL via MintFuel redeemer.
     mint sspFuelPolicy (Map.singleton fuelName initialFuel) MintFuel
     validTo sspValidTo
+    -- The PILOT NFT is left for the balancer to fold
+    -- into the player's change output, matching the
+    -- 3-output spawn-tx shape used on mainnet. This
+    -- relies on the residual-multi-asset folding
+    -- added in cardano-node-clients balanceTx; see
+    -- lambdasistemi/cardano-node-clients PR #77.
     _ <- payTo' sspAsteriaAddr asteriaOutValue asteriaDatum'
-    -- The pilot NFT goes to the player's wallet (proof of ship
-    -- ownership). 1.5 ADA covers the multi-asset min-utxo.
-    let pilotOutValue =
-            MaryValue (Coin 1_500_000) $
-                MultiAsset $
-                    Map.singleton sspShipyardPolicy $
-                        Map.singleton pName 1
-    _ <- payTo sspPilotAddr pilotOutValue
     payTo' sspShipAddr shipOutValue shipDatum

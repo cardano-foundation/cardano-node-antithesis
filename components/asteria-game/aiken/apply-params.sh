@@ -37,7 +37,12 @@ MAX_SPEED_CBOR=d8798201197530            # Speed { distance=1, time=30000 }
 MAX_SHIP_FUEL_CBOR=1864                  # 100
 FUEL_PER_STEP_CBOR=05                    # 5
 
-aiken build
+# Build with traces stripped — asteria's add_new_ship script is
+# heavy enough to overshoot Conway's per-tx CPU step ceiling
+# (10_000_000_000) by ~0.006% with the default trace-level.
+# `--trace-level silent` removes the runtime allocations that
+# wrap every assertion; gameplay-equivalent, costs less.
+aiken build --trace-level silent --trace-filter user-defined
 
 # Compute admin_token from the just-built admin_mint hash.
 ADMIN_MINT_HASH=$(jq -r '.validators[] | select(.title=="admin_mint.admin_mint.mint") | .hash' plutus.json)

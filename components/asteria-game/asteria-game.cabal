@@ -1,5 +1,5 @@
 cabal-version: 3.0
-name:          asteria-player
+name:          asteria-game
 version:       0.1.0.0
 synopsis:      Asteria game player for the antithesis cluster
 description:
@@ -82,7 +82,7 @@ executable asteria-bootstrap
   default-language: GHC2021
   build-depends:
     , aeson
-    , asteria-player
+    , asteria-game
     , base
     , cardano-crypto-class
     , cardano-ledger-api
@@ -94,14 +94,14 @@ executable asteria-bootstrap
     , microlens
     , text
 
-executable asteria-player
+executable asteria-game
   import:           settings
   main-is:          PlayerMain.hs
   hs-source-dirs:   app
   default-language: GHC2021
   build-depends:
     , aeson
-    , asteria-player
+    , asteria-game
     , base
     , bytestring
     , cardano-crypto-class
