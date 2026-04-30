@@ -49,7 +49,11 @@ jobs:
           # repo alias to stay under the 63-char DNS label
           # limit.
           DOMAIN="cf-cna-pr-${{ github.event.number }}.surge.sh"
-          nix shell nixpkgs#nodePackages.surge -c surge \
+          # Pin nixpkgs to nixos-25.05 because nodePackages was
+          # removed from nixpkgs-unstable on 2026-03-03; the
+          # 25.05 channel still ships surge 0.23.1.
+          nix shell github:NixOS/nixpkgs/nixos-25.05#nodePackages.surge \
+            -c surge \
             surge-site \
             "${DOMAIN}" \
             --token "${SURGE_TOKEN}"
