@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# eventually_amaru_started.sh — post-fault proof that both relay-only
-# Amaru nodes reached their `amaru run` exec point.
+# finally_amaru_started.sh - final proof that both relay-only Amaru
+# nodes reached their `amaru run` exec point after consuming the
+# bootstrap bundle.
 
 set -euo pipefail
 
@@ -28,12 +29,7 @@ observed_markers() {
     done
 }
 
-sdk_reachable "eventually_amaru_started entered"
-
-IFS=' ' read -r -a relay_names <<< "$RELAYS"
-
-attempt=1
-while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
+probe_startup_markers() {
     missing=()
     for relay in "${relay_names[@]}"; do
         if [ ! -f "$STARTUP_DIR/$relay.started" ]; then
@@ -49,9 +45,19 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
         --argjson observed "$observed_json" \
         --argjson missing "$missing_json" \
         '{attempt:$attempt, observed:$observed, missing:$missing}')"
+}
 
+sdk_reachable "finally_amaru_started entered"
+
+IFS=' ' read -r -a relay_names <<< "$RELAYS"
+
+details='{"attempt":0,"observed":[],"missing":[]}'
+attempt=1
+while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
+    probe_startup_markers
     if [ "${#missing[@]}" -eq 0 ]; then
         sdk_sometimes true "amaru_relays_started" "$details"
+        sdk_always true "amaru_relays_started_at_final_check" "$details"
         exit 0
     fi
 
@@ -59,5 +65,6 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     sleep "$RETRY_DELAY"
 done
 
+sdk_always false "amaru_relays_started_at_final_check" "$details"
 sdk_unreachable "amaru_relays_not_started" "$details"
 exit 1

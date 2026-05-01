@@ -120,8 +120,9 @@ share writable chain or ledger stores.
 Each relay also writes a startup marker into the shared `amaru-startup`
 volume immediately before the `amaru run` exec. The sidecar mounts that
 volume and the `composer/amaru` scripts so Antithesis can score
-`eventually_amaru_started.sh` as an explicit property instead of asking
-readers to infer startup from container background-monitor logs.
+`parallel_driver_amaru_started.sh` and `finally_amaru_started.sh` as
+explicit properties instead of asking readers to infer startup from
+container background-monitor logs.
 
 ## Local Commands
 
@@ -162,8 +163,9 @@ Expected completion sequence:
    volumes.
 3. `amaru-relay-1` and `amaru-relay-2` start with `amaru run` and stay
    running without a restart during the smoke gate.
-4. `eventually_amaru_started.sh` emits `amaru_relays_started` after it
-   observes both relay startup markers.
+4. `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
+   it samples both relay startup markers; `finally_amaru_started.sh`
+   fails the run if those markers are still missing at the final check.
 
 ## Compatibility Constraint
 

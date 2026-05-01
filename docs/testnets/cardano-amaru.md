@@ -215,8 +215,8 @@ tx-generator still work with the Amaru services present. For
 `cardano_amaru`, it additionally waits for `bootstrap-producer` to exit
 `0`, then checks that `amaru-relay-1` and `amaru-relay-2` copied the
 bundle into private state volumes and stayed running after `amaru run`
-opened those stores. It then executes the same `eventually_amaru_started`
-property that Antithesis discovers under `/opt/antithesis/test/v1/amaru/`.
+opened those stores. It then executes the same `finally_amaru_started`
+proof that Antithesis discovers under `/opt/antithesis/test/v1/amaru/`.
 
 The long-epoch variant can be validated locally with a larger bootstrap
 timeout, but it is primarily intended for Antithesis:
@@ -244,8 +244,9 @@ The success evidence is:
   volumes;
 - `amaru-relay-1` and `amaru-relay-2` enter `amaru run` and remain
   running without a restart during the smoke gate;
-- `eventually_amaru_started.sh` emits `amaru_relays_started` after it
-  observes both relay startup markers.
+- `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
+  it samples both relay startup markers, and `finally_amaru_started.sh`
+  fails the run if those markers are still missing at the final check.
 
 ## What This Does Not Prove
 
