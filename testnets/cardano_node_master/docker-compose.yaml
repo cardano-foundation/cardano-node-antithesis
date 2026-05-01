@@ -164,47 +164,6 @@ services:
     tmpfs:
       - /tmp
 
-  # cardano-adversary daemon: long-running NDJSON server on
-  # /state/adversary-control.sock. The composer script in this
-  # container's image talks to that socket via `nc -U`. Image
-  # is a thin wrapper around
-  # ghcr.io/lambdasistemi/cardano-node-clients/cardano-adversary
-  # that bakes the antithesis composer driver alongside the
-  # daemon binary.
-  adversary:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:cc628d5
-    container_name: adversary
-    hostname: adversary.example
-    command:
-      - --control-socket
-      - /state/adversary-control.sock
-      - --network-magic
-      - "42"
-      - --producer-port
-      - "3001"
-      - --producer-host
-      - p1.example
-      - --producer-host
-      - p2.example
-      - --producer-host
-      - p3.example
-      - --chain-points-file
-      - /tracer/chainPoints.log
-    volumes:
-      # Shared with relay1 — composer drivers exec into this
-      # container and talk to /state/adversary-control.sock.
-      - relay1-state:/state
-      # Read-only — tracer-sidecar writes chainPoints.log here.
-      - tracer:/tracer:ro
-    depends_on:
-      relay1:
-        condition: service_started
-      tracer-sidecar:
-        condition: service_started
-      configurator:
-        condition: service_completed_successfully
-    restart: always
-
   tracer-sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
     container_name: tracer-sidecar
