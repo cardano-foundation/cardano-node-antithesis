@@ -2,35 +2,106 @@
 set -euo pipefail
 
 # -------------------------- CONFIG --------------------------
-REPO_URL="https://github.com/cardano-foundation/cardano-node-antithesis.git"
-CLONE_DIR="/tmp/cardano-node-antithesis-build"
-REGISTRY="ghcr.io/cardano-foundation/cardano-node-antithesis"
-TEST="testnets/cardano_node_master"
+REGISTRY="${REGISTRY:-ghcr.io/cardano-foundation/cardano-node-antithesis}"
+TESTNETS="${TESTNETS:-cardano_node_master cardano_amaru cardano_amaru_epoch3600}"
+ALWAYS_BUILD_COMPONENTS="${ALWAYS_BUILD_COMPONENTS:-sidecar}"
+ARTIFACT_COMPONENTS="${ARTIFACT_COMPONENTS:-sidecar}"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+WORKTREE_ROOT="${WORKTREE_ROOT:-/tmp/cardano-node-antithesis-image-builds}"
+HEAD_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+HEAD_TAG="$(git -C "$REPO_ROOT" rev-parse --short=7 HEAD)"
 # -----------------------------------------------------------
 
-# 1. Extract "name tag" pairs  (e.g. configurator 5967670)
-#    Compose entries may carry a content digest after the tag,
-#    e.g. `sidecar:1362c5b@sha256:abc…` — strip the digest before
-#    splitting tag from name. The digest is what Antithesis pulls;
-#    publish-images only needs the tag to resolve a commit.
-mapfile -t ENTRIES < <(
-  grep -oP 'ghcr\.io/cardano-foundation/cardano-node-antithesis/\K[^ ]+' "$TEST/docker-compose.yaml" |
-  sed 's|@sha256:[a-f0-9]\+||; s|:| |' |
-  sort -u
-)
+mkdir -p "$WORKTREE_ROOT"
 
-# 2. Clone / update repo once
-if [[ ! -d "$CLONE_DIR/.git" ]]; then
-  echo "Cloning repository..."
-  git clone "$REPO_URL" "$CLONE_DIR"
-else
-  echo "Updating existing clone..."
-  git -C "$CLONE_DIR" fetch --tags --prune --quiet
-  git -C "$CLONE_DIR" reset --hard --quiet
-  git -C "$CLONE_DIR" clean -fdx --quiet
-fi
+resolve_commit() {
+  local ref="$1"
+  git -C "$REPO_ROOT" rev-parse --verify "${ref}^{commit}" 2>/dev/null || true
+}
 
-# 3. Process **each** entry independently
+entries_from_compose() {
+  local testnet compose_file
+  for testnet in $TESTNETS; do
+    compose_file="$REPO_ROOT/testnets/$testnet/docker-compose.yaml"
+    [[ -f "$compose_file" ]] || continue
+    grep -oP 'ghcr\.io/cardano-foundation/cardano-node-antithesis/\K[^ ]+' "$compose_file" |
+      sed 's|@sha256:[a-f0-9]\+||; s|:| |'
+  done
+}
+
+all_entries() {
+  local component
+  for component in $ALWAYS_BUILD_COMPONENTS; do
+    printf '%s %s\n' "$component" "$HEAD_TAG"
+  done
+  entries_from_compose
+}
+
+prepare_worktree() {
+  local component="$1" commit="$2" dir
+  dir="$WORKTREE_ROOT/$component-$commit"
+  if [[ ! -e "$dir/.git" ]]; then
+    rm -rf "$dir"
+    git -C "$REPO_ROOT" worktree add --detach "$dir" "$commit" --quiet
+  fi
+  printf '%s' "$dir"
+}
+
+artifact_enabled_for() {
+  local component="$1" artifact_component
+  [[ -n "${IMAGE_ARTIFACT_DIR:-}" ]] || return 1
+  for artifact_component in $ARTIFACT_COMPONENTS; do
+    [[ "$artifact_component" == "$component" ]] && return 0
+  done
+  return 1
+}
+
+save_artifact() {
+  local component="$1" tag="$2"
+  artifact_enabled_for "$component" || return 0
+
+  mkdir -p "$IMAGE_ARTIFACT_DIR"
+  docker save "$REGISTRY/$component:$tag" \
+    -o "$IMAGE_ARTIFACT_DIR/$component-$tag.tar"
+}
+
+build_component() {
+  local name="$1" tag="$2" commit="$3"
+  local checkout build_dir image_out version
+
+  checkout="$(prepare_worktree "$name" "$commit")"
+  build_dir="$checkout/components/$name"
+
+  if [[ ! -d "$build_dir" ]]; then
+    echo "Warning: Directory $build_dir does not exist. Skipping $name."
+    return 0
+  fi
+
+  cd "$build_dir"
+  echo "Current directory: $(pwd)"
+  ls -la
+
+  if nix flake show --json . 2>/dev/null | jq -e '.packages."x86_64-linux"."docker-image"' >/dev/null; then
+    echo "Building $name from $commit using nix ..."
+    image_out="/tmp/${name}-${tag}-docker-image"
+    rm -f "$image_out"
+    nix build ".#docker-image" --out-link "$image_out" --print-out-paths
+    docker load -i "$image_out"
+    version="$(nix eval --raw ".#version")"
+    docker tag "$REGISTRY/$name:$version" "$REGISTRY/$name:$tag"
+    docker tag "$REGISTRY/$name:$version" "$REGISTRY/$name:$commit"
+  else
+    echo "Building $name from $commit using docker ..."
+    docker build \
+      --pull \
+      -t "$REGISTRY/$name:$tag" \
+      -t "$REGISTRY/$name:$commit" \
+      .
+  fi
+}
+
+mapfile -t ENTRIES < <(all_entries | sort -u)
+
 for entry in "${ENTRIES[@]}"; do
   # Compose entries pinned by digest-only (`name@sha256:digest`) leave no
   # tag side after sanitization. The image must already exist at that
@@ -42,64 +113,38 @@ for entry in "${ENTRIES[@]}"; do
     echo "=================================================="
     continue
   fi
+
   NAME="${entry%% *}"
   TAG="${entry#* }"
-  BUILD_DIR="$CLONE_DIR/components/$NAME"
+  COMMIT="$(resolve_commit "$TAG")"
+
+  if [[ -z "$COMMIT" && "$TAG" == "$HEAD_TAG" ]]; then
+    COMMIT="$HEAD_COMMIT"
+  fi
 
   echo
   echo "=================================================="
   echo "Processing: $NAME  (tag: $TAG)"
   echo "=================================================="
 
-  # ---- Resolve tag → commit ----
-  COMMIT=$(git -C "$CLONE_DIR" rev-list -n 1 "$TAG" 2>/dev/null || true)
   if [[ -z "$COMMIT" ]]; then
-    echo "Error: Tag '$TAG' not found in repo. Skipping $NAME."
+    echo "Error: tag/ref '$TAG' not found in current checkout. Skipping $NAME."
     continue
   fi
-  echo "→ Tag $TAG resolves to commit ${COMMIT:0:8}"
+  echo "-> Tag $TAG resolves to commit ${COMMIT:0:8}"
 
-  # ---- Skip if both tags already published ----
   if docker manifest inspect "$REGISTRY/$NAME:$TAG" >/dev/null 2>&1 \
      && docker manifest inspect "$REGISTRY/$NAME:$COMMIT" >/dev/null 2>&1; then
-    echo "→ $NAME:$TAG and $NAME:$COMMIT already in registry. Skipping."
+    echo "-> $NAME:$TAG and $NAME:$COMMIT already in registry. Skipping."
     continue
   fi
 
-  # ---- Checkout exact commit (detached HEAD) ----
-  git -C "$CLONE_DIR" checkout "$COMMIT" --quiet
+  build_component "$NAME" "$TAG" "$COMMIT"
 
-  # ---- Verify component directory exists ----
-  if [[ ! -d "$BUILD_DIR" ]]; then
-    echo "Warning: Directory $BUILD_DIR does not exist. Skipping $NAME."
-    continue
-  fi
-
-  cd "$BUILD_DIR"
-  echo "Current directory: $(pwd)"
-  ls -la
-
-  # try to use nix build .#docker-image if possible or fallback to docker build
-  if nix eval --raw ".#docker-image" >/dev/null 2>&1; then
-      echo "Building $NAME using from $CLONE_DIR using nix ..."
-        nix build ".#docker-image" --out-link "/tmp/${NAME}-docker-image" --print-out-paths
-        docker load -i "/tmp/${NAME}-docker-image"
-        version=$(nix eval --raw ".#version")
-        docker tag "$REGISTRY/$NAME:$version" "$REGISTRY/$NAME:$TAG"
-        docker tag "$REGISTRY/$NAME:$version" "$REGISTRY/$NAME:$COMMIT"
-    else
-    # ---- Build image ----
-    echo "Building $NAME from $BUILD_DIR using docker ..."
-    docker build \
-        --pull \
-        -t "$REGISTRY/$NAME:$TAG" \
-        -t "$REGISTRY/$NAME:$COMMIT" \
-        .
-  fi
-  # ---- Push both tags ----
   echo "Pushing $NAME ..."
   docker push "$REGISTRY/$NAME:$TAG"
   docker push "$REGISTRY/$NAME:$COMMIT"
+  save_artifact "$NAME" "$TAG"
 
   echo "Done: $NAME"
 done
