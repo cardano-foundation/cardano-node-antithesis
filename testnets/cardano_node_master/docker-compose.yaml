@@ -113,41 +113,46 @@ services:
       - relay2-state:/state
       - tracer:/tracer
 
-  tx-generator:
-    # Tag is bumped commit-by-commit while the downstream
-    # branch is in flight; the publish-images workflow
-    # resolves <tag> to a commit on this repo and
-    # rebuilds via `nix build .#docker-image`. Locally,
-    # `nix build` from components/tx-generator/ produces
-    # the exact tag and `docker load` makes compose pick
-    # it up without a pull.
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:2012360
-    container_name: tx-generator
-    hostname: tx-generator.example
-    command:
-      - --relay-socket
-      - /state/node.socket
-      - --control-socket
-      - /state/tx-generator-control.sock
-      - --state-dir
-      - /state/txgen
-      - --master-seed-file
-      - /state/txgen/master.seed
-      - --faucet-skey-file
-      - /utxo-keys/genesis.1.skey
-      - --network-magic
-      - "42"
-    volumes:
-      # rw — daemon writes its control socket + state dir
-      # under /state.
-      - relay1-state:/state
-      - utxo-keys:/utxo-keys:ro
-    restart: always
-    depends_on:
-      relay1:
-        condition: service_started
-      configurator:
-        condition: service_completed_successfully
+  # tx-generator service is parked in tx-generator.disabled.yaml.
+  # It used to drive ADA transfers via N2C against relay1 and was
+  # removed from this compose so the main testnet runs without a
+  # synthetic transaction load. Restore from the parked file when
+  # reintroducing the daemon.
+  # tx-generator:
+  #   # Tag is bumped commit-by-commit while the downstream
+  #   # branch is in flight; the publish-images workflow
+  #   # resolves <tag> to a commit on this repo and
+  #   # rebuilds via `nix build .#docker-image`. Locally,
+  #   # `nix build` from components/tx-generator/ produces
+  #   # the exact tag and `docker load` makes compose pick
+  #   # it up without a pull.
+  #   image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:2012360
+  #   container_name: tx-generator
+  #   hostname: tx-generator.example
+  #   command:
+  #     - --relay-socket
+  #     - /state/node.socket
+  #     - --control-socket
+  #     - /state/tx-generator-control.sock
+  #     - --state-dir
+  #     - /state/txgen
+  #     - --master-seed-file
+  #     - /state/txgen/master.seed
+  #     - --faucet-skey-file
+  #     - /utxo-keys/genesis.1.skey
+  #     - --network-magic
+  #     - "42"
+  #   volumes:
+  #     # rw — daemon writes its control socket + state dir
+  #     # under /state.
+  #     - relay1-state:/state
+  #     - utxo-keys:/utxo-keys:ro
+  #   restart: always
+  #   depends_on:
+  #     relay1:
+  #       condition: service_started
+  #     configurator:
+  #       condition: service_completed_successfully
 
   sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:f889dbc
