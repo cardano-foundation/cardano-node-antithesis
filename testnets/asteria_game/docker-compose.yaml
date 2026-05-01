@@ -209,7 +209,7 @@ services:
   # idempotent (Asteria.Bootstrap.isAlreadyDeployed) so Antithesis
   # can restart this container at will.
   asteria-game:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:3042c0a
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:ac7d5c0
     container_name: asteria-game
     hostname: asteria-game.example
     environment:
