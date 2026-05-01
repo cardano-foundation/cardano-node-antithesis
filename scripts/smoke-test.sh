@@ -61,6 +61,16 @@ echo "Checking sidecar convergence command..."
 docker exec sidecar \
   /opt/antithesis/test/v1/convergence/eventually_converged.sh
 
+# tx-generator probes are conditional on the service being present in
+# the resolved compose. The service is parked in some testnets (see
+# tx-generator.disabled.yaml) — when it isn't part of the running
+# cluster we skip the probes rather than fail the smoke test.
+if ! docker compose -f "$COMPOSE_FILE" config --services | grep -qx tx-generator; then
+  echo "SKIP: tx-generator not in compose for testnet ${TESTNET}, skipping tx-generator probes"
+  echo "PASS: all ${POOLS} nodes responding"
+  exit 0
+fi
+
 # tx-generator: prove the daemon comes up, drives one
 # refill, lets the indexer observe it, then lands a small
 # burst of transacts and grows the population. This is the
