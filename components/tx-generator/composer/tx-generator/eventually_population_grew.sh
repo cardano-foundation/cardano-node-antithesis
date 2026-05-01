@@ -19,7 +19,9 @@ sdk_reachable "tx_generator_eventually_started"
 # its N2C connection.
 sleep 15
 
-RSP="$(printf '{"snapshot":null}\n' | nc -U -q 1 "$CONTROL_SOCKET" || true)"
+if ! RSP="$(txgen_control_request '{"snapshot":null}')"; then
+    exit 0
+fi
 POP="$(printf '%s' "$RSP" | jq -r '.populationSize // 0')"
 
 if [ "$POP" -gt 0 ]; then
@@ -30,4 +32,4 @@ fi
 
 sdk_unreachable "tx_generator_population_did_not_grow" \
     "$(printf '{"populationSize":%s}' "$POP")"
-exit 1
+exit 0

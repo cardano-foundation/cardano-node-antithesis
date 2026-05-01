@@ -1,0 +1,183 @@
+# Amaru Bootstrap Producer Antithesis Handoff
+
+## Goal
+
+Run the published `amaru-bootstrap-producer` image inside an Antithesis
+cluster and prove that Amaru can load the generated bootstrap bundle from the
+same kind of ChainDB/config material produced by a target cardano-node release.
+
+This branch is deliberately separate from the older `feat/amaru-testnet`
+worktree because that branch has untracked local state. Treat the old branch as
+reference material, not as the active implementation surface.
+
+## Active Branch
+
+Repository:
+https://github.com/cardano-foundation/cardano-node-antithesis
+
+Branch:
+`feat/amaru-bootstrap-producer-cluster`
+
+Local worktree:
+`/code/cardano-node-antithesis-amaru-bootstrap-producer-cluster`
+
+Base commit:
+`ed6666dfec44066d1d52acef7613c488ef117020`
+
+Current implementation status:
+
+- `testnets/cardano_amaru/` is a sibling testnet copied from
+  `cardano_node_master` and adjusted for Amaru.
+- All cardano-node producers and relays in `cardano_amaru` are pinned to the
+  official `10.7.1-amd64` image digest:
+  `sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c`.
+- `bootstrap-producer` consumes `p1-state` at `/cardano/state`,
+  `p1-configs` at `/cardano/config/configs`, and writes
+  `/srv/amaru/testnet_42` on the `amaru-bundle` volume.
+- `amaru-relay-1` and `amaru-relay-2` start immediately as waiting shell
+  entrypoints, then copy `/bundle/testnet_42` into private `a1-state` /
+  `a2-state` volumes and exec `amaru run` once the bundle exists. This avoids
+  blocking `docker compose up -d` on a long producer readiness window.
+- Amaru is relay-only here. It receives no stake assignment, KES key, VRF key,
+  cold key, or operational certificate. The only stake-bearing block producers
+  are the three cardano-node services `p1`, `p2`, and `p3`.
+- Amaru relay logs are intentionally warning/error only for Antithesis:
+  `AMARU_LOG=warn`, `AMARU_TRACE=warn`, and `AMARU_COLOR=never` are set in
+  compose, and the relay wrapper does not emit polling heartbeats.
+- `cardano_amaru` now uses a fast bootstrap profile (`k=10`,
+  `securityParam=10`, `epochLength=120`, `activeSlotsCoeff=0.2`, Conway at
+  epoch 0) so local and CI smoke can wait for the actual producer completion
+  and Amaru relay load path.
+- CI smoke workflows now run both `cardano_node_master` and `cardano_amaru`.
+
+## Upstream Bootstrap Producer
+
+Source repository:
+https://github.com/lambdasistemi/amaru-bootstrap
+
+Merged producer/golden-test PR:
+https://github.com/lambdasistemi/amaru-bootstrap/pull/30
+
+Published image:
+`ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e`
+
+Producer source commit:
+https://github.com/lambdasistemi/amaru-bootstrap/commit/d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
+
+Main CI proof:
+https://github.com/lambdasistemi/amaru-bootstrap/actions/runs/25172449567
+
+Image publish proof:
+https://github.com/lambdasistemi/amaru-bootstrap/actions/runs/25172636074
+
+Published docs:
+https://lambdasistemi.github.io/amaru-bootstrap/
+
+Architecture docs:
+https://lambdasistemi.github.io/amaru-bootstrap/architecture/
+
+## Related Issues
+
+Existing Antithesis Amaru cluster issue:
+https://github.com/cardano-foundation/cardano-node-antithesis/issues/72
+
+Amaru bootstrap Antithesis wiring ticket:
+https://github.com/lambdasistemi/amaru-bootstrap/issues/15
+
+Amaru bootstrap Antithesis assertions ticket:
+https://github.com/lambdasistemi/amaru-bootstrap/issues/16
+
+Amaru bootstrap retargeting playbook ticket:
+https://github.com/lambdasistemi/amaru-bootstrap/issues/17
+
+## Known Constraints
+
+- The bootstrap producer targets a specific cardano-node release. Compilation
+  alone is not evidence of runtime compatibility because ledger/CBOR behavior
+  drifts between node releases.
+- The producer image from PR #28 was built against cardano-node 10.7.1. The
+  local smoke examples used `ghcr.io/intersectmbo/cardano-node:10.7.1-amd64`.
+- The `cardano_amaru` compose file deliberately overrides the mixed-version
+  `cardano_node_master` node set and pins every cardano-node service to the
+  10.7.1 target.
+- The producer command shape is:
+  `amaru-bootstrap-producer <chain-db> <config-dir> <bundle-dir> <network>`.
+- The ChainDB mount should be read-write from Docker's perspective even though
+  the producer semantically reads immutable chunks. This avoids fighting the
+  ledger replay implementation and mirrors the local proof.
+- The local proof deliberately removed the synthesized `ledger/` directory
+  before launching the official cardano-node verifier. The node must rebuild its
+  own LedgerDB from immutable chunks; otherwise a stale synthesizer LedgerDB can
+  produce misleading failures.
+- The old issue #72 plan refers to an Amaru-on-Antithesis stack vendored from
+  `pragma-org/amaru` and cardano-node 10.5.3-era material. Use it as topology
+  reference only; do not resurrect the old snapshot-generator/fork path as the
+  runtime proof for this branch.
+
+## Current Antithesis Integration Surface
+
+- `testnets/cardano_amaru/docker-compose.yaml` defines the Amaru bootstrap
+  cluster and named volumes.
+- `testnets/cardano_amaru/testnet.yaml` defines network magic 42 and the
+  genesis/config material generated by the `configurator` service.
+- `.github/workflows/publish-images.yaml` publishes component images and then
+  runs both `./scripts/smoke-test.sh cardano_node_master 600` and
+  `./scripts/smoke-test.sh cardano_amaru 600`.
+- `.github/workflows/smoke-test.yaml` does the same for manual smoke reruns.
+- `scripts/push-cardano_node_master_images.sh` is the current image publication
+  entry point for repo-owned component images. The Amaru bootstrap producer is
+  an external image pinned by full SHA, not a repo-owned component image.
+
+## Implemented Path
+
+1. Inspected the current `feat/amaru-testnet` branch for topology and service
+   naming without reusing its untracked local state.
+2. Added a new `testnets/cardano_amaru` sibling copied from
+   `cardano_node_master`.
+3. Added a `bootstrap-producer` service using the published producer image:
+   `ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e`.
+4. Mounted the selected producer node's ChainDB state and generated config into
+   the producer container, plus a shared bundle volume for Amaru.
+5. Wired Amaru services to wait inside their entrypoints for the atomically
+   committed bundle, copy it into private state volumes, and then exec
+   `amaru run`. These services are relay-only and carry no stake assignment.
+   This preserves the runtime gate without making `docker compose up -d` block
+   during local smoke.
+6. Extended the local/CI smoke path for `cardano_amaru` so it waits for
+   `bootstrap-producer` to exit `0`, then checks both Amaru relays copied the
+   bundle and stayed running after opening their private stores.
+7. Ran the repo's local compose smoke path against the published producer image
+   before pushing the implementation.
+
+## Local Evidence
+
+- `INTERNAL_NETWORK=false docker compose -f testnets/cardano_amaru/docker-compose.yaml config`
+  rendered successfully.
+- `nix develop --command mkdocs build --strict` built the docs successfully and
+  the Mermaid diagram renders as a `pre.mermaid` block.
+- `AMARU_BOOTSTRAP_SMOKE_TIMEOUT=1800 ./scripts/smoke-test.sh cardano_amaru 600`
+  passed locally with the published image
+  `ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e`.
+  The run waited for `bootstrap-producer` to exit `0`, verified both Amaru
+  relays copied the bundle, and ensured both relays remained running after
+  opening the stores. The smoke now also asserts the Amaru warning/error log
+  environment before accepting those relay checks.
+- During that run, `bootstrap-producer` satisfied readiness at target slot
+  `250`, emitted ledger states at slots `10`, `130`, and `250`, imported
+  ledger state, headers, and nonces, and printed
+  `wrote /srv/amaru/testnet_42`.
+
+The fast profile keeps the release target fixed at cardano-node 10.7.1 and does
+not assign stake to Amaru. It only changes the testnet timing constants so the
+bundle/load proof is bounded.
+
+## Non-Goals For This Branch
+
+- Do not retarget `amaru-bootstrap` to a different node release in this
+  Antithesis branch. Retargeting belongs in the upstream repo and should follow
+  issue #17.
+- Do not treat the existing db-synthesizer smoke proof as enough for Antithesis.
+  The cluster path still needs to prove volume wiring, service ordering, and
+  Amaru's actual load path.
+- Do not merge any Antithesis PR until local compose evidence and CI evidence
+  both exist.

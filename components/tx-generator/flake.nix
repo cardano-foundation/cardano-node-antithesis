@@ -10,11 +10,13 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     cardano-node-clients = {
-      # Pinned to the merge commit of
-      # https://github.com/lambdasistemi/cardano-node-clients/pull/94
-      # on main per the *Pins main only* rule.
+      # Pinned to the main merge commit of
+      # https://github.com/lambdasistemi/cardano-node-clients/pull/105.
+      # This keeps the Antithesis image on the N2C reconnect
+      # supervisor and the BlockedIndefinitelyOnSTM -> ConnectionLost
+      # hardening observed necessary in one-hour fault runs.
       url =
-        "github:lambdasistemi/cardano-node-clients/05814183627ecb37771a70b932d165183cc83042";
+        "github:lambdasistemi/cardano-node-clients/898a2c470ced6a82fa5a32b18cbaf195e1cce927";
     };
   };
 

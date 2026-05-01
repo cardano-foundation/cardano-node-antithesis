@@ -1,0 +1,375 @@
+x-cardano-node-10-7-1: &cardano-node-10-7-1
+  image: ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+  environment:
+    CARDANO_BLOCK_PRODUCER: true
+  command: >
+    run --topology /configs/configs/topology.json
+      --config /configs/configs/config.json
+      --database-path /state
+      --socket-path /state/node.socket
+      --tracer-socket-path-connect /tracer/tracer.socket
+      --shelley-operational-certificate /configs/keys/opcert.cert
+      --shelley-kes-key /configs/keys/kes.skey
+      --shelley-vrf-key /configs/keys/vrf.skey
+      --port 3001
+      --host-addr 0.0.0.0
+      +RTS -N -A16m -qg -qb -RTS
+  restart: always
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
+
+x-cardano-relay-10-7-1: &cardano-relay-10-7-1
+  image: ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+  environment:
+    CARDANO_BLOCK_PRODUCER: false
+  command: >
+    run --topology /configs/configs/topology.json
+      --config /configs/configs/config.json
+      --database-path /state
+      --socket-path /state/node.socket
+      --tracer-socket-path-connect /tracer/tracer.socket
+      --port 3001
+      --host-addr 0.0.0.0
+      +RTS -N -A16m -qg -qb -RTS
+  restart: always
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
+
+x-amaru: &amaru
+  # Amaru is relay-only in this testnet. It receives no stake pool keys,
+  # no KES/VRF/opcert material, and no block-producing command.
+  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
+  entrypoint:
+    - /bin/sh
+  environment:
+    # Antithesis log ingestion is intentionally narrow: keep Amaru below
+    # warning/error quiet by default. Upstream Amaru uses AMARU_LOG rather
+    # than RUST_LOG for its tracing EnvFilter.
+    AMARU_LOG: warn
+    AMARU_TRACE: warn
+    AMARU_COLOR: never
+  restart: always
+  depends_on:
+    bootstrap-producer:
+      condition: service_started
+
+services:
+  configurator:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator@sha256:6e6ba428838bf754ad286b62a151c63c683ef27fbdd5dd1bb5bab11ec9a6a34d
+    container_name: configurator
+    volumes:
+      - ./testnet.yaml:/testnet.yaml
+      - p1-configs:/configs/1
+      - p2-configs:/configs/2
+      - p3-configs:/configs/3
+      - utxo-keys:/utxo-keys
+
+  tracer:
+    image: ghcr.io/intersectmbo/cardano-tracer@sha256:da628263a851b419c38d020d3a7dc3b65b20ee84e730faeb74babd6d96f28efe
+    hostname: tracer.example
+    container_name: tracer
+    volumes:
+      - tracer:/opt/cardano-tracer
+      - ./tracer-config.yaml:/tracer-config.yaml:ro
+    entrypoint: cardano-tracer
+    command:
+      - "--config"
+      - "/tracer-config.yaml"
+    restart: always
+
+  p1:
+    <<: *cardano-node-10-7-1
+    container_name: p1
+    hostname: p1.example
+    volumes:
+      - p1-configs:/configs:ro
+      - p1-state:/state
+      - tracer:/tracer
+
+  p2:
+    <<: *cardano-node-10-7-1
+    container_name: p2
+    hostname: p2.example
+    volumes:
+      - p2-configs:/configs:ro
+      - p2-state:/state
+      - tracer:/tracer
+
+  p3:
+    <<: *cardano-node-10-7-1
+    container_name: p3
+    hostname: p3.example
+    volumes:
+      - p3-configs:/configs:ro
+      - p3-state:/state
+      - tracer:/tracer
+
+  relay1:
+    <<: *cardano-relay-10-7-1
+    container_name: relay1
+    hostname: relay1.example
+    volumes:
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay1-state:/state
+      - tracer:/tracer
+
+  relay2:
+    <<: *cardano-relay-10-7-1
+    container_name: relay2
+    hostname: relay2.example
+    volumes:
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay2-state:/state
+      - tracer:/tracer
+
+  tx-generator:
+    # Tag 6808a14 rebuilds the daemon from
+    # lambdasistemi/cardano-node-clients@898a2c4: the N2C
+    # reconnect supervisor plus typed recovery for
+    # BlockedIndefinitelyOnSTM under Antithesis faulting.
+    # The composer drivers record transient control-socket
+    # gaps as telemetry because Antithesis may schedule them
+    # before the daemon is ready or while the relay is faulted.
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:6808a14
+    container_name: tx-generator
+    hostname: tx-generator.example
+    command:
+      - --relay-socket
+      - /state/node.socket
+      - --control-socket
+      - /state/tx-generator-control.sock
+      - --state-dir
+      - /state/txgen
+      - --master-seed-file
+      - /state/txgen/master.seed
+      - --faucet-skey-file
+      - /utxo-keys/genesis.1.skey
+      - --network-magic
+      - "42"
+    volumes:
+      - relay1-state:/state
+      - utxo-keys:/utxo-keys:ro
+    restart: always
+    depends_on:
+      relay1:
+        condition: service_started
+      configurator:
+        condition: service_completed_successfully
+
+  bootstrap-producer:
+    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
+    container_name: bootstrap-producer
+    hostname: bootstrap-producer.example
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        retry="$${AMARU_BOOTSTRAP_RETRY_SECONDS:-20}"
+        final="/srv/amaru/testnet_42"
+        attempt_log="/srv/amaru/.logs/bootstrap-producer-attempt.log"
+
+        bundle_complete() {
+          test -d "$${final}/ledger.testnet_42.db/live" \
+            && test -d "$${final}/chain.testnet_42.db" \
+            && test -f "$${final}/nonces.json"
+        }
+
+        refresh_snapshot() {
+          test -d /live/immutable || return 1
+          test -d /live/ledger || return 1
+          test -d /live/volatile || return 1
+          test -f /live/protocolMagicId || return 1
+          test -e /live/lock || return 1
+
+          rm -rf /cardano/state/.copy-tmp /cardano/state/*
+          mkdir -p /cardano/state/.copy-tmp
+          if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock /cardano/state/.copy-tmp/; then
+            rm -rf /cardano/state/immutable /cardano/state/ledger /cardano/state/volatile /cardano/state/protocolMagicId /cardano/state/lock
+            mv /cardano/state/.copy-tmp/immutable /cardano/state/
+            mv /cardano/state/.copy-tmp/ledger /cardano/state/
+            mv /cardano/state/.copy-tmp/volatile /cardano/state/
+            mv /cardano/state/.copy-tmp/protocolMagicId /cardano/state/
+            mv /cardano/state/.copy-tmp/lock /cardano/state/
+            rmdir /cardano/state/.copy-tmp
+            return 0
+          fi
+          rm -rf /cardano/state/.copy-tmp
+          return 1
+        }
+
+        while :; do
+          if bundle_complete; then
+            exit 0
+          fi
+
+          if refresh_snapshot; then
+            mkdir -p /srv/amaru/.logs
+            rc=0
+            /bin/bootstrap-producer /cardano/state /cardano/config/configs /srv/amaru testnet_42 >"$${attempt_log}" 2>&1 || rc=$$?
+            case "$${rc}" in
+              0)
+                if ! awk '/^wrote / { print; found=1 } END { exit found ? 0 : 1 }' "$${attempt_log}"; then
+                  echo "bootstrap-producer: committed $${final}"
+                fi
+                exit 0
+                ;;
+              1|2|5|7)
+                # Transient under Antithesis faults or a snapshot copied before
+                # enough immutable history was available. Refresh p1 state and
+                # try again inside this container so Antithesis does not record
+                # an expected readiness miss as a container failure.
+                ;;
+              *)
+                tail -n 50 "$${attempt_log}" >&2 || true
+                exit "$${rc}"
+                ;;
+            esac
+          fi
+
+          sleep "$${retry}"
+        done
+    environment:
+      AMARU_NETWORK: testnet_42
+      AMARU_CLUSTER_READY_DEADLINE_SECONDS: "30"
+      AMARU_WAIT_DEADLINE_SECONDS: "30"
+      AMARU_POLL_INTERVAL_SECONDS: "5"
+      AMARU_BOOTSTRAP_RETRY_SECONDS: "20"
+    volumes:
+      - p1-state:/live:ro
+      - bootstrap-state:/cardano/state
+      - p1-configs:/cardano/config:ro
+      - amaru-bundle:/srv/amaru
+    depends_on:
+      p1:
+        condition: service_started
+    restart: "no"
+
+  amaru-relay-1:
+    <<: *amaru
+    container_name: amaru-relay-1
+    hostname: amaru-relay-1.example
+    command:
+      - -c
+      - |
+        set -eu
+        if [ ! -d /srv/amaru/ledger.testnet_42.db ] || [ ! -d /srv/amaru/chain.testnet_42.db ]; then
+          until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
+             && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
+             && [ -f /bundle/testnet_42/nonces.json ]; do
+            sleep 10
+          done
+          find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          cp -a /bundle/testnet_42/. /srv/amaru/
+        fi
+        exec /bin/amaru run \
+          --network testnet_42 \
+          --ledger-dir /srv/amaru/ledger.testnet_42.db \
+          --chain-dir /srv/amaru/chain.testnet_42.db \
+          --peer-address p1.example:3001
+    volumes:
+      - amaru-bundle:/bundle:ro
+      - a1-state:/srv/amaru
+
+  amaru-relay-2:
+    <<: *amaru
+    container_name: amaru-relay-2
+    hostname: amaru-relay-2.example
+    command:
+      - -c
+      - |
+        set -eu
+        if [ ! -d /srv/amaru/ledger.testnet_42.db ] || [ ! -d /srv/amaru/chain.testnet_42.db ]; then
+          until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
+             && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
+             && [ -f /bundle/testnet_42/nonces.json ]; do
+            sleep 10
+          done
+          find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          cp -a /bundle/testnet_42/. /srv/amaru/
+        fi
+        exec /bin/amaru run \
+          --network testnet_42 \
+          --ledger-dir /srv/amaru/ledger.testnet_42.db \
+          --chain-dir /srv/amaru/chain.testnet_42.db \
+          --peer-address amaru-relay-1:3000
+    volumes:
+      - amaru-bundle:/bundle:ro
+      - a2-state:/srv/amaru
+
+  sidecar:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar@sha256:5e363f5d99da044c551e148ecb782fb1a195af81f1e0a00167b2f95bad1dcee0
+    environment:
+      NETWORKMAGIC: 42
+      PORT: 3001
+      LIMIT: 100
+      POOLS: "3"
+      NCONNS: 1
+      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+    container_name: sidecar
+    hostname: sidecar.example
+    volumes:
+      - tracer:/opt/cardano-tracer
+    depends_on:
+      tracer-sidecar:
+        condition: service_started
+    restart: always
+    tmpfs:
+      - /tmp
+
+  tracer-sidecar:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
+    container_name: tracer-sidecar
+    hostname: tracer-sidecar.example
+    command:
+      - "/opt/cardano-tracer/logs"
+    environment:
+      POOLS: "3"
+      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+    volumes:
+      - tracer:/opt/cardano-tracer
+    restart: always
+    depends_on:
+      tracer:
+        condition: service_started
+
+  log-tailer:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/log-tailer@sha256:a5d23c42408a1003bb14208fd97dd2bdda102e7002e4e2a2804e71a80df56484
+    container_name: log-tailer
+    hostname: log-tailer.example
+    volumes:
+      - tracer:/tracer:ro
+    restart: always
+    depends_on:
+      tracer:
+        condition: service_started
+
+volumes:
+  tracer:
+  p1-configs:
+  p2-configs:
+  p3-configs:
+  p1-state:
+  p2-state:
+  p3-state:
+  bootstrap-state:
+  relay1-state:
+  relay2-state:
+  utxo-keys:
+  amaru-bundle:
+  a1-state:
+  a2-state:
+
+networks:
+  default:
+    name: cardano-amaru-testnet
+    driver: bridge
+    internal: ${INTERNAL_NETWORK}

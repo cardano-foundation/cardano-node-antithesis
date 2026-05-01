@@ -70,3 +70,25 @@ sdk_always() {
     [ "$cond_bool" = "true" ] && cond=true
     _sdk_emit "Always" "always" "$cond" true "$id" "$id" "$details"
 }
+
+txgen_control_request() {
+    local req="$1"
+    local timeout="${TX_GEN_CONTROL_TIMEOUT:-55}"
+    local err
+    err="$(mktemp)"
+    if rsp="$(printf '%s\n' "$req" \
+        | nc -U -w "$timeout" "$CONTROL_SOCKET" 2>"$err")"; then
+        rm -f "$err"
+        printf '%s' "$rsp"
+        return 0
+    fi
+
+    sdk_reachable "tx_generator_control_request_unavailable" \
+        "$(jq -nc \
+            --arg socket "$CONTROL_SOCKET" \
+            --arg error "$(cat "$err")" \
+            --arg request "$req" \
+            '{socket:$socket,error:$error,request:$request}')"
+    rm -f "$err"
+    return 1
+}

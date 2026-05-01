@@ -5,9 +5,23 @@ repo_url: https://github.com/cardano-foundation/cardano-node-antithesis
 theme:
   name: material
   palette:
-    scheme: slate
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
     - navigation.indexes
+    - navigation.sections
     - toc.integrate
     - content.code.copy
     - navigation.path
@@ -16,8 +30,29 @@ plugins:
   - search
   - asciinema-player
 
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - js/mermaid-init.js
+
 markdown_extensions:
+  - admonition
   - callouts
+  - tables
+  - footnotes
+  - def_list
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
 
 nav:
   - Home: index.md
@@ -33,6 +68,7 @@ nav:
   - Testnets:
       - testnets/index.md
       - Cardano Node Master: testnets/cardano-node-master.md
+      - Cardano Amaru: testnets/cardano-amaru.md
   - Multi-run overview: overview.md
   - Triage: triage.md
   - Querying logs: query-logs.md
