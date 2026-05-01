@@ -86,7 +86,10 @@ at genesis even after the slot threshold has passed.
 Antithesis log ingestion is deliberately kept small. The Amaru relay
 containers set `AMARU_LOG=warn`, `AMARU_TRACE=warn`, and
 `AMARU_COLOR=never`, and their shell wrapper does not print polling
-heartbeats while waiting for the bootstrap bundle. The smoke test asserts
+heartbeats while waiting for the bootstrap bundle. The bootstrap
+producer wrapper also avoids retry heartbeats; retryable readiness misses
+refresh the snapshot silently, with per-attempt logs retained under
+`/srv/amaru/.logs` inside the bundle volume. The smoke test asserts
 those environment settings before accepting the relay load proof.
 
 ## Topology
@@ -106,9 +109,9 @@ flowchart LR
     relay2 -.N2N.-> p1
 
     p1 --> chain[(p1-state ChainDB)]
-    chain --> snap[bootstrap-state-snapshot]
-    snap --> copy[(bootstrap-state ChainDB copy)]
-    copy --> producer[bootstrap-producer]
+    chain --> producer[bootstrap-producer]
+    producer --> copy[(bootstrap-state ChainDB copy)]
+    copy --> producer
     producer --> bundle[(amaru-bundle)]
     bundle --> a1[(a1-state)]
     bundle --> a2[(a2-state)]
@@ -125,20 +128,19 @@ volume, and then execs `amaru run`.
 
 ## Bootstrap Contract
 
-`bootstrap-state-snapshot` runs first. It polls `p1` through the local
-node socket until the chain reaches slot `360`, copies the mature ChainDB
-into the isolated `bootstrap-state` volume, and exits `0`.
-
-`bootstrap-producer` runs once:
+`bootstrap-producer` owns the snapshot-refresh loop. It mounts the live
+`p1` ChainDB read-only at `/live`, copies it into the isolated
+`bootstrap-state` volume at `/cardano/state`, and then runs the upstream
+producer command against that copy:
 
 ```text
 bootstrap-producer /cardano/state /cardano/config/configs /srv/amaru testnet_42
 ```
 
-It opens the copied ChainDB, verifies that the immutable tip is era-ready,
-emits three ledger snapshots for the target window, converts them through
-Amaru, extracts headers and nonces, imports all data into Amaru stores,
-and atomically commits:
+The producer verifies that the immutable tip in the copied ChainDB is
+era-ready, emits three ledger snapshots for the target window, converts
+them through Amaru, extracts headers and nonces, imports all data into
+Amaru stores, and atomically commits:
 
 ```text
 /srv/amaru/testnet_42/
@@ -149,18 +151,33 @@ and atomically commits:
 `-- nonces.json
 ```
 
+Readiness and snapshot-race failures are retryable in this Antithesis
+composition. If the producer returns exit `1` (`cluster-not-ready`), exit
+`2` (`chain-not-era-ready`), exit `5` (`tool-error: emit`), or exit `7`
+(`tool-error: extract`), the wrapper refreshes the snapshot and tries
+again inside the same container. Each producer attempt uses a short
+readiness deadline so the wrapper refreshes stale snapshots instead of
+waiting twenty minutes on a copy that cannot mature. This matters under
+fault injection: a single copied ChainDB can be too early forever, and
+surfacing that as a container exit would make Antithesis report an
+infrastructure failure instead of letting the cluster continue until a
+mature snapshot exists. Configuration, conversion, nonce, import, and
+output-write failures still exit non-zero because those are real
+bootstrap defects.
+
 The producer ChainDB mount is intentionally read-write:
 
 ```yaml
 volumes:
+  - p1-state:/live:ro
   - bootstrap-state:/cardano/state
 ```
 
 This is not a live-node write contract. It is required because
 cardano-node 10.7.1's consensus ImmutableDB validation path opens chunk
 files through APIs that reject read-only filesystems. The live `p1`
-ChainDB is mounted read-only by the snapshot service only, and the
-producer never opens it directly.
+ChainDB remains read-only to this service; only the isolated
+`bootstrap-state` copy is opened by the producer.
 
 ## Local Verification
 
@@ -191,13 +208,11 @@ For a bootstrap-specific cluster run, watch:
 
 ```bash
 docker compose -f testnets/cardano_amaru/docker-compose.yaml logs -f bootstrap-producer
-docker compose -f testnets/cardano_amaru/docker-compose.yaml ps bootstrap-state-snapshot bootstrap-producer amaru-relay-1 amaru-relay-2
+docker compose -f testnets/cardano_amaru/docker-compose.yaml ps bootstrap-producer amaru-relay-1 amaru-relay-2
 ```
 
 The success evidence is:
 
-- `bootstrap-state-snapshot` prints `copied p1 ChainDB at slot ...` and
-  exits `0`;
 - `bootstrap-producer` prints `wrote /srv/amaru/testnet_42` and exits
   `0`;
 - `amaru-relay-1` and `amaru-relay-2` copy the bundle into private state

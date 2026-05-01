@@ -30,6 +30,10 @@ plugins:
   - search
   - asciinema-player
 
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - js/mermaid-init.js
+
 markdown_extensions:
   - admonition
   - callouts

@@ -164,92 +164,93 @@ services:
       configurator:
         condition: service_completed_successfully
 
-  bootstrap-state-snapshot:
-    image: ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
-    container_name: bootstrap-state-snapshot
-    hostname: bootstrap-state-snapshot.example
+  bootstrap-producer:
+    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
+    container_name: bootstrap-producer
+    hostname: bootstrap-producer.example
     entrypoint:
       - /bin/sh
       - -ec
     command:
       - |
-        min_slot="$${AMARU_BOOTSTRAP_COPY_MIN_SLOT:-360}"
-        deadline="$${AMARU_BOOTSTRAP_COPY_DEADLINE_SECONDS:-1200}"
-        start="$$(date +%s)"
+        retry="$${AMARU_BOOTSTRAP_RETRY_SECONDS:-20}"
+        final="/srv/amaru/testnet_42"
+        attempt_log="/srv/amaru/.logs/bootstrap-producer-attempt.log"
+
+        bundle_complete() {
+          test -d "$${final}/ledger.testnet_42.db/live" \
+            && test -d "$${final}/chain.testnet_42.db" \
+            && test -f "$${final}/nonces.json"
+        }
+
+        refresh_snapshot() {
+          test -d /live/immutable || return 1
+          test -d /live/ledger || return 1
+          test -d /live/volatile || return 1
+          test -f /live/protocolMagicId || return 1
+          test -e /live/lock || return 1
+
+          rm -rf /cardano/state/.copy-tmp /cardano/state/*
+          mkdir -p /cardano/state/.copy-tmp
+          if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock /cardano/state/.copy-tmp/; then
+            rm -rf /cardano/state/immutable /cardano/state/ledger /cardano/state/volatile /cardano/state/protocolMagicId /cardano/state/lock
+            mv /cardano/state/.copy-tmp/immutable /cardano/state/
+            mv /cardano/state/.copy-tmp/ledger /cardano/state/
+            mv /cardano/state/.copy-tmp/volatile /cardano/state/
+            mv /cardano/state/.copy-tmp/protocolMagicId /cardano/state/
+            mv /cardano/state/.copy-tmp/lock /cardano/state/
+            rmdir /cardano/state/.copy-tmp
+            return 0
+          fi
+          rm -rf /cardano/state/.copy-tmp
+          return 1
+        }
 
         while :; do
-          now="$$(date +%s)"
-          if [ "$$((now - start))" -ge "$${deadline}" ]; then
-            echo "bootstrap-state-snapshot: p1 did not reach slot $${min_slot} within $${deadline}s" >&2
-            exit 1
+          if bundle_complete; then
+            exit 0
           fi
 
-          tip_json=""
-          if [ -S /live/node.socket ]; then
-            tip_json="$$(cardano-cli query tip --socket-path /live/node.socket --testnet-magic 42 2>/dev/null || true)"
-          fi
-          slot=""
-          case "$${tip_json}" in
-            *'"slot"'*)
-              value="$${tip_json#*\"slot\"}"
-              value="$${value#*:}"
-              value="$${value%%,*}"
-              slot="$$(printf '%s' "$${value}" | tr -dc '0-9')"
-              ;;
-          esac
-
-          if [ -n "$${slot}" ] && [ "$${slot}" -ge "$${min_slot}" ]; then
-            rm -rf /snapshot/.copy-tmp /snapshot/*
-            mkdir -p /snapshot/.copy-tmp
-            if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock /snapshot/.copy-tmp/; then
-              rm -rf /snapshot/immutable /snapshot/ledger /snapshot/volatile /snapshot/protocolMagicId /snapshot/lock
-              mv /snapshot/.copy-tmp/immutable /snapshot/
-              mv /snapshot/.copy-tmp/ledger /snapshot/
-              mv /snapshot/.copy-tmp/volatile /snapshot/
-              mv /snapshot/.copy-tmp/protocolMagicId /snapshot/
-              mv /snapshot/.copy-tmp/lock /snapshot/
-              rmdir /snapshot/.copy-tmp
-              echo "bootstrap-state-snapshot: copied p1 ChainDB at slot $${slot}"
-              exit 0
-            fi
-            echo "bootstrap-state-snapshot: copy raced with p1 writes; retrying" >&2
-            rm -rf /snapshot/.copy-tmp
+          if refresh_snapshot; then
+            mkdir -p /srv/amaru/.logs
+            rc=0
+            /bin/bootstrap-producer /cardano/state /cardano/config/configs /srv/amaru testnet_42 >"$${attempt_log}" 2>&1 || rc=$$?
+            case "$${rc}" in
+              0)
+                if ! awk '/^wrote / { print; found=1 } END { exit found ? 0 : 1 }' "$${attempt_log}"; then
+                  echo "bootstrap-producer: committed $${final}"
+                fi
+                exit 0
+                ;;
+              1|2|5|7)
+                # Transient under Antithesis faults or a snapshot copied before
+                # enough immutable history was available. Refresh p1 state and
+                # try again inside this container so Antithesis does not record
+                # an expected readiness miss as a container failure.
+                ;;
+              *)
+                tail -n 50 "$${attempt_log}" >&2 || true
+                exit "$${rc}"
+                ;;
+            esac
           fi
 
-          sleep 5
+          sleep "$${retry}"
         done
     environment:
-      AMARU_BOOTSTRAP_COPY_MIN_SLOT: "360"
-      AMARU_BOOTSTRAP_COPY_DEADLINE_SECONDS: "1200"
+      AMARU_NETWORK: testnet_42
+      AMARU_CLUSTER_READY_DEADLINE_SECONDS: "30"
+      AMARU_WAIT_DEADLINE_SECONDS: "30"
+      AMARU_POLL_INTERVAL_SECONDS: "5"
+      AMARU_BOOTSTRAP_RETRY_SECONDS: "20"
     volumes:
       - p1-state:/live:ro
-      - bootstrap-state:/snapshot
-    restart: "no"
-    depends_on:
-      p1:
-        condition: service_started
-
-  bootstrap-producer:
-    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
-    container_name: bootstrap-producer
-    hostname: bootstrap-producer.example
-    command:
-      - /cardano/state
-      - /cardano/config/configs
-      - /srv/amaru
-      - testnet_42
-    environment:
-      AMARU_NETWORK: testnet_42
-      AMARU_CLUSTER_READY_DEADLINE_SECONDS: "600"
-      AMARU_WAIT_DEADLINE_SECONDS: "1200"
-      AMARU_POLL_INTERVAL_SECONDS: "5"
-    volumes:
       - bootstrap-state:/cardano/state
       - p1-configs:/cardano/config:ro
       - amaru-bundle:/srv/amaru
     depends_on:
-      bootstrap-state-snapshot:
-        condition: service_completed_successfully
+      p1:
+        condition: service_started
     restart: "no"
 
   amaru-relay-1:

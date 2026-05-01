@@ -36,8 +36,10 @@ the immutable tip at genesis for too long.
 
 The Amaru relay containers are intentionally quiet for Antithesis log
 ingestion: compose sets `AMARU_LOG=warn`, `AMARU_TRACE=warn`, and
-`AMARU_COLOR=never`, and the wrapper loop does not print bundle-wait
-heartbeats.
+`AMARU_COLOR=never`, and the wrapper loops do not print polling
+heartbeats. The bootstrap producer stores per-attempt logs under
+`/srv/amaru/.logs` in the bundle volume and prints only the final commit
+line or a bounded tail for a non-retryable failure.
 
 The producer image is pinned by full source commit SHA:
 
@@ -87,13 +89,10 @@ configurator -> p1/p2/p3/relay1/relay2
              p1 ChainDB
                   |
                   v
-       bootstrap-state-snapshot
+      bootstrap-producer refresh loop
                   |
                   v
           bootstrap ChainDB copy
-                  |
-                  v
-          bootstrap-producer
                   |
                   v
            amaru-bundle volume
@@ -102,13 +101,15 @@ configurator -> p1/p2/p3/relay1/relay2
       amaru-relay-1   amaru-relay-2
 ```
 
-`bootstrap-state-snapshot` waits for `p1` to reach slot `360` through
-the local node socket, then copies `p1`'s ChainDB into an isolated
-`bootstrap-state` volume. `bootstrap-producer` mounts that copy
-read-write at `/cardano/state`. This preserves the cardano-node 10.7.1
-consensus API requirement that immutable chunk validation has write
-permissions, while avoiding a second process opening the live `p1`
-ChainDB during Antithesis fault scheduling.
+`bootstrap-producer` owns the snapshot-refresh loop. It mounts `p1`'s
+live ChainDB read-only at `/live`, copies it into the isolated
+`bootstrap-state` volume, then mounts that copy read-write at
+`/cardano/state` for the upstream producer command. This preserves the
+cardano-node 10.7.1 consensus API requirement that immutable chunk
+validation has write permissions, while avoiding writes to the live `p1`
+ChainDB during Antithesis fault scheduling. Retryable readiness and copy
+failures use a short per-attempt deadline and refresh the snapshot inside
+the same container instead of exiting non-zero.
 
 Each relay-only Amaru entrypoint copies the final bundle into its private
 state volume before it execs `amaru run`, so the two Amaru nodes do not
