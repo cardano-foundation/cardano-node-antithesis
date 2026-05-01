@@ -63,10 +63,17 @@ docker exec sidecar \
 
 # tx-generator: prove the daemon comes up, drives one
 # refill, lets the indexer observe it, then lands a small
-# burst of transacts and grows the population. This is the
-# CI-side counterpart of the docker-compose contract; the
-# Antithesis composer drives the same scripts at much
-# heavier load on the cluster.
+# burst of transacts and grows the population. Gated on
+# the compose actually defining a tx-generator service —
+# master testnet has dropped it (per
+# https://github.com/cardano-foundation/cardano-node-antithesis/pull/111),
+# while the cardano_node_tx_generator feature testnet
+# keeps it. Same script serves both.
+if ! grep -qE '^[[:space:]]*tx-generator:' "$COMPOSE_FILE"; then
+  echo "PASS: all ${POOLS} nodes responding (no tx-generator on this testnet)"
+  exit 0
+fi
+
 TXGEN_SOCK=/state/tx-generator-control.sock
 txgen_send() {
   docker exec tx-generator sh -c \
