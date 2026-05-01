@@ -98,7 +98,11 @@ the same container instead of exiting non-zero.
 
 Each relay-only Amaru entrypoint copies the final bundle into its private
 state volume before it execs `amaru run`, so the two Amaru nodes do not
-share writable chain or ledger stores.
+share writable chain or ledger stores. The relays peer directly with
+cardano-node producers (`amaru-relay-1` to `p1`, `amaru-relay-2` to
+`p2`) rather than with each other, because this test is only proving
+bootstrap loading and should not require Amaru to serve blocks as a
+responder.
 
 Each relay also writes a startup marker into the shared `amaru-startup`
 volume immediately before the `amaru run` exec. The sidecar mounts that

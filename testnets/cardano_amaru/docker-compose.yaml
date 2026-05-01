@@ -275,7 +275,7 @@ services:
           --chain-dir /srv/amaru/chain.testnet_42.db \
           --era-history-file /amaru-runtime/era-history.json \
           --global-parameters-file /amaru-runtime/global-parameters.json \
-          --peer-address amaru-relay-1:3000
+          --peer-address p2.example:3001
     volumes:
       - amaru-bundle:/bundle:ro
       - ./amaru-runtime:/amaru-runtime:ro

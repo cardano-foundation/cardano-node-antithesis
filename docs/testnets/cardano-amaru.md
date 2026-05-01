@@ -125,12 +125,15 @@ flowchart LR
     a2 --> amaru2[amaru-relay-2]
 
     amaru1 -.upstream.-> p1
-    amaru2 -.upstream.-> amaru1
+    amaru2 -.upstream.-> p2
 ```
 
 The Amaru relay nodes do not share writable stores. Each relay entrypoint
 waits for the atomically committed bundle, copies it into a private state
-volume, and then execs `amaru run`.
+volume, and then execs `amaru run`. They also do not peer with each
+other: both are downstream consumers of cardano-node producers. That
+avoids exercising Amaru's block-fetch responder path while this test is
+only proving bootstrap loading.
 
 ## Bootstrap Contract
 
