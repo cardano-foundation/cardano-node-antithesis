@@ -62,7 +62,7 @@ The tx-generator image is pinned to the component rebuild from this
 repository commit:
 
 ```text
-ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:ba7697e
+ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:6808a14
 ```
 
 That rebuild consumes

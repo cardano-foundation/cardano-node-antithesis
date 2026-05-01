@@ -28,7 +28,7 @@ ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82d
 The tx-generator image is also pinned deliberately:
 
 ```text
-ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:ba7697e
+ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:6808a14
 ```
 
 That image rebuilds the daemon against
