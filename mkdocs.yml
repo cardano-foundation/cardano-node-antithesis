@@ -59,11 +59,13 @@ nav:
       - Configurator: components/configurator.md
       - Config: components/config.md
       - Adversary: components/adversary.md
+      - Adversary roadmap: components/adversary-roadmap.md
       - Asteria Player: components/asteria-player.md
   - Testnets:
       - testnets/index.md
       - Cardano Node Master: testnets/cardano-node-master.md
       - Cardano Amaru: testnets/cardano-amaru.md
+  - Multi-run overview: overview.md
   - Triage: triage.md
   - Querying logs: query-logs.md
   - Contributing: contributing.md
