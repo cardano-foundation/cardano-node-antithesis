@@ -259,7 +259,7 @@ if [[ "$TESTNET" == cardano_amaru* ]]; then
 
   echo "Checking Amaru startup Antithesis property..."
   docker exec sidecar \
-    /opt/antithesis/test/v1/amaru/finally_amaru_started.sh
+    /opt/antithesis/test/v1/convergence/finally_amaru_started.sh
 fi
 
 echo "PASS: all ${POOLS} nodes responding"

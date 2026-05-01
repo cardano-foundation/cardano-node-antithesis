@@ -104,7 +104,8 @@ share writable chain or ledger stores.
 
 Each relay also writes a startup marker into the shared `amaru-startup`
 volume immediately before the `amaru run` exec. The sidecar mounts that
-volume and the `composer/amaru` scripts so Antithesis can score
+volume and the `composer/amaru` scripts into the existing
+`convergence` Test Composer template so Antithesis can score
 `parallel_driver_amaru_started.sh` and `finally_amaru_started.sh` as
 explicit properties instead of asking readers to infer startup from
 container background-monitor logs.
@@ -132,7 +133,8 @@ generic tx-generator smoke gate is skipped. For
 `bootstrap-producer` to complete, checks that both relay-only Amaru nodes
 copied the bundle into private state and stayed running after
 `amaru run` opened the stores, then executes the same Amaru startup
-property that Antithesis discovers under `/opt/antithesis/test/v1/amaru/`.
+property that Antithesis discovers under
+`/opt/antithesis/test/v1/convergence/`.
 
 For the bootstrap-specific proof, inspect:
 
@@ -152,6 +154,12 @@ Expected completion sequence:
 4. `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
    it samples both relay startup markers; `finally_amaru_started.sh`
    fails the run if those markers are still missing at the final check.
+   Both commands run from the `convergence` template so Antithesis does
+   not mix separate test directories in one sidecar.
+5. The sidecar uses a larger post-fault convergence budget in this
+   profile (`30s` settle, `15` attempts, `3s` delay) so a final check is
+   not scored while producer tips are still catching up after faults
+   stop.
 
 ## Compatibility Constraint
 

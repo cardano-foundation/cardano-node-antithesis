@@ -206,8 +206,8 @@ gate is skipped. For `cardano_amaru`, the smoke then waits for
 `bootstrap-producer` to exit `0`, checks that `amaru-relay-1` and
 `amaru-relay-2` copied the bundle into private state volumes and stayed
 running after `amaru run` opened those stores, and executes the same
-`finally_amaru_started` proof that Antithesis discovers under
-`/opt/antithesis/test/v1/amaru/`.
+`finally_amaru_started` proof that Antithesis discovers under the
+existing `/opt/antithesis/test/v1/convergence/` template.
 
 The long-epoch variant can be validated locally with a larger bootstrap
 timeout, but it is primarily intended for Antithesis:
@@ -238,6 +238,13 @@ The success evidence is:
 - `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
   it samples both relay startup markers, and `finally_amaru_started.sh`
   fails the run if those markers are still missing at the final check.
+  These Amaru proof commands are mounted into the existing
+  `convergence` Test Composer template so the sidecar exposes one
+  coherent template to Antithesis.
+- the Amaru profiles give the sidecar convergence checks a larger
+  post-fault recovery budget than the default profile (`30s` settle,
+  `15` attempts, `3s` delay) because the one-hour Antithesis campaign
+  can stop faults immediately after a transient producer-tip split.
 
 ## What This Does Not Prove
 

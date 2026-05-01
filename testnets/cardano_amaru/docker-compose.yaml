@@ -290,13 +290,17 @@ services:
       LIMIT: 100
       POOLS: "3"
       NCONNS: 1
+      SLEEP_SETTLE: "30"
+      MAX_ATTEMPTS: "15"
+      RETRY_DELAY: "3"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     container_name: sidecar
     hostname: sidecar.example
     volumes:
       - tracer:/opt/cardano-tracer
       - amaru-startup:/amaru-startup:ro
-      - ./composer/amaru:/opt/antithesis/test/v1/amaru:ro
+      - ./composer/amaru/finally_amaru_started.sh:/opt/antithesis/test/v1/convergence/finally_amaru_started.sh:ro
+      - ./composer/amaru/parallel_driver_amaru_started.sh:/opt/antithesis/test/v1/convergence/parallel_driver_amaru_started.sh:ro
     depends_on:
       tracer-sidecar:
         condition: service_started
