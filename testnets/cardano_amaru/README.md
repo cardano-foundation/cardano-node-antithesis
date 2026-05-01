@@ -62,7 +62,7 @@ The tx-generator image is pinned to the component rebuild from this
 repository commit:
 
 ```text
-ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:94100c6
+ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:ba7697e
 ```
 
 That rebuild consumes
@@ -72,7 +72,11 @@ the main merge commit for
 important runtime behavior is the N2C reconnect supervisor and typed
 handling of GHC's `BlockedIndefinitelyOnSTM` detection, so a relay
 disconnect during LSQ or local transaction submission returns a
-recoverable control response instead of killing the daemon.
+recoverable control response instead of killing the daemon. The
+Antithesis composer also records transient control-socket gaps as
+reachable telemetry rather than as an SDK failure, because fault
+scheduling can run a command before the daemon is ready or while the
+upstream relay is being disrupted.
 
 ## Runtime Flow
 

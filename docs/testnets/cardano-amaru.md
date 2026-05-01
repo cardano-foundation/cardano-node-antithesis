@@ -28,7 +28,7 @@ ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82d
 The tx-generator image is also pinned deliberately:
 
 ```text
-ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:94100c6
+ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:ba7697e
 ```
 
 That image rebuilds the daemon against
@@ -39,6 +39,10 @@ pin matters for Antithesis because the daemon now supervises its N2C
 connection and turns GHC's `BlockedIndefinitelyOnSTM` detection on
 in-flight LSQ/LTxS calls into the typed `ConnectionLost` path. Composer
 requests then get a retryable control response instead of a daemon exit.
+The composer records transient control-socket gaps as reachable telemetry
+rather than as a failing SDK assertion, because the command can be
+scheduled before the daemon is ready or while the upstream relay is being
+faulted.
 
 ## Stake Roles
 
