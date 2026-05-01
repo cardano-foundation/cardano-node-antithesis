@@ -243,7 +243,7 @@ services:
   # so the daemon stays up across relay restarts. RocksDB persistence
   # at /idx-db keeps state across full process restarts too.
   asteria-game:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game@sha256:af1c9ae55f47d88c66b2edc9edeb1ec4225e4f5322e779df5d37b946c5c6d11c
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:asteria-game-v2
     container_name: asteria-game
     hostname: asteria-game.example
     environment:
@@ -251,6 +251,7 @@ services:
     volumes:
       - relay1-state:/state:ro
       - asteria-game-db:/idx-db
+      - utxo-keys:/utxo-keys:ro
     tmpfs:
       - /tmp
     depends_on:
