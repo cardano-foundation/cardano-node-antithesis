@@ -161,18 +161,21 @@ Amaru stores, and atomically commits:
 ```
 
 Readiness and snapshot-race failures are retryable in this Antithesis
-composition. If the producer returns exit `1` (`cluster-not-ready`), exit
-`2` (`chain-not-era-ready`), exit `5` (`tool-error: emit`), or exit `7`
-(`tool-error: extract`), the wrapper refreshes the snapshot and tries
-again inside the same container. Each producer attempt uses a short
-readiness deadline so the wrapper refreshes stale snapshots instead of
-waiting twenty minutes on a copy that cannot mature. This matters under
-fault injection: a single copied ChainDB can be too early forever, and
-surfacing that as a container exit would make Antithesis report an
-infrastructure failure instead of letting the cluster continue until a
-mature snapshot exists. Configuration, conversion, nonce, import, and
-output-write failures still exit non-zero because those are real
-bootstrap defects.
+composition. The wrapper copies the live `p1` ChainDB repeatedly until it
+can hand the producer a coherent snapshot; expected `cp` races against
+the live ledger directory are recorded under the Amaru bundle logs rather
+than emitted to container stdout. If the producer returns exit `1`
+(`cluster-not-ready`), exit `2` (`chain-not-era-ready`), exit `5`
+(`tool-error: emit`), or exit `7` (`tool-error: extract`), the wrapper
+refreshes the snapshot and tries again inside the same container. Each
+producer attempt uses a short readiness deadline so the wrapper refreshes
+stale snapshots instead of waiting twenty minutes on a copy that cannot
+mature. This matters under fault injection: a single copied ChainDB can be
+too early forever, and surfacing that as a container exit would make
+Antithesis report an infrastructure failure instead of letting the
+cluster continue until a mature snapshot exists. Configuration,
+conversion, nonce, import, and output-write failures still exit non-zero
+because those are real bootstrap defects.
 
 The producer ChainDB mount is intentionally read-write:
 
@@ -238,6 +241,9 @@ The success evidence is:
   volumes;
 - `amaru-relay-1` and `amaru-relay-2` enter `amaru run` and remain
   running without a restart during the smoke gate;
+- the sidecar delays Antithesis setup-complete until those relay startup
+  markers exist, so the one-hour campaign starts fault injection only
+  after Amaru has consumed the bootstrap bundle at least once;
 - `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
   it samples both relay startup markers, and `finally_amaru_started.sh`
   fails the run if those markers are still missing at the final check.

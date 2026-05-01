@@ -155,9 +155,10 @@ services:
           test -f /live/protocolMagicId || return 1
           test -e /live/lock || return 1
 
+          mkdir -p /srv/amaru/.logs
           rm -rf /cardano/state/.copy-tmp /cardano/state/*
           mkdir -p /cardano/state/.copy-tmp
-          if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock /cardano/state/.copy-tmp/; then
+          if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock /cardano/state/.copy-tmp/ 2>/srv/amaru/.logs/snapshot-copy.err; then
             rm -rf /cardano/state/immutable /cardano/state/ledger /cardano/state/volatile /cardano/state/protocolMagicId /cardano/state/lock
             mv /cardano/state/.copy-tmp/immutable /cardano/state/
             mv /cardano/state/.copy-tmp/ledger /cardano/state/
@@ -165,6 +166,7 @@ services:
             mv /cardano/state/.copy-tmp/protocolMagicId /cardano/state/
             mv /cardano/state/.copy-tmp/lock /cardano/state/
             rmdir /cardano/state/.copy-tmp
+            rm -f /srv/amaru/.logs/snapshot-copy.err
             return 0
           fi
           rm -rf /cardano/state/.copy-tmp
@@ -207,7 +209,7 @@ services:
       AMARU_CLUSTER_READY_DEADLINE_SECONDS: "30"
       AMARU_WAIT_DEADLINE_SECONDS: "30"
       AMARU_POLL_INTERVAL_SECONDS: "5"
-      AMARU_BOOTSTRAP_RETRY_SECONDS: "20"
+      AMARU_BOOTSTRAP_RETRY_SECONDS: "5"
     volumes:
       - p1-state:/live:ro
       - bootstrap-state:/cardano/state
@@ -222,6 +224,9 @@ services:
     <<: *amaru
     container_name: amaru-relay-1
     hostname: amaru-relay-1.example
+    depends_on:
+      bootstrap-producer:
+        condition: service_completed_successfully
     command:
       - -c
       - |
@@ -254,6 +259,9 @@ services:
     <<: *amaru
     container_name: amaru-relay-2
     hostname: amaru-relay-2.example
+    depends_on:
+      bootstrap-producer:
+        condition: service_completed_successfully
     command:
       - -c
       - |
@@ -283,7 +291,7 @@ services:
       - a2-state:/srv/amaru
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:741ce87
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:fb26cec
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -294,6 +302,9 @@ services:
       MAX_ATTEMPTS: "15"
       RETRY_DELAY: "3"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+      AMARU_STARTUP_REQUIRED: "true"
+      AMARU_STARTUP_DIR: "/amaru-startup"
+      AMARU_RELAYS: "amaru-relay-1 amaru-relay-2"
     container_name: sidecar
     hostname: sidecar.example
     volumes:

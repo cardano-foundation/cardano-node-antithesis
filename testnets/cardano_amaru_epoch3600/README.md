@@ -96,7 +96,9 @@ cardano-node 10.7.1 consensus API requirement that immutable chunk
 validation has write permissions, while avoiding writes to the live `p1`
 ChainDB during Antithesis fault scheduling. Retryable readiness and copy
 failures use a short per-attempt deadline and refresh the snapshot inside
-the same container instead of exiting non-zero.
+the same container instead of exiting non-zero. Expected `cp` races
+against the live ledger directory are kept in the Amaru bundle logs, not
+container stdout.
 
 Each relay-only Amaru entrypoint copies the final bundle into its private
 state volume before it execs `amaru run`, so the two Amaru nodes do not
@@ -112,7 +114,10 @@ volume, and its image contains the Amaru startup proof scripts in the
 existing `convergence` Test Composer template so Antithesis can score
 `parallel_driver_amaru_started.sh` and `finally_amaru_started.sh` as
 explicit properties instead of asking readers to infer startup from
-container background-monitor logs.
+container background-monitor logs. In this profile the sidecar also
+waits for those markers before emitting Antithesis setup-complete, so
+fault injection starts only after Amaru has consumed the bootstrap bundle
+at least once.
 
 ## Local Commands
 
@@ -155,12 +160,14 @@ Expected completion sequence:
    volumes.
 3. `amaru-relay-1` and `amaru-relay-2` start with `amaru run` and stay
    running without a restart during the smoke gate.
-4. `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
+4. The sidecar setup signal is delayed until both relay startup markers
+   exist.
+5. `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
    it samples both relay startup markers; `finally_amaru_started.sh`
    fails the run if those markers are still missing at the final check.
    Both commands run from the `convergence` template so Antithesis does
    not mix separate test directories in one sidecar.
-5. The sidecar uses a larger post-fault convergence budget in this
+6. The sidecar uses a larger post-fault convergence budget in this
    profile (`30s` settle, `15` attempts, `3s` delay) so a final check is
    not scored while producer tips are still catching up after faults
    stop.
