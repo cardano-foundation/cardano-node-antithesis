@@ -83,11 +83,12 @@ txgen_control_request() {
         return 0
     fi
 
-    sdk_unreachable "tx_generator_control_request_failed" \
+    sdk_reachable "tx_generator_control_request_unavailable" \
         "$(jq -nc \
             --arg socket "$CONTROL_SOCKET" \
             --arg error "$(cat "$err")" \
-            '{socket:$socket,error:$error}')"
+            --arg request "$req" \
+            '{socket:$socket,error:$error,request:$request}')"
     rm -f "$err"
     return 1
 }
