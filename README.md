@@ -10,6 +10,7 @@ Current testnets:
 
 - `cardano_node_master`: mixed-version cardano-node network with relays, sidecars, and transaction generation.
 - `cardano_amaru`: cardano-node 10.7.1 network with the published `amaru-bootstrap-producer` image and two relay-only Amaru nodes gated on the produced bootstrap bundle. Amaru receives no stake assignment or producer credentials.
+- `cardano_amaru_epoch3600`: Antithesis-only variant of `cardano_amaru` with 3600-slot epochs. It is for one-hour Antithesis campaigns where simulated time is long enough for two complete epochs; it is not part of the default wall-clock smoke-test matrix.
 
 It is maintained by the Cardano Foundation as part of the [Moog project][Moog].
 

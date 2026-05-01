@@ -22,7 +22,7 @@ The producer image is pinned to the `amaru-bootstrap` commit that passed
 CI and published the runtime image:
 
 ```text
-ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
+ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
 ```
 
 The tx-generator image is also pinned deliberately:
@@ -61,7 +61,8 @@ certificate, or stake-pool genesis assignment. They start with
 
 ## Fast Bootstrap Profile
 
-This testnet intentionally shortens the epoch/security window:
+The `cardano_amaru` testnet intentionally shortens the epoch/security
+window:
 
 ```yaml
 protocolConsts:
@@ -80,6 +81,22 @@ wait for the real producer completion instead of only proving cluster
 startup. The dense active slot coefficient makes enough blocks immutable
 inside that short window; without it the immutable ChainDB tip can remain
 at genesis even after the slot threshold has passed.
+
+The `cardano_amaru_epoch3600` testnet keeps the same topology and
+bootstrap path but uses 3600-slot epochs:
+
+```yaml
+protocolConsts:
+  k: 10
+epochLength: 3600
+securityParam: 10
+activeSlotsCoeff: 0.2
+TestConwayHardForkAtEpoch: 0
+```
+
+It is meant for one-hour Antithesis campaigns, where simulated time can
+cover enough chain time for two complete Conway epochs. It is not part of
+the default wall-clock smoke matrix.
 
 ## Log Budget
 
@@ -198,7 +215,15 @@ tx-generator still work with the Amaru services present. For
 `cardano_amaru`, it additionally waits for `bootstrap-producer` to exit
 `0`, then checks that `amaru-relay-1` and `amaru-relay-2` copied the
 bundle into private state volumes and stayed running after `amaru run`
-opened those stores.
+opened those stores. It then executes the same `eventually_amaru_started`
+property that Antithesis discovers under `/opt/antithesis/test/v1/amaru/`.
+
+The long-epoch variant can be validated locally with a larger bootstrap
+timeout, but it is primarily intended for Antithesis:
+
+```bash
+AMARU_BOOTSTRAP_SMOKE_TIMEOUT=9000 ./scripts/smoke-test.sh cardano_amaru_epoch3600 600
+```
 
 The same smoke command runs in both the PR image-publish workflow and
 the manual smoke workflow, after the existing `cardano_node_master`
@@ -218,7 +243,9 @@ The success evidence is:
 - `amaru-relay-1` and `amaru-relay-2` copy the bundle into private state
   volumes;
 - `amaru-relay-1` and `amaru-relay-2` enter `amaru run` and remain
-  running without a restart during the smoke gate.
+  running without a restart during the smoke gate;
+- `eventually_amaru_started.sh` emits `amaru_relays_started` after it
+  observes both relay startup markers.
 
 ## What This Does Not Prove
 

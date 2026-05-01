@@ -24,10 +24,11 @@ Docker containers that set up and drive the Antithesis test environment. Dependi
 
 ## Testnets
 
-Currently we provide and maintain two testnet configurations. Some old testnets are preserved in the [old-broken](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/old-broken) directory for historical reference.
+Currently we provide and maintain three testnet configurations. Some old testnets are preserved in the [old-broken](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/old-broken) directory for historical reference.
 
 - `cardano_node_master/`: A mixed-version testnet with 3 block producers (10.5.3, 10.6.2, 10.7.1) and 2 relay nodes (10.6.2, 10.7.1). Includes a tracer, tracer-sidecar, and sidecar for observability and assertions. The topology exercises node-to-node protocol diversity across supported Cardano Node versions. See [cardano-node-master](testnets/cardano-node-master.md) for details.
 - `cardano_amaru/`: A cardano-node 10.7.1 testnet that runs the published `amaru-bootstrap-producer` image inside the cluster, copies the produced `testnet_42` bundle into per-Amaru-node state volumes, and starts two relay-only Amaru nodes only after the bundle is complete. Amaru receives no stake assignment or producer credentials. See [cardano-amaru](testnets/cardano-amaru.md) for details.
+- `cardano_amaru_epoch3600/`: An Antithesis-only long-epoch variant of `cardano_amaru` for one-hour campaigns that can cover enough simulated time for two complete 3600-slot Conway epochs.
 
 ## Image publishing
 
@@ -43,7 +44,7 @@ To add a new component: create `components/<name>/Dockerfile`, reference it in d
 The `cardano_amaru` testnet consumes an external image instead:
 
 ```text
-ghcr.io/lambdasistemi/amaru-bootstrap-producer:d81dd7d31e1c23b3223d3c4155294b82dc56ea0e
+ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
 ```
 
 That image is produced by `lambdasistemi/amaru-bootstrap` and is pinned

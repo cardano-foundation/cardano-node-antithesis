@@ -181,7 +181,7 @@ fi
 
 echo "OK: tx-generator drove $TXGEN_OK/5 transacts, populationSize=$POP"
 
-if [ "$TESTNET" = "cardano_amaru" ]; then
+if [[ "$TESTNET" == cardano_amaru* ]]; then
   BOOTSTRAP_TIMEOUT="${AMARU_BOOTSTRAP_SMOKE_TIMEOUT:-1200}"
   BOOTSTRAP_DEADLINE=$((SECONDS + BOOTSTRAP_TIMEOUT))
 
@@ -254,6 +254,10 @@ if [ "$TESTNET" = "cardano_amaru" ]; then
     fi
     echo "OK: ${RELAY} consumed bundle and stayed running"
   done
+
+  echo "Checking Amaru startup Antithesis property..."
+  docker exec sidecar \
+    /opt/antithesis/test/v1/amaru/eventually_amaru_started.sh
 fi
 
 echo "PASS: all ${POOLS} nodes responding"
