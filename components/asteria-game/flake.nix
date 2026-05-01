@@ -72,7 +72,7 @@
             };
           in rec {
             packages = {
-              inherit (project.packages) asteria-game asteria-bootstrap;
+              inherit (project.packages) asteria-game asteria-bootstrap asteria-invariant;
               inherit docker-image;
               default = packages.docker-image;
             };

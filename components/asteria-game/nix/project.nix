@@ -59,5 +59,7 @@ in {
     project.hsPkgs.asteria-game.components.exes.asteria-game;
   packages.asteria-bootstrap =
     project.hsPkgs.asteria-game.components.exes.asteria-bootstrap;
+  packages.asteria-invariant =
+    project.hsPkgs.asteria-game.components.exes.asteria-invariant;
   inherit project;
 }

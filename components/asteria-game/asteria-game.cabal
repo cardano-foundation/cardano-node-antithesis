@@ -119,3 +119,24 @@ executable asteria-game
     , plutus-tx
     , text
     , time
+
+executable asteria-invariant
+  import:           settings
+  main-is:          InvariantMain.hs
+  hs-source-dirs:   app
+  default-language: GHC2021
+  build-depends:
+    , aeson
+    , asteria-game
+    , base
+    , bytestring
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-node-clients
+    , containers
+    , microlens
+    , plutus-ledger-api
+    , plutus-tx
+    , text

@@ -47,6 +47,7 @@ pkgs.dockerTools.buildImage {
       usrBinEnv
       project.packages.asteria-game
       project.packages.asteria-bootstrap
+      project.packages.asteria-invariant
     ];
   };
   config = {
