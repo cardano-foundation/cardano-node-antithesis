@@ -59,12 +59,12 @@ import PlutusTx.Builtins.Internal (BuiltinData (..))
 import PlutusTx.IsData.Class (fromBuiltinData)
 
 import Asteria.Datums (AsteriaDatum (..))
+import Asteria.Deploy (readSeed)
 import Asteria.Provider (N2CSettings, settingsFromEnv, withN2C)
 import Asteria.Sdk (sdkAlways, sdkReachable, sdkSometimes, sdkUnreachable)
 import Asteria.Validators (
-    adminMintScript,
-    asteriaScript,
-    spacetimeScript,
+    AppliedScripts (..),
+    applyScripts,
  )
 
 main :: IO ()
@@ -77,20 +77,35 @@ main = do
         ("asteria_invariant_started_" <> invariant)
         Nothing
     settings <- settingsFromEnv
-    result <- try (run invariant settings)
-    case result of
-        Left (e :: SomeException) ->
+    -- Need bootstrap's seed to derive the per-deploy script
+    -- hashes / addresses. Without it the invariant can't even
+    -- query the right UTxOs.
+    mSeed <- readSeed
+    case mSeed of
+        Nothing -> do
             sdkUnreachable
-                ("asteria_invariant_errored_" <> invariant)
-                (Just $ object ["error" .= T.pack (show e)])
-        Right () -> pure ()
+                ("asteria_invariant_seed_missing_" <> invariant)
+                Nothing
+            -- Don't error — finally_ should still exit 0 so the
+            -- composer marks it complete; the unreachable fires
+            -- the "bootstrap didn't run" signal.
+            pure ()
+        Just seedIn -> do
+            let scripts = applyScripts seedIn
+            result <- try (run invariant settings scripts)
+            case result of
+                Left (e :: SomeException) ->
+                    sdkUnreachable
+                        ("asteria_invariant_errored_" <> invariant)
+                        (Just $ object ["error" .= T.pack (show e)])
+                Right () -> pure ()
     sdkReachable ("asteria_invariant_completed_" <> invariant) Nothing
 
-run :: Text -> N2CSettings -> IO ()
-run invariant settings = withN2C settings $ \provider _submitter ->
+run :: Text -> N2CSettings -> AppliedScripts -> IO ()
+run invariant settings scripts = withN2C settings $ \provider _submitter ->
     case invariant of
-        "admin_singleton" -> checkAdminSingleton provider
-        "consistency" -> checkConsistency provider
+        "admin_singleton" -> checkAdminSingleton provider scripts
+        "consistency" -> checkConsistency provider scripts
         other ->
             sdkUnreachable
                 "asteria_invariant_unknown"
@@ -99,10 +114,10 @@ run invariant settings = withN2C settings $ \provider _submitter ->
 {- | Invariant: exactly one @asteriaAdmin@ NFT exists at the
 asteria spend address (across all UTxOs).
 -}
-checkAdminSingleton :: Provider IO -> IO ()
-checkAdminSingleton provider = do
-    let addr = scriptAddr (hashScript asteriaScript)
-        adminPolicy = PolicyID (hashScript adminMintScript)
+checkAdminSingleton :: Provider IO -> AppliedScripts -> IO ()
+checkAdminSingleton provider scripts = do
+    let addr = scriptAddr (asAsteriaHash scripts)
+        adminPolicy = PolicyID (asAdminMintHash scripts)
         adminName = AssetName "asteriaAdmin"
     utxos <- queryUTxOs provider addr
     let total = sum (map (countAsset adminPolicy adminName . snd) utxos)
@@ -122,11 +137,11 @@ checkAdminSingleton provider = do
 equals the number of @SHIP*@ tokens at the spacetime spend
 address. True after pure-spawn flows; false after quit/mine.
 -}
-checkConsistency :: Provider IO -> IO ()
-checkConsistency provider = do
-    let asteriaAddr = scriptAddr (hashScript asteriaScript)
-        shipAddr = scriptAddr (hashScript spacetimeScript)
-        shipyardPolicy = PolicyID (hashScript spacetimeScript)
+checkConsistency :: Provider IO -> AppliedScripts -> IO ()
+checkConsistency provider scripts = do
+    let asteriaAddr = scriptAddr (asAsteriaHash scripts)
+        shipAddr = scriptAddr (asSpacetimeHash scripts)
+        shipyardPolicy = PolicyID (asSpacetimeHash scripts)
     asteriaUtxos <- queryUTxOs provider asteriaAddr
     shipUtxos <- queryUTxOs provider shipAddr
     let counter = case asteriaUtxos of

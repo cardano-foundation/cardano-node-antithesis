@@ -78,6 +78,7 @@ import PlutusTx.Builtins.Internal (BuiltinData (..))
 import PlutusTx.IsData.Class (fromBuiltinData)
 
 import Asteria.Datums (AsteriaDatum (..))
+import Asteria.Deploy (readSeed)
 import Asteria.Game (
     SpawnShipParams (..),
     spawnShipProgram,
@@ -90,10 +91,8 @@ import Asteria.RandomSource (
  )
 import Asteria.Sdk (sdkReachable, sdkSometimes, sdkUnreachable)
 import Asteria.Validators (
-    adminMintScript,
-    asteriaScript,
-    pelletScript,
-    spacetimeScript,
+    AppliedScripts (..),
+    applyScripts,
  )
 import Asteria.Wallet (
     WalletKey (..),
@@ -114,11 +113,25 @@ main = do
     rng <- newSystemSource (hash playerIdStr)
     settings <- settingsFromEnv
     walletKey <- readWalletKey genesisKeyPath
+    -- Bootstrap is the source of truth for which UTxO seeded the
+    -- one-shot admin policy; without that seed we can't derive
+    -- the per-deploy validators / addresses correctly. Fail fast
+    -- if the seed file is missing — that means bootstrap hasn't
+    -- completed yet on this cluster.
+    mSeed <- readSeed
+    seedIn <- case mSeed of
+        Just s -> pure s
+        Nothing -> do
+            sdkUnreachable
+                ("asteria_player_seed_missing_" <> playerId)
+                Nothing
+            error "asteria-game: seed.json missing — bootstrap not run"
+    let scripts = applyScripts seedIn
     withN2C settings $ \provider submitter -> do
         sdkReachable
             ("asteria_player_n2c_connected_" <> playerId)
             Nothing
-        result <- try (observeAndAct provider submitter walletKey rng playerId)
+        result <- try (observeAndAct provider submitter walletKey rng playerId scripts)
         case result of
             Left (e :: SomeException) ->
                 sdkUnreachable
@@ -133,9 +146,10 @@ observeAndAct ::
     WalletKey ->
     RandomSource ->
     Text ->
+    AppliedScripts ->
     IO ()
-observeAndAct provider submitter wk rng playerId = do
-    let asteriaAddr = scriptAddr (hashScript asteriaScript)
+observeAndAct provider submitter wk rng playerId scripts = do
+    let asteriaAddr = scriptAddr (asAsteriaHash scripts)
     outs <- queryUTxOs provider asteriaAddr
     case outs of
         [] -> do
@@ -176,6 +190,7 @@ observeAndAct provider submitter wk rng playerId = do
                             (aIn, aOut)
                             datum
                             playerId
+                            scripts
 
 attemptSpawn ::
     Provider IO ->
@@ -184,8 +199,9 @@ attemptSpawn ::
     (TxIn, TxOut ConwayEra) ->
     AsteriaDatum ->
     Text ->
+    AppliedScripts ->
     IO ()
-attemptSpawn provider submitter wk (aIn, aOut) datum playerId = do
+attemptSpawn provider submitter wk (aIn, aOut) datum playerId scripts = do
     sdkReachable
         ("asteria_player_ship_spawn_attempted_" <> playerId)
         Nothing
@@ -197,11 +213,11 @@ attemptSpawn provider submitter wk (aIn, aOut) datum playerId = do
     SlotNo nowSlot <- posixMsToSlot provider nowMs
     let validToSlot = SlotNo (nowSlot + 60)
     fundingSeed@(fundingIn, _) <- pickWalletUtxo provider wk
-    let asteriaAddr = scriptAddr (hashScript asteriaScript)
-        shipAddr = scriptAddr (hashScript spacetimeScript)
-        adminPolicy = PolicyID (hashScript adminMintScript)
-        shipyardPolicy = PolicyID (hashScript spacetimeScript)
-        fuelPolicy = PolicyID (hashScript pelletScript)
+    let asteriaAddr = scriptAddr (asAsteriaHash scripts)
+        shipAddr = scriptAddr (asSpacetimeHash scripts)
+        adminPolicy = PolicyID (asAdminMintHash scripts)
+        shipyardPolicy = PolicyID (asSpacetimeHash scripts)
+        fuelPolicy = PolicyID (asPelletHash scripts)
         params =
             SpawnShipParams
                 { sspAsteriaIn = aIn
@@ -213,9 +229,9 @@ attemptSpawn provider submitter wk (aIn, aOut) datum playerId = do
                 , sspAdminName = AssetName (SBS.toShort (BS8.pack "asteriaAdmin"))
                 , sspShipyardPolicy = shipyardPolicy
                 , sspFuelPolicy = fuelPolicy
-                , sspAsteriaScript = asteriaScript
-                , sspSpacetimeScript = spacetimeScript
-                , sspPelletScript = pelletScript
+                , sspAsteriaScript = asAsteriaScript scripts
+                , sspSpacetimeScript = asSpacetimeScript scripts
+                , sspPelletScript = asPelletScript scripts
                 , sspFundingIn = fundingIn
                 , sspValidTo = validToSlot
                 , sspPilotAddr = walletAddr wk

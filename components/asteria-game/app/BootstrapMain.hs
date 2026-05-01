@@ -1,37 +1,42 @@
 {- |
 Module      : Main
-Description : Iteration-5b bootstrap — create the asteria UTxO.
+Description : Idempotent, one-shot asteria deploy.
 
-Uses the genesis wallet from 'Asteria.Wallet' and the
-parameter-applied validators from 'Asteria.Validators' to:
+Picks a wallet UTxO as the deploy seed, applies the seed to the
+four asteria validators (so 'admin_mint' becomes a one-shot
+policy parameterised on that exact UTxO), and submits the tx
+that mints the @asteriaAdmin@ NFT and locks it at the asteria
+spend address with the initial @AsteriaDatum {ship_counter=0,
+shipyard_policy=spacetime_hash}@.
 
-  1. Mint exactly one @"asteriaAdmin"@ token via the always-true
-     @admin_mint@ policy (whose hash is baked into @admin_token@).
-  2. Lock that admin NFT at the @asteria.spend@ script address with
-     the initial inline @AsteriaDatum {ship_counter=0,
-     shipyard_policy=spacetime_hash}@ — the on-chain "asteria UTxO"
-     that ships will mine and consume.
-  3. Exit 0 so the player containers' @depends_on@ unblocks.
+Idempotence is enforced both off-chain and on-chain:
 
-Subsequent iterations layer on:
+  * Off-chain: bootstrap reads @\/asteria-deploy\/seed.json@ on
+    startup. If present, it reuses the same seed (deterministic
+    re-derivation) and short-circuits if the asteria UTxO already
+    exists at the resulting address.
+  * On-chain: 'admin_mint(seed)' rejects any tx that doesn't
+    consume the exact seed 'OutputReference'. The seed can be
+    consumed at most once across all chain history, so the
+    @asteriaAdmin@ token can be minted at most once.
 
-  * deploy of all four validators as inline ref-scripts at the
-    @deploy.spend@ address (so move_ship / mine / gather txs can
-    reference them instead of re-attaching the script every time);
-  * mint+lock of N pellet UTxOs at known coordinates;
-  * the actual game loop.
+The seed is written to disk *before* the deploy tx is submitted,
+so a crash between write and submit leaves either no file (next
+attempt picks fresh) or a consistent file (next attempt
+re-derives the same scripts).
 -}
 module Main (main) where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, try)
 import Data.Aeson (object, (.=))
+import Data.ByteString.Short qualified as SBS
 import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Void (Void)
-import Lens.Micro ((%~), (&), (.~), (^.))
+import Lens.Micro ((%~), (&), (^.))
 
 import Cardano.Crypto.DSIGN (
     Ed25519DSIGN,
@@ -51,7 +56,6 @@ import Cardano.Ledger.Api.Tx.Wits (addrTxWitsL)
 import Cardano.Ledger.BaseTypes (Network (Testnet))
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.Core (hashScript)
 import Cardano.Ledger.Credential (
     Credential (ScriptHashObj),
     StakeReference (StakeRefNull),
@@ -89,9 +93,14 @@ import Cardano.Node.Client.TxBuild (
 
 import Asteria.Crypto (hashToBuiltinByteString)
 import Asteria.Datums (AsteriaDatum (..))
+import Asteria.Deploy (readSeed, writeSeed)
 import Asteria.Provider (settingsFromEnv, withN2C)
 import Asteria.Sdk (sdkReachable, sdkSometimes, sdkUnreachable)
-import Asteria.Validators (adminMintScript, asteriaScript, spacetimeScript)
+import Asteria.Validators (
+    AppliedScripts (..),
+    applyScripts,
+    asteriaAdminAssetName,
+ )
 import Asteria.Wallet (
     WalletKey (..),
     genesisKeyPath,
@@ -111,7 +120,30 @@ main = do
             object ["addr" .= T.pack (show (walletAddr walletKey))]
         )
     withN2C settings $ \provider submitter -> do
-        deployed <- isAlreadyDeployed provider
+        -- 1. Resolve the seed: prefer the persisted one (this
+        --    re-derivation guarantees identical script hashes
+        --    and addresses across container restarts), else
+        --    pick a fresh wallet UTxO.
+        mPersisted <- readSeed
+        seedIn <- case mPersisted of
+            Just s -> do
+                sdkReachable "asteria_bootstrap_seed_reused" Nothing
+                pure s
+            Nothing -> do
+                (sIn, sOut) <- pickWalletUtxo provider walletKey
+                sdkReachable
+                    "asteria_bootstrap_seed_picked"
+                    ( Just $
+                        object
+                            ["seed_coin" .= unCoin (sOut ^. coinTxOutL)]
+                    )
+                pure sIn
+        let scripts = applyScripts seedIn
+            asteriaAddr = scriptAddr (asAsteriaHash scripts)
+        -- 2. Already on chain? (Both pre- and post-restart paths
+        --    end here — if the deploy tx already landed, short-
+        --    circuit.)
+        deployed <- isAlreadyDeployed provider asteriaAddr
         if deployed
             then
                 sdkSometimes
@@ -119,60 +151,81 @@ main = do
                     "asteria_bootstrap_already_deployed"
                     ( Just $
                         object
-                            [ "asteria_addr"
-                                .= T.pack
-                                    (show (scriptAddr (hashScript asteriaScript)))
-                            ]
+                            ["asteria_addr" .= T.pack (show asteriaAddr)]
                     )
-            else do
-                seed <- pickWalletUtxo provider walletKey
-                sdkReachable
-                    "asteria_bootstrap_seed_picked"
-                    ( Just $
-                        object
-                            [ "seed_coin"
-                                .= unCoin (snd seed ^. coinTxOutL)
-                            ]
-                    )
-                result <- try (createAsteria provider submitter walletKey seed)
-                case result of
-                    Left (e :: SomeException) -> do
-                        sdkUnreachable
-                            "asteria_bootstrap_create_asteria_failed"
-                            (Just $ object ["error" .= T.pack (show e)])
-                        error (show e)
-                    Right () ->
-                        sdkSometimes True "asteria_bootstrap_asteria_created" Nothing
+            else case mPersisted of
+                Just _ -> do
+                    -- We have a seed file but no asteria UTxO at
+                    -- the derived addr. Either the deploy is in
+                    -- the mempool (will land soon) or it never
+                    -- landed and the seed UTxO is gone — submit
+                    -- will then fail loudly.
+                    runDeploy provider submitter walletKey seedIn scripts asteriaAddr
+                Nothing -> do
+                    -- Fresh seed: write to disk BEFORE submit so
+                    -- a crash leaves a consistent state.
+                    writeSeed seedIn
+                    sdkReachable "asteria_bootstrap_seed_persisted" Nothing
+                    runDeploy provider submitter walletKey seedIn scripts asteriaAddr
     sdkReachable "asteria_bootstrap_completed" Nothing
 
-{- | Returns 'True' if the asteria-deployed state already exists on
-chain. The check is conservative: any UTxO at the asteria spend
-address that carries one unit of @(admin_mint_hash, "asteriaAdmin")@
-counts as deployed.
+runDeploy ::
+    Provider IO ->
+    Submitter IO ->
+    WalletKey ->
+    TxIn ->
+    AppliedScripts ->
+    Addr ->
+    IO ()
+runDeploy provider submitter walletKey seedIn scripts asteriaAddr = do
+    -- We need the seed UTxO's TxOut for the build's input list.
+    seedSeed@(_, _) <- resolveSeed provider walletKey seedIn
+    result <-
+        try
+            ( createAsteria
+                provider
+                submitter
+                walletKey
+                scripts
+                asteriaAddr
+                seedSeed
+            )
+    case result of
+        Left (e :: SomeException) -> do
+            sdkUnreachable
+                "asteria_bootstrap_create_asteria_failed"
+                (Just $ object ["error" .= T.pack (show e)])
+            error (show e)
+        Right () ->
+            sdkSometimes True "asteria_bootstrap_asteria_created" Nothing
 
-This is the first line of idempotence — Antithesis can restart the
-bootstrap container at any time, and subsequent invocations must not
-re-mint the admin NFT or re-create the Asteria UTxO. The Plutus
-admin_mint policy is currently always-true (PR #67's iteration-5b
-placeholder), so chain-level uniqueness is *not* enforced; the next
-PR replaces admin_mint with a one-shot policy parameterised on a
-seed @OutputReference@. Until then this Haskell-side check, plus
-Antithesis's @serial_driver_@ scheduling, is the contract.
+{- | Look up a 'TxIn' in the wallet's UTxOs and return the
+'(TxIn, TxOut)' pair the build needs. Errors if not found —
+that means the seed was consumed by another tx, which is fatal
+for this bootstrap run.
 -}
-isAlreadyDeployed :: Provider IO -> IO Bool
-isAlreadyDeployed provider = do
-    let asteriaAddr = scriptAddr (hashScript asteriaScript)
-        adminPolicy = PolicyID (hashScript adminMintScript)
-        adminName = AssetName "asteriaAdmin"
-    utxos <- queryUTxOs provider asteriaAddr
-    pure $ any (hasAsset adminPolicy adminName . snd) utxos
-  where
-    hasAsset pid an out =
-        case out ^. valueTxOutL of
-            MaryValue _ (MultiAsset assets) ->
-                case Map.lookup pid assets of
-                    Just inner -> Map.findWithDefault 0 an inner > 0
-                    Nothing -> False
+resolveSeed ::
+    Provider IO -> WalletKey -> TxIn -> IO (TxIn, TxOut ConwayEra)
+resolveSeed provider wk needle = do
+    utxos <- queryUTxOs provider (walletAddr wk)
+    case lookup needle utxos of
+        Just out -> pure (needle, out)
+        Nothing ->
+            error
+                ( "Asteria bootstrap: persisted seed "
+                    <> show needle
+                    <> " not found at wallet addr — likely \
+                       \consumed by an unrelated tx"
+                )
+
+{- | Returns 'True' if any UTxO already sits at the (per-deploy)
+asteria spend address. Under the one-shot policy at most one
+such UTxO can ever exist, so the conservative "any UTxO" check
+matches the on-chain invariant exactly.
+-}
+isAlreadyDeployed :: Provider IO -> Addr -> IO Bool
+isAlreadyDeployed provider addr =
+    not . null <$> queryUTxOs provider addr
 
 {- | Build, sign, submit the asteria-creation tx and wait for the
 ship-counter=0 UTxO to land at the asteria spend address.
@@ -181,14 +234,15 @@ createAsteria ::
     Provider IO ->
     Submitter IO ->
     WalletKey ->
+    AppliedScripts ->
+    Addr ->
     (TxIn, TxOut ConwayEra) ->
     IO ()
-createAsteria provider submitter wk seed@(seedIn, _) = do
+createAsteria provider submitter wk scripts asteriaAddr seed@(seedIn, _) = do
     pp <- queryProtocolParams provider
-    let asteriaAddr = scriptAddr (hashScript asteriaScript)
-        adminPolicy = PolicyID (hashScript adminMintScript)
-        adminName = AssetName "asteriaAdmin"
-        spacetimeHashBs = case hashScript spacetimeScript of
+    let adminPolicy = PolicyID (asAdminMintHash scripts)
+        adminName = AssetName (SBS.toShort asteriaAdminAssetName)
+        spacetimeHashBs = case asSpacetimeHash scripts of
             ScriptHash h -> hashToBuiltinByteString h
         initialDatum =
             AsteriaDatum
@@ -204,7 +258,7 @@ createAsteria provider submitter wk seed@(seedIn, _) = do
         prog = do
             _ <- spend seedIn
             collateral seedIn
-            attachScript adminMintScript
+            attachScript (asAdminMintScript scripts)
             mint adminPolicy (Map.singleton adminName 1) ()
             _ <- payTo' asteriaAddr asteriaValue initialDatum
             pure ()
@@ -226,9 +280,6 @@ createAsteria provider submitter wk seed@(seedIn, _) = do
             r <- submitTx submitter signed
             case r of
                 Submitted _ ->
-                    -- Cluster cold-start can take a while to forge
-                    -- + propagate the first non-genesis block. Give
-                    -- it 3 minutes before declaring failure.
                     waitForAsteria
                         provider
                         asteriaAddr

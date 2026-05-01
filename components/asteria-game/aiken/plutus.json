@@ -19,16 +19,32 @@
           "$ref": "#/definitions/Data"
         }
       },
-      "compiledCode": "585401010029800aba2aba1aab9eaab9dab9a4888896600264653001300600198031803800cc0180092225980099b8748000c01cdd500144c9289bae30093008375400516401830060013003375400d149a26cac8009",
-      "hash": "def68337867cb4f1f95b6b811fedbfcdd7780d10a95cc072077088ea"
+      "parameters": [
+        {
+          "title": "seed",
+          "schema": {
+            "$ref": "#/definitions/cardano~1transaction~1OutputReference"
+          }
+        }
+      ],
+      "compiledCode": "590127010100229800aba2aba1aba0aab9faab9eaab9dab9a488888896600264646644b30013370e900018031baa001899912cc004c8cc004004dd61806801112cc00400629422b30013375e601c60166ea8c0380040462946266004004601e002804900c44cdd79ba6325980099b8748008c024dd5000c52f5bded8c113756601a60146ea800500819198008009bab300d300e300e300e300e0022259800800c5300103d87a8000899192cc004cdc8803000c56600266e3c018006266e9520003300f300d0024bd7045300103d87a8000402d1330040043011003402c6eb8c02c004c03800500c2610fa14c6173746572696141646d696e01008a50401c6eb8c028c01cdd500098039baa300a0048b200a300800130083009001300800130033754011149a26cac8009",
+      "hash": "b4e7c3e6723f3155f0e624cedfd5dab38c34152fde3022a8ffad7375"
     },
     {
       "title": "admin_mint.admin_mint.else",
       "redeemer": {
         "schema": {}
       },
-      "compiledCode": "585401010029800aba2aba1aab9eaab9dab9a4888896600264653001300600198031803800cc0180092225980099b8748000c01cdd500144c9289bae30093008375400516401830060013003375400d149a26cac8009",
-      "hash": "def68337867cb4f1f95b6b811fedbfcdd7780d10a95cc072077088ea"
+      "parameters": [
+        {
+          "title": "seed",
+          "schema": {
+            "$ref": "#/definitions/cardano~1transaction~1OutputReference"
+          }
+        }
+      ],
+      "compiledCode": "590127010100229800aba2aba1aba0aab9faab9eaab9dab9a488888896600264646644b30013370e900018031baa001899912cc004c8cc004004dd61806801112cc00400629422b30013375e601c60166ea8c0380040462946266004004601e002804900c44cdd79ba6325980099b8748008c024dd5000c52f5bded8c113756601a60146ea800500819198008009bab300d300e300e300e300e0022259800800c5300103d87a8000899192cc004cdc8803000c56600266e3c018006266e9520003300f300d0024bd7045300103d87a8000402d1330040043011003402c6eb8c02c004c03800500c2610fa14c6173746572696141646d696e01008a50401c6eb8c028c01cdd500098039baa300a0048b200a300800130083009001300800130033754011149a26cac8009",
+      "hash": "b4e7c3e6723f3155f0e624cedfd5dab38c34152fde3022a8ffad7375"
     },
     {
       "title": "asteria.asteria.spend",
@@ -384,6 +400,10 @@
     }
   ],
   "definitions": {
+    "ByteArray": {
+      "title": "ByteArray",
+      "dataType": "bytes"
+    },
     "Data": {
       "title": "Data",
       "description": "Any Plutus data."
@@ -644,6 +664,27 @@
     "cardano/assets/PolicyId": {
       "title": "PolicyId",
       "dataType": "bytes"
+    },
+    "cardano/transaction/OutputReference": {
+      "title": "OutputReference",
+      "description": "An `OutputReference` is a unique reference to an output on-chain. The `output_index`\n corresponds to the position in the output list of the transaction (identified by its id)\n that produced that output",
+      "anyOf": [
+        {
+          "title": "OutputReference",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "transaction_id",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
     }
   }
 }

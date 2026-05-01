@@ -184,6 +184,7 @@ services:
       - relay1-state:/state:ro
       - utxo-keys:/utxo-keys:ro
       - asteria-game-db:/idx-db
+      - asteria-deploy:/asteria-deploy
     tmpfs:
       - /tmp
     depends_on:
@@ -199,6 +200,11 @@ volumes:
   relay2-state:
   utxo-keys:
   asteria-game-db:
+  # Holds /asteria-deploy/seed.json — bootstrap writes the
+  # one-shot seed TxIn here before submitting the deploy tx;
+  # player + invariant binaries read it on startup to derive
+  # the per-deploy validator hashes / addresses.
+  asteria-deploy:
 
 networks:
   default:
