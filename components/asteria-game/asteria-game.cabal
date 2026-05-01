@@ -1,15 +1,16 @@
 cabal-version: 3.0
-name:          asteria-player
+name:          asteria-game
 version:       0.1.0.0
-synopsis:      Asteria game player for the antithesis cluster
+synopsis:      Asteria game bootstrap+player for the antithesis cluster
 description:
-  Long-running container that plays asteria
+  Long-running container that runs the asteria game
   (https://github.com/txpipe/asteria) inside the cardano-node-antithesis
-  test cluster. Iteration 1 only proves the wiring: Nix-built docker
-  image, baked composer scripts, SDK-reachable assertions. Subsequent
-  iterations layer on the cardano-node-clients TxBuild DSL, the
-  parameter-applied Aiken validators, Antithesis-controlled randomness,
-  and the actual move_ship / gather_fuel / mine_asteria game loop.
+  test cluster. Ships two execs: @asteria-bootstrap@ (idempotent
+  one-shot deploy of the asteria UTxO) and @asteria-game@ (the
+  long-running player loop). The cardano-node-clients TxBuild DSL,
+  parameter-applied Aiken validators, and Antithesis-controlled
+  randomness are all wired in here; the player loop layers on top in
+  subsequent PRs.
 
 license:       Apache-2.0
 license-file:  LICENSE
@@ -82,7 +83,7 @@ executable asteria-bootstrap
   default-language: GHC2021
   build-depends:
     , aeson
-    , asteria-player
+    , asteria-game
     , base
     , cardano-crypto-class
     , cardano-ledger-api
@@ -94,14 +95,14 @@ executable asteria-bootstrap
     , microlens
     , text
 
-executable asteria-player
+executable asteria-game
   import:           settings
   main-is:          PlayerMain.hs
   hs-source-dirs:   app
   default-language: GHC2021
   build-depends:
     , aeson
-    , asteria-player
+    , asteria-game
     , base
     , bytestring
     , cardano-crypto-class

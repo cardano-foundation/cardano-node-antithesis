@@ -27,7 +27,7 @@ let
   };
 
   mkProject = { lib, pkgs, ... }: {
-    name = "asteria-player";
+    name = "asteria-game";
     src = ./..;
     compiler-nix-name = "ghc9122";
     modules = [ fix-libs ];
@@ -55,9 +55,9 @@ let
 
 in {
   devShells.default = project.shellFor shell;
-  packages.asteria-player =
-    project.hsPkgs.asteria-player.components.exes.asteria-player;
+  packages.asteria-game =
+    project.hsPkgs.asteria-game.components.exes.asteria-game;
   packages.asteria-bootstrap =
-    project.hsPkgs.asteria-player.components.exes.asteria-bootstrap;
+    project.hsPkgs.asteria-game.components.exes.asteria-bootstrap;
   inherit project;
 }

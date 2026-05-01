@@ -111,25 +111,68 @@ main = do
             object ["addr" .= T.pack (show (walletAddr walletKey))]
         )
     withN2C settings $ \provider submitter -> do
-        seed <- pickWalletUtxo provider walletKey
-        sdkReachable
-            "asteria_bootstrap_seed_picked"
-            ( Just $
-                object
-                    [ "seed_coin"
-                        .= unCoin (snd seed ^. coinTxOutL)
-                    ]
-            )
-        result <- try (createAsteria provider submitter walletKey seed)
-        case result of
-            Left (e :: SomeException) -> do
-                sdkUnreachable
-                    "asteria_bootstrap_create_asteria_failed"
-                    (Just $ object ["error" .= T.pack (show e)])
-                error (show e)
-            Right () ->
-                sdkSometimes True "asteria_bootstrap_asteria_created" Nothing
+        deployed <- isAlreadyDeployed provider
+        if deployed
+            then
+                sdkSometimes
+                    True
+                    "asteria_bootstrap_already_deployed"
+                    ( Just $
+                        object
+                            [ "asteria_addr"
+                                .= T.pack
+                                    (show (scriptAddr (hashScript asteriaScript)))
+                            ]
+                    )
+            else do
+                seed <- pickWalletUtxo provider walletKey
+                sdkReachable
+                    "asteria_bootstrap_seed_picked"
+                    ( Just $
+                        object
+                            [ "seed_coin"
+                                .= unCoin (snd seed ^. coinTxOutL)
+                            ]
+                    )
+                result <- try (createAsteria provider submitter walletKey seed)
+                case result of
+                    Left (e :: SomeException) -> do
+                        sdkUnreachable
+                            "asteria_bootstrap_create_asteria_failed"
+                            (Just $ object ["error" .= T.pack (show e)])
+                        error (show e)
+                    Right () ->
+                        sdkSometimes True "asteria_bootstrap_asteria_created" Nothing
     sdkReachable "asteria_bootstrap_completed" Nothing
+
+{- | Returns 'True' if the asteria-deployed state already exists on
+chain. The check is conservative: any UTxO at the asteria spend
+address that carries one unit of @(admin_mint_hash, "asteriaAdmin")@
+counts as deployed.
+
+This is the first line of idempotence — Antithesis can restart the
+bootstrap container at any time, and subsequent invocations must not
+re-mint the admin NFT or re-create the Asteria UTxO. The Plutus
+admin_mint policy is currently always-true (PR #67's iteration-5b
+placeholder), so chain-level uniqueness is *not* enforced; the next
+PR replaces admin_mint with a one-shot policy parameterised on a
+seed @OutputReference@. Until then this Haskell-side check, plus
+Antithesis's @serial_driver_@ scheduling, is the contract.
+-}
+isAlreadyDeployed :: Provider IO -> IO Bool
+isAlreadyDeployed provider = do
+    let asteriaAddr = scriptAddr (hashScript asteriaScript)
+        adminPolicy = PolicyID (hashScript adminMintScript)
+        adminName = AssetName "asteriaAdmin"
+    utxos <- queryUTxOs provider asteriaAddr
+    pure $ any (hasAsset adminPolicy adminName . snd) utxos
+  where
+    hasAsset pid an out =
+        case out ^. valueTxOutL of
+            MaryValue _ (MultiAsset assets) ->
+                case Map.lookup pid assets of
+                    Just inner -> Map.findWithDefault 0 an inner > 0
+                    Nothing -> False
 
 {- | Build, sign, submit the asteria-creation tx and wait for the
 ship-counter=0 UTxO to land at the asteria spend address.

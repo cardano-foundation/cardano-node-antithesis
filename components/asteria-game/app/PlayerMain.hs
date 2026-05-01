@@ -28,10 +28,10 @@ import Data.Foldable (toList)
 import Data.Hashable (hash)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Void (Void)
-import Lens.Micro ((^.))
 import System.Environment (lookupEnv)
 
 import Cardano.Crypto.DSIGN (
@@ -74,7 +74,7 @@ import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Short qualified as SBS
 import Data.Set qualified as Set
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Lens.Micro ((%~), (&))
+import Lens.Micro ((%~), (&), (^.))
 import PlutusTx.Builtins.Internal (BuiltinData (..))
 import PlutusTx.IsData.Class (fromBuiltinData)
 
@@ -107,7 +107,7 @@ import Asteria.Wallet (
 main :: IO ()
 main = do
     playerIdStr <-
-        maybe "unknown" id <$> lookupEnv "ASTERIA_PLAYER_ID"
+        fromMaybe "unknown" <$> lookupEnv "ASTERIA_PLAYER_ID"
     let playerId = T.pack playerIdStr
     sdkReachable
         ("asteria_player_started_" <> playerId)
@@ -267,7 +267,7 @@ attemptSpawn provider submitter wk (aIn, aOut) datum spawnedRef playerId = do
                         True
                         ("asteria_player_ship_spawned_" <> playerId)
                         Nothing
-                    atomicModifyIORef' spawnedRef (\_ -> (True, ()))
+                    atomicModifyIORef' spawnedRef (const (True, ()))
                 Rejected reason ->
                     sdkUnreachable
                         ("asteria_player_ship_spawn_failed_" <> playerId)

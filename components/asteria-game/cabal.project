@@ -1,7 +1,9 @@
 -- Pinned to match cardano-node-clients's cabal.project exactly,
 -- because we depend on its TxBuild DSL + Provider/Submitter
--- interface and need every transitive source-repository-package
--- pin available so cabal can resolve the build plan.
+-- interface and (for the runtime container) its utxo-indexer
+-- daemon. Cabal can't see the SRP'd package's own cabal.project,
+-- so every transitive source-repository-package pin and constraint
+-- has to be repeated here.
 --
 -- When bumping the cardano-node-clients tag below, copy the
 -- updated index-state + SRP block + constraints from
@@ -30,8 +32,8 @@ repository cardano-haskell-packages
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  tag: f6a31ca6c169810a46e45648a0868d7a48eb1f02
-  --sha256: 0fcblvcqdhlj3kjq7jyarj169grmi6csvmrhpja4sc80ann3nihr
+  tag: 5707836b623918043a7f2fbdcc2ed499902ac082
+  --sha256: 12dyzgg1q1lqjny2dmwa3l7ljsw7kadlll41ghgq30rm79ad2vz3
 
 source-repository-package
   type: git
@@ -93,13 +95,3 @@ constraints:
   , cuddle == 1.1.1.0
   , quickcheck-state-machine == 0.10.3
   , ouroboros-consensus == 1.0.0.0
-  , ouroboros-network == 1.1.0.0
-  , typed-protocols == 1.2.0.0
-
-package ouroboros-consensus
-  tests: False
-  benchmarks: False
-
-package ouroboros-network
-  tests: False
-  benchmarks: False

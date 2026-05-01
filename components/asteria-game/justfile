@@ -4,7 +4,7 @@ format:
     #!/usr/bin/env bash
     set -euo pipefail
     fourmolu -i src app
-    cabal-fmt -i asteria-player.cabal
+    cabal-fmt -i asteria-game.cabal
     nixfmt *.nix
     nixfmt nix/*.nix
 
@@ -23,8 +23,8 @@ load-docker-image:
     version=$(nix eval --raw .#version)
     docker load < ./result
     docker tag \
-      "ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-player:$version" \
-      ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-player:dev
+      "ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:$version" \
+      ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:dev
     echo "image tag: $version (also tagged :dev)"
 
 CI:

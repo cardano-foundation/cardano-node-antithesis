@@ -26,6 +26,7 @@ module Asteria.Sdk (
 import Data.Aeson (Value, encode, object, (.=))
 import Data.Aeson.Key qualified as Key
 import Data.ByteString.Lazy qualified as LBS
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import System.Directory (createDirectoryIfMissing)
@@ -86,7 +87,7 @@ mkAssert displayType hit mustHit ident msg details =
                         , "begin_line" .= (0 :: Int)
                         , "begin_column" .= (0 :: Int)
                         ]
-                , "details" .= maybe (object []) id details
+                , "details" .= fromMaybe (object []) details
                 ]
         ]
 

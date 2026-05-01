@@ -44,6 +44,7 @@ import Data.Aeson.Types (parseEither)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as Base16
 import Data.ByteString.Char8 qualified as BS8
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 
@@ -111,9 +112,8 @@ mkKey hexT =
                             <> show (BS.length bytes)
                         )
         sk =
-            maybe
+            fromMaybe
                 (error "Asteria.Wallet: rawDeserialiseSignKeyDSIGN")
-                id
                 (rawDeserialiseSignKeyDSIGN keyBytes)
         vk = VKey (deriveVerKeyDSIGN sk)
         kh = hashKey vk

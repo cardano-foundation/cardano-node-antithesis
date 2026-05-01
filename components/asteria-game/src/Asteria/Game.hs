@@ -79,9 +79,10 @@ data SpawnShipParams = SpawnShipParams
     , sspFundingIn :: TxIn
     , sspValidTo :: SlotNo
     , sspPilotAddr :: Addr
-    -- ^ Where the new PILOT NFT lands. Conventional asteria
-    -- off-chain code sends it to the player's wallet so the
-    -- pilot doubles as proof of ship ownership.
+    {- ^ Where the new PILOT NFT lands. Conventional asteria
+    off-chain code sends it to the player's wallet so the
+    pilot doubles as proof of ship ownership.
+    -}
     }
 
 {- | Hard-coded spawn position. Asteria's add_new_ship rule

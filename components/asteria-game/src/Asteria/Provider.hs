@@ -25,6 +25,7 @@ module Asteria.Provider (
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, poll)
 import Control.Exception (SomeException, throwIO)
+import Data.Maybe (fromMaybe)
 import Data.Word (Word32)
 import Text.Read (readMaybe)
 
@@ -51,12 +52,11 @@ data N2CSettings = N2CSettings
 settingsFromEnv :: IO N2CSettings
 settingsFromEnv = do
     sock <-
-        maybe
+        fromMaybe
             (error "CARDANO_NODE_SOCKET_PATH not set")
-            id
             <$> lookupEnv "CARDANO_NODE_SOCKET_PATH"
     magicStr <-
-        maybe "42" id <$> lookupEnv "NETWORK_MAGIC"
+        fromMaybe "42" <$> lookupEnv "NETWORK_MAGIC"
     let magic = case readMaybe magicStr :: Maybe Word32 of
             Just m -> NetworkMagic m
             Nothing ->
