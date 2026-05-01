@@ -102,8 +102,8 @@ share writable chain or ledger stores.
 
 Each relay also writes a startup marker into the shared `amaru-startup`
 volume immediately before the `amaru run` exec. The sidecar mounts that
-volume and the `composer/amaru` scripts into the existing
-`convergence` Test Composer template so Antithesis can score
+volume, and its image contains the Amaru startup proof scripts in the
+existing `convergence` Test Composer template so Antithesis can score
 `parallel_driver_amaru_started.sh` and `finally_amaru_started.sh` as
 explicit properties instead of asking readers to infer startup from
 container background-monitor logs.

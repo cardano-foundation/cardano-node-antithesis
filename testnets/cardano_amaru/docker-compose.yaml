@@ -283,7 +283,7 @@ services:
       - a2-state:/srv/amaru
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar@sha256:5e363f5d99da044c551e148ecb782fb1a195af81f1e0a00167b2f95bad1dcee0
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:741ce87
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -299,8 +299,6 @@ services:
     volumes:
       - tracer:/opt/cardano-tracer
       - amaru-startup:/amaru-startup:ro
-      - ./composer/amaru/finally_amaru_started.sh:/opt/antithesis/test/v1/convergence/finally_amaru_started.sh:ro
-      - ./composer/amaru/parallel_driver_amaru_started.sh:/opt/antithesis/test/v1/convergence/parallel_driver_amaru_started.sh:ro
     depends_on:
       tracer-sidecar:
         condition: service_started
