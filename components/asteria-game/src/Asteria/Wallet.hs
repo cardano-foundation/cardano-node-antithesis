@@ -29,14 +29,16 @@ import Cardano.Crypto.DSIGN (
     rawDeserialiseSignKeyDSIGN,
  )
 import Cardano.Ledger.Address (Addr (..))
-import Cardano.Ledger.Api.Tx.Out (TxOut)
+import Cardano.Ledger.Api.Tx.Out (TxOut, coinTxOutL, valueTxOutL)
 import Cardano.Ledger.BaseTypes (Network (Testnet))
+import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Credential (
     Credential (KeyHashObj),
     StakeReference (StakeRefNull),
  )
 import Cardano.Ledger.Keys (KeyHash, KeyRole (Payment), VKey (..), hashKey)
+import Cardano.Ledger.Mary.Value (MaryValue (..), MultiAsset (..))
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Provider (Provider (..))
 import Data.Aeson (Value (Object), eitherDecodeFileStrict, (.:))
@@ -44,9 +46,13 @@ import Data.Aeson.Types (parseEither)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as Base16
 import Data.ByteString.Char8 qualified as BS8
+import Data.List (sortOn)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
+import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
+import Lens.Micro ((^.))
 
 -- | Loaded wallet: signing key + key hash + address.
 data WalletKey = WalletKey
@@ -126,14 +132,30 @@ walletAddr :: WalletKey -> Addr
 walletAddr wk = Addr Testnet (KeyHashObj (wkKeyHash wk)) StakeRefNull
 
 {- | Query the provider for UTxOs at the wallet's address and
-return the first one. Errors if there are none — caller is
-expected to call this once the cluster has booted.
+return the one with the largest pure-ada balance, preferring
+UTxOs that hold no native tokens (so balanceTx's change output
+doesn't have to carry token dust).
+
+After the first spawn tx the wallet has a small change output
+plus the original genesis UTxO; "first" UTxO selection picks
+the change one and the next spawn fails @BalanceFailed
+InsufficientFee@. Largest-pure-ada selection avoids that.
+
+Errors if there are no UTxOs — caller is expected to call this
+once the cluster has booted.
 -}
 pickWalletUtxo ::
     Provider IO -> WalletKey -> IO (TxIn, TxOut ConwayEra)
 pickWalletUtxo provider wk = do
     let addr = walletAddr wk
     outs <- queryUTxOs provider addr
-    case outs of
+    case sortOn rank outs of
         u : _ -> pure u
         [] -> error ("Asteria.Wallet: no UTxOs at " <> show addr)
+  where
+    -- (hasNativeTokens, Down lovelace): pure-ada UTxOs first,
+    -- then by descending lovelace.
+    rank (_, out) =
+        let MaryValue (Coin lov) (MultiAsset ma) = out ^. valueTxOutL
+            hasTokens = not (Map.null ma)
+         in (hasTokens, Down lov)
