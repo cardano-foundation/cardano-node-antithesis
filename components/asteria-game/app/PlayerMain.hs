@@ -1,32 +1,31 @@
 {- |
 Module      : Main
-Description : Iteration-6b player loop — attempt spawnShip.
+Description : Iteration-6c player single-pass — attempt spawnShip once.
 
-Each player container loops:
+Each invocation does one pass:
 
   1. Observe the asteria UTxO at the asteria spend address.
-  2. If this player has not spawned a ship yet, attempt
-     'spawnShipProgram': build, sign, submit. Emit
-     @asteria_player_ship_spawn_attempted_<id>@ on every try and
-     @asteria_player_ship_spawned_<id>@ on success. On failure,
-     @asteria_player_ship_spawn_failed_<id>@ with the error.
-  3. After spawn (or attempt failure), continue the observation
-     loop with a random sleep.
+  2. If this player is the spawn-eligible player (currently
+     @ASTERIA_PLAYER_ID=1@) attempt 'spawnShipProgram': build,
+     sign, submit. Emit @asteria_player_ship_spawn_attempted_<id>@
+     on the try, @asteria_player_ship_spawned_<id>@ on success,
+     @asteria_player_ship_spawn_failed_<id>@ on rejection.
+  3. Exit 0.
 
-Only the player with @ASTERIA_PLAYER_ID=1@ attempts the spawn so
-multi-player races aren't a concern at this iteration. Iter 6c
-will add fair contention via Antithesis randomness deciding which
-player goes first.
+The Antithesis composer re-fires the parallel driver on its own
+schedule, so a forever loop here would block exclusive scheduling
+for downstream serial drivers. Spawn idempotence comes from chain
+state — once the asteria UTxO has been consumed-and-replaced with
+a higher @ship_counter@, the next attempt's tx will be rejected as
+expected.
 -}
 module Main (main) where
 
-import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, try)
-import Control.Monad (forever, when)
+import Control.Monad (when)
 import Data.Aeson (object, (.=))
 import Data.Foldable (toList)
 import Data.Hashable (hash)
-import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -113,43 +112,29 @@ main = do
         ("asteria_player_started_" <> playerId)
         Nothing
     rng <- newSystemSource (hash playerIdStr)
-    spawnedRef <- newIORef False
     settings <- settingsFromEnv
     walletKey <- readWalletKey genesisKeyPath
     withN2C settings $ \provider submitter -> do
         sdkReachable
             ("asteria_player_n2c_connected_" <> playerId)
             Nothing
-        forever (loop provider submitter walletKey rng spawnedRef playerId)
-
-loop ::
-    Provider IO ->
-    Submitter IO ->
-    WalletKey ->
-    RandomSource ->
-    IORef Bool ->
-    Text ->
-    IO ()
-loop provider submitter wk rng spawnedRef playerId = do
-    result <- try (observeAndAct provider submitter wk rng spawnedRef playerId)
-    case result of
-        Left (e :: SomeException) ->
-            sdkUnreachable
-                ("asteria_player_loop_errored_" <> playerId)
-                (Just $ object ["error" .= T.pack (show e)])
-        Right () -> pure ()
-    sleepSecs <- randomInRange rng 1 5
-    threadDelay (fromIntegral sleepSecs * 1_000_000)
+        result <- try (observeAndAct provider submitter walletKey rng playerId)
+        case result of
+            Left (e :: SomeException) ->
+                sdkUnreachable
+                    ("asteria_player_pass_errored_" <> playerId)
+                    (Just $ object ["error" .= T.pack (show e)])
+            Right () -> pure ()
+    sdkReachable ("asteria_player_pass_completed_" <> playerId) Nothing
 
 observeAndAct ::
     Provider IO ->
     Submitter IO ->
     WalletKey ->
     RandomSource ->
-    IORef Bool ->
     Text ->
     IO ()
-observeAndAct provider submitter wk rng spawnedRef playerId = do
+observeAndAct provider submitter wk rng playerId = do
     let asteriaAddr = scriptAddr (hashScript asteriaScript)
     outs <- queryUTxOs provider asteriaAddr
     case outs of
@@ -180,16 +165,16 @@ observeAndAct provider submitter wk rng spawnedRef playerId = do
                         ("asteria_player_move_planned_" <> playerId)
                         (Just $ object ["delta_x" .= dx, "delta_y" .= dy])
                     -- Only player 1 attempts to spawn — avoids
-                    -- multi-player races at this iteration.
-                    spawned <- readIORef spawnedRef
-                    when (playerId == "1" && not spawned) $
+                    -- multi-player races at this iteration. The
+                    -- chain rejects double-spawn naturally because
+                    -- the asteria UTxO is consumed-and-replaced.
+                    when (playerId == "1") $
                         attemptSpawn
                             provider
                             submitter
                             wk
                             (aIn, aOut)
                             datum
-                            spawnedRef
                             playerId
 
 attemptSpawn ::
@@ -198,10 +183,9 @@ attemptSpawn ::
     WalletKey ->
     (TxIn, TxOut ConwayEra) ->
     AsteriaDatum ->
-    IORef Bool ->
     Text ->
     IO ()
-attemptSpawn provider submitter wk (aIn, aOut) datum spawnedRef playerId = do
+attemptSpawn provider submitter wk (aIn, aOut) datum playerId = do
     sdkReachable
         ("asteria_player_ship_spawn_attempted_" <> playerId)
         Nothing
@@ -262,12 +246,11 @@ attemptSpawn provider submitter wk (aIn, aOut) datum spawnedRef playerId = do
                 (Just $ object ["outputs" .= length outs])
             r <- submitTx submitter signed
             case r of
-                Submitted _ -> do
+                Submitted _ ->
                     sdkSometimes
                         True
                         ("asteria_player_ship_spawned_" <> playerId)
                         Nothing
-                    atomicModifyIORef' spawnedRef (const (True, ()))
                 Rejected reason ->
                     sdkUnreachable
                         ("asteria_player_ship_spawn_failed_" <> playerId)
