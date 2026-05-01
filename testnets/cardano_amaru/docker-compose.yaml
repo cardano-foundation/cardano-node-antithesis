@@ -68,7 +68,6 @@ services:
       - p1-configs:/configs/1
       - p2-configs:/configs/2
       - p3-configs:/configs/3
-      - utxo-keys:/utxo-keys
 
   tracer:
     image: ghcr.io/intersectmbo/cardano-tracer@sha256:da628263a851b419c38d020d3a7dc3b65b20ee84e730faeb74babd6d96f28efe
@@ -129,40 +128,6 @@ services:
       - ./relay-topology.json:/configs/configs/topology.json:ro
       - relay2-state:/state
       - tracer:/tracer
-
-  tx-generator:
-    # Tag 6808a14 rebuilds the daemon from
-    # lambdasistemi/cardano-node-clients@898a2c4: the N2C
-    # reconnect supervisor plus typed recovery for
-    # BlockedIndefinitelyOnSTM under Antithesis faulting.
-    # The composer drivers record transient control-socket
-    # gaps as telemetry because Antithesis may schedule them
-    # before the daemon is ready or while the relay is faulted.
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:6808a14
-    container_name: tx-generator
-    hostname: tx-generator.example
-    command:
-      - --relay-socket
-      - /state/node.socket
-      - --control-socket
-      - /state/tx-generator-control.sock
-      - --state-dir
-      - /state/txgen
-      - --master-seed-file
-      - /state/txgen/master.seed
-      - --faucet-skey-file
-      - /utxo-keys/genesis.1.skey
-      - --network-magic
-      - "42"
-    volumes:
-      - relay1-state:/state
-      - utxo-keys:/utxo-keys:ro
-    restart: always
-    depends_on:
-      relay1:
-        condition: service_started
-      configurator:
-        condition: service_completed_successfully
 
   bootstrap-producer:
     image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
@@ -377,7 +342,6 @@ volumes:
   bootstrap-state:
   relay1-state:
   relay2-state:
-  utxo-keys:
   amaru-bundle:
   amaru-startup:
   a1-state:

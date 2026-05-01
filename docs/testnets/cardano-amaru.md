@@ -25,25 +25,6 @@ CI and published the runtime image:
 ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
 ```
 
-The tx-generator image is also pinned deliberately:
-
-```text
-ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:6808a14
-```
-
-That image rebuilds the daemon against
-`lambdasistemi/cardano-node-clients@898a2c470ced6a82fa5a32b18cbaf195e1cce927`,
-the merge commit for
-`https://github.com/lambdasistemi/cardano-node-clients/pull/105`. The
-pin matters for Antithesis because the daemon now supervises its N2C
-connection and turns GHC's `BlockedIndefinitelyOnSTM` detection on
-in-flight LSQ/LTxS calls into the typed `ConnectionLost` path. Composer
-requests then get a retryable control response instead of a daemon exit.
-The composer records transient control-socket gaps as reachable telemetry
-rather than as a failing SDK assertion, because the command can be
-scheduled before the daemon is ready or while the upstream relay is being
-faulted.
-
 ## Stake Roles
 
 Amaru is relay-only in this testnet. It is not assigned stake, and it is
@@ -58,6 +39,14 @@ The only stake-bearing block producers are:
 The Amaru services receive no KES key, VRF key, cold key, operational
 certificate, or stake-pool genesis assignment. They start with
 `amaru run` and an upstream peer only.
+
+## Perturbator Policy
+
+The Amaru testnets keep the observability and assertion services
+(`tracer`, `tracer-sidecar`, `log-tailer`, and `sidecar`) but remove the
+transaction perturbator workload. There is no `tx-generator` service in
+`cardano_amaru` or `cardano_amaru_epoch3600`; these profiles isolate the
+cardano-node-to-Amaru bootstrap and relay-loading path.
 
 ## Fast Bootstrap Profile
 
@@ -210,13 +199,15 @@ Run the standard smoke test:
 ./scripts/smoke-test.sh cardano_amaru 600
 ```
 
-That smoke test proves the cardano-node network, sidecar, and
-tx-generator still work with the Amaru services present. For
-`cardano_amaru`, it additionally waits for `bootstrap-producer` to exit
-`0`, then checks that `amaru-relay-1` and `amaru-relay-2` copied the
-bundle into private state volumes and stayed running after `amaru run`
-opened those stores. It then executes the same `finally_amaru_started`
-proof that Antithesis discovers under `/opt/antithesis/test/v1/amaru/`.
+That smoke test proves the cardano-node network and sidecar convergence
+checks still work with the Amaru services present. Since the Amaru
+profiles do not include `tx-generator`, the generic tx-generator smoke
+gate is skipped. For `cardano_amaru`, the smoke then waits for
+`bootstrap-producer` to exit `0`, checks that `amaru-relay-1` and
+`amaru-relay-2` copied the bundle into private state volumes and stayed
+running after `amaru run` opened those stores, and executes the same
+`finally_amaru_started` proof that Antithesis discovers under
+`/opt/antithesis/test/v1/amaru/`.
 
 The long-epoch variant can be validated locally with a larger bootstrap
 timeout, but it is primarily intended for Antithesis:

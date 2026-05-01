@@ -60,25 +60,10 @@ Antithesis image parameter validator accepts image names by tag or by
 digest, but rejects the combined tag-plus-digest form before the cluster
 is built.
 
-The tx-generator image is pinned to the component rebuild from this
-repository commit:
-
-```text
-ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:6808a14
-```
-
-That rebuild consumes
-`lambdasistemi/cardano-node-clients@898a2c470ced6a82fa5a32b18cbaf195e1cce927`,
-the main merge commit for
-`https://github.com/lambdasistemi/cardano-node-clients/pull/105`. The
-important runtime behavior is the N2C reconnect supervisor and typed
-handling of GHC's `BlockedIndefinitelyOnSTM` detection, so a relay
-disconnect during LSQ or local transaction submission returns a
-recoverable control response instead of killing the daemon. The
-Antithesis composer also records transient control-socket gaps as
-reachable telemetry rather than as an SDK failure, because fault
-scheduling can run a command before the daemon is ready or while the
-upstream relay is being disrupted.
+The generic observability and assertion services remain enabled:
+`tracer`, `tracer-sidecar`, `log-tailer`, and `sidecar`. The
+transaction perturbator workload is deliberately absent; this testnet has
+no `tx-generator` service.
 
 ## Runtime Flow
 
@@ -136,12 +121,13 @@ Run the standard node smoke test:
 ./scripts/smoke-test.sh cardano_amaru 600
 ```
 
-The standard smoke test proves the cardano-node network, sidecar, and
-tx-generator still start and converge. For `cardano_amaru`, it also
-waits for `bootstrap-producer` to complete and checks that both
-relay-only Amaru nodes copied the bundle into private state and stayed
-running after `amaru run` opened the stores. It then executes the same
-Amaru startup property that Antithesis discovers under
+The standard smoke test proves the cardano-node network and sidecar
+convergence checks still start. Because this profile has no
+`tx-generator`, the generic tx-generator smoke gate is skipped. For
+`cardano_amaru`, the smoke waits for `bootstrap-producer` to complete,
+checks that both relay-only Amaru nodes copied the bundle into private
+state and stayed running after `amaru run` opened the stores, and then
+executes the same Amaru startup property that Antithesis discovers under
 `/opt/antithesis/test/v1/amaru/`.
 
 For the bootstrap-specific proof, inspect:
