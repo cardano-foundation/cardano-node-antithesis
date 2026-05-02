@@ -41,7 +41,7 @@
     # closure without re-building from source.
     cardano-node-clients = {
       url =
-        "github:lambdasistemi/cardano-node-clients/9db6672adb2f1ab8d01e493bac16f42396a03bb4";
+        "github:lambdasistemi/cardano-node-clients/428313dec43ca213a383c092d5fe8dc1b0cb4ab4";
     };
   };
 
