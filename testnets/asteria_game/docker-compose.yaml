@@ -113,37 +113,17 @@ services:
       - relay2-state:/state
       - tracer:/tracer
 
-  sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:f889dbc
-    environment:
-      NETWORKMAGIC: 42
-      PORT: 3001
-      POOLS: "3"
-    container_name: sidecar
-    hostname: sidecar.example
-    depends_on:
-      tracer-sidecar:
-        condition: service_started
-    restart: always
-    volumes:
-      # Replace the cluster-reconvergence finally-check baked
-      # into sidecar:f889dbc with a no-op. That check fires an
-      # Always assertion ("all producer tips at exact same slot
-      # at end-of-run") which on 1h runs under fault injection
-      # often fails purely on duration. It is orthogonal to the
-      # asteria game contract this testnet scores; see
-      # no-op-finally.sh for the rationale.
-      - ./no-op-finally.sh:/opt/antithesis/test/v1/convergence/finally_tips_agree.sh:ro
-    # Shadow the orphan chain-sync-client driver baked into the
-    # sidecar:f889dbc image. That driver expects an adversary
-    # daemon (a separate component absent from this testnet);
-    # without it the script exits 1 and trips Antithesis's
-    # "Always: zero exit code" property. tmpfs-mounting an empty
-    # directory over the path hides the script from the composer
-    # at start time without modifying the upstream image.
-    tmpfs:
-      - /tmp
-      - /opt/antithesis/test/v1/chain-sync-client
+  # NOTE: the cardano-node-antithesis/sidecar component is
+  # intentionally absent from this testnet. Its image bakes
+  # composer scripts under /opt/antithesis/test/v1/convergence/
+  # and /opt/antithesis/test/v1/chain-sync-client/ — both target
+  # cluster-tip-agreement checks (and an adversary-daemon driver
+  # whose daemon isn't here). Antithesis's composer discovers
+  # those scripts at image-bake time and runs them regardless of
+  # whether the matching daemon is present, producing
+  # "Always: zero exit" findings that are orthogonal to the
+  # asteria game contract this testnet scores. Dropping the
+  # service drops the scripts.
 
   tracer-sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
@@ -190,7 +170,7 @@ services:
   # idempotent (Asteria.Bootstrap.isAlreadyDeployed) so Antithesis
   # can restart this container at will.
   asteria-game:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:d0d9531
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:c99e992
     container_name: asteria-game
     hostname: asteria-game.example
     environment:
