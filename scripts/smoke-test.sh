@@ -38,15 +38,19 @@ for i in $(seq 1 "$POOLS"); do
 
     # Check the node did not terminate. Compose may briefly report created or
     # restarting while dependencies settle, so only terminal states fail.
-    STATE="$(docker inspect -f '{{.State.Status}}' "$NODE" 2>/dev/null || true)"
+    # Use `docker compose ps` to resolve the service to its actual container
+    # name — testnets that allow multi-project coexistence on a shared host
+    # don't pin `container_name:`, so the container is project-prefixed.
+    STATE="$(docker compose -f "$COMPOSE_FILE" ps --format '{{.State}}' "$NODE" 2>/dev/null | head -1)"
     if [ "$STATE" = "exited" ] || [ "$STATE" = "dead" ]; then
       echo "FAIL: ${NODE} crashed"
       docker compose -f "$COMPOSE_FILE" logs --tail 30 "$NODE" 2>&1
       exit 1
     fi
 
-    # Query the node tip via cardano-cli ping
-    if TIP=$(docker exec "$NODE" \
+    # Query the node tip via cardano-cli ping. `docker compose exec`
+    # resolves the service name regardless of container_name.
+    if TIP=$(docker compose -f "$COMPOSE_FILE" exec -T "$NODE" \
         cardano-cli ping --magic "$MAGIC" --host 127.0.0.1 --port 3001 \
         --tip --quiet -c1 2>/dev/null); then
       echo "OK: ${NODE} — ${TIP}"
@@ -58,8 +62,23 @@ for i in $(seq 1 "$POOLS"); do
 done
 
 echo "Checking sidecar convergence command..."
-docker exec sidecar \
+docker compose -f "$COMPOSE_FILE" exec -T sidecar \
   /opt/antithesis/test/v1/convergence/eventually_converged.sh
+
+# Adversary probe: if the testnet has the adversary container, exec
+# its driver once to prove the binary runs, the chainpoints file is
+# reachable, and exit code is zero. Antithesis composer dispatches
+# this same script at much higher rate during a real run.
+if docker compose -f "$COMPOSE_FILE" config --services | grep -qx adversary; then
+  echo "Probing adversary driver..."
+  if ! docker compose -f "$COMPOSE_FILE" exec -T adversary \
+       /opt/antithesis/test/v1/chain-sync-client/parallel_driver_flap.sh; then
+    echo "FAIL: adversary parallel_driver_flap.sh returned non-zero"
+    docker compose -f "$COMPOSE_FILE" logs --tail 30 adversary 2>&1
+    exit 1
+  fi
+  echo "OK: adversary driver"
+fi
 
 # tx-generator probes are conditional on the service being present in
 # the resolved compose. The service is parked in some testnets (see
