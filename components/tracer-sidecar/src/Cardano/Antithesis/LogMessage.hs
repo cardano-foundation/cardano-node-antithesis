@@ -43,6 +43,15 @@ data LogMessageData
         { newTipSelectView :: NewTipSelectView
         , newtip :: Text
         }
+    | -- | A node has switched to a different chain branch. Both
+      -- the old and new tips are reported. Used by the
+      -- ForkTree consumer to track per-host current-tip
+      -- transitions that bypass sequential extension.
+      SwitchedToAFork
+        { newTipSelectView :: NewTipSelectView
+        , newtip :: Text
+        , oldTipSelectView :: NewTipSelectView
+        }
     | OtherLogMessageData
         { originalObject :: Value
         }
@@ -71,6 +80,11 @@ instance FromJSON LogMessageData where
                 AddedToCurrentChain
                     <$> o .: "newTipSelectView"
                     <*> o .: "newtip"
+            Just "TraceAddBlockEvent.SwitchedToAFork" ->
+                SwitchedToAFork
+                    <$> o .: "newTipSelectView"
+                    <*> o .: "newtip"
+                    <*> o .: "oldTipSelectView"
             Just "ServerError" ->
                 ServerError
                     <$> o .: "reason"

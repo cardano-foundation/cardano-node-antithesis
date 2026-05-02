@@ -51,6 +51,7 @@ library
 
   exposed-modules:
     App
+    Cardano.Antithesis.ForkTree
     Cardano.Antithesis.LogMessage
     Cardano.Antithesis.Sdk
     Cardano.Antithesis.Sidecar
@@ -66,13 +67,17 @@ test-suite test
     , async
     , base
     , bytestring
+    , containers
     , filepath
     , hspec
     , hspec-golden
     , process
     , temporary
+    , text
     , time
     , tracer-sidecar
 
   build-tool-depends: hspec-discover:hspec-discover
-  other-modules:      Spec
+  other-modules:
+    ForkTreeSpec
+    Spec

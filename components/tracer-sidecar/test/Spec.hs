@@ -43,6 +43,7 @@ import Data.Maybe
     ( mapMaybe
     )
 import Data.Time
+import ForkTreeSpec qualified
 import System.FilePath ((</>))
 import System.IO.Temp
     ( withSystemTempDirectory
@@ -55,6 +56,7 @@ import Test.Hspec.Golden
 
 spec :: Spec
 spec = do
+    ForkTreeSpec.spec
     (input :: [B8.ByteString]) <-
         runIO $ B8.lines <$> B8.readFile "test/data/input.jsonl"
 
