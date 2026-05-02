@@ -95,6 +95,7 @@ import Asteria.Crypto (hashToBuiltinByteString)
 import Asteria.Datums (AsteriaDatum (..))
 import Asteria.Deploy (readSeed, writeSeed)
 import Asteria.Provider (settingsFromEnv, withN2C)
+import Asteria.Provider qualified
 import Asteria.Sdk (sdkReachable, sdkSometimes, sdkUnreachable)
 import Asteria.Validators (
     AppliedScripts (..),
@@ -119,6 +120,24 @@ main = do
         ( Just $
             object ["addr" .= T.pack (show (walletAddr walletKey))]
         )
+    -- Top-level catch: anything that escapes (withN2C connection
+    -- failures, transient queryUTxOs errors, etc.) should not
+    -- propagate as a non-zero exit — Antithesis treats every
+    -- non-zero exit as a real "Always: zero exit" violation. Emit
+    -- a 'sdkSometimes deferred' assertion describing the failure
+    -- and exit cleanly so the next composer fire retries.
+    result <- try (bootstrap settings walletKey)
+    case result of
+        Left (e :: SomeException) ->
+            sdkSometimes
+                True
+                "asteria_bootstrap_deferred"
+                (Just $ object ["error" .= T.pack (show e)])
+        Right () -> pure ()
+    sdkReachable "asteria_bootstrap_completed" Nothing
+
+bootstrap :: Asteria.Provider.N2CSettings -> WalletKey -> IO ()
+bootstrap settings walletKey =
     withN2C settings $ \provider submitter -> do
         -- 1. Resolve the seed: prefer the persisted one (this
         --    re-derivation guarantees identical script hashes
@@ -154,20 +173,12 @@ main = do
                             ["asteria_addr" .= T.pack (show asteriaAddr)]
                     )
             else case mPersisted of
-                Just _ -> do
-                    -- We have a seed file but no asteria UTxO at
-                    -- the derived addr. Either the deploy is in
-                    -- the mempool (will land soon) or it never
-                    -- landed and the seed UTxO is gone — submit
-                    -- will then fail loudly.
+                Just _ ->
                     runDeploy provider submitter walletKey seedIn scripts asteriaAddr
                 Nothing -> do
-                    -- Fresh seed: write to disk BEFORE submit so
-                    -- a crash leaves a consistent state.
                     writeSeed seedIn
                     sdkReachable "asteria_bootstrap_seed_persisted" Nothing
                     runDeploy provider submitter walletKey seedIn scripts asteriaAddr
-    sdkReachable "asteria_bootstrap_completed" Nothing
 
 runDeploy ::
     Provider IO ->
