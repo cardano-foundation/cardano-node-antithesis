@@ -1,6 +1,10 @@
 name: "Antithesis on cardano-node testnet"
 env:
-  TESTNET: "cardano_node_master"
+  # workflow_dispatch passes `inputs.test`; cron has no inputs so
+  # falls through to the default. Without the `inputs.test` lookup
+  # here, every manual dispatch silently ran against
+  # cardano_node_master regardless of the -f test=... flag.
+  TESTNET: ${{ inputs.test || 'cardano_node_master' }}
   REGISTRY: ghcr.io/cardano-foundation/cardano-node-antithesis
   EMAILS: 'antithesis@cardanofoundation.org'
   DURATION: ${{ inputs.duration || 3 }}
