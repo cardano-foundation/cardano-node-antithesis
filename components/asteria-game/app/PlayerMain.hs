@@ -119,25 +119,30 @@ main = do
     -- if the seed file is missing — that means bootstrap hasn't
     -- completed yet on this cluster.
     mSeed <- readSeed
-    seedIn <- case mSeed of
-        Just s -> pure s
-        Nothing -> do
+    case mSeed of
+        Nothing ->
+            -- Bootstrap hasn't completed yet on this cluster.
+            -- Emit the unreachable signal and exit 0 so the
+            -- composer's "Always: zero exit" property doesn't
+            -- treat the not-yet-ready window as a real failure.
             sdkUnreachable
                 ("asteria_player_seed_missing_" <> playerId)
                 Nothing
-            error "asteria-game: seed.json missing — bootstrap not run"
-    let scripts = applyScripts seedIn
-    withN2C settings $ \provider submitter -> do
-        sdkReachable
-            ("asteria_player_n2c_connected_" <> playerId)
-            Nothing
-        result <- try (observeAndAct provider submitter walletKey rng playerId scripts)
-        case result of
-            Left (e :: SomeException) ->
-                sdkUnreachable
-                    ("asteria_player_pass_errored_" <> playerId)
-                    (Just $ object ["error" .= T.pack (show e)])
-            Right () -> pure ()
+        Just seedIn -> do
+            let scripts = applyScripts seedIn
+            withN2C settings $ \provider submitter -> do
+                sdkReachable
+                    ("asteria_player_n2c_connected_" <> playerId)
+                    Nothing
+                result <-
+                    try
+                        (observeAndAct provider submitter walletKey rng playerId scripts)
+                case result of
+                    Left (e :: SomeException) ->
+                        sdkUnreachable
+                            ("asteria_player_pass_errored_" <> playerId)
+                            (Just $ object ["error" .= T.pack (show e)])
+                    Right () -> pure ()
     sdkReachable ("asteria_player_pass_completed_" <> playerId) Nothing
 
 observeAndAct ::

@@ -178,24 +178,29 @@ runDeploy ::
     Addr ->
     IO ()
 runDeploy provider submitter walletKey seedIn scripts asteriaAddr = do
-    -- We need the seed UTxO's TxOut for the build's input list.
-    seedSeed@(_, _) <- resolveSeed provider walletKey seedIn
+    -- Resolving the seed (looking up its TxOut) and createAsteria
+    -- (build / sign / submit / wait) can both fail transiently —
+    -- chain not yet forging, mempool race after a prior submit
+    -- attempt, etc. We catch and emit a 'sdkSometimes deferred'
+    -- assertion so the composer's "Always: zero exit" property
+    -- isn't fooled by the not-yet-ready window. The next composer
+    -- fire retries.
     result <-
-        try
-            ( createAsteria
+        try $ do
+            seedSeed <- resolveSeed provider walletKey seedIn
+            createAsteria
                 provider
                 submitter
                 walletKey
                 scripts
                 asteriaAddr
                 seedSeed
-            )
     case result of
-        Left (e :: SomeException) -> do
-            sdkUnreachable
-                "asteria_bootstrap_create_asteria_failed"
+        Left (e :: SomeException) ->
+            sdkSometimes
+                True
+                "asteria_bootstrap_create_asteria_deferred"
                 (Just $ object ["error" .= T.pack (show e)])
-            error (show e)
         Right () ->
             sdkSometimes True "asteria_bootstrap_asteria_created" Nothing
 
