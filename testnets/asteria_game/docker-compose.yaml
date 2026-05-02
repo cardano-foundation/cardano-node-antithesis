@@ -125,8 +125,16 @@ services:
       tracer-sidecar:
         condition: service_started
     restart: always
+    # Shadow the orphan chain-sync-client driver baked into the
+    # sidecar:f889dbc image. That driver expects an adversary
+    # daemon (a separate component absent from this testnet);
+    # without it the script exits 1 and trips Antithesis's
+    # "Always: zero exit code" property. tmpfs-mounting an empty
+    # directory over the path hides the script from the composer
+    # at start time without modifying the upstream image.
     tmpfs:
       - /tmp
+      - /opt/antithesis/test/v1/chain-sync-client
 
   tracer-sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
@@ -173,7 +181,7 @@ services:
   # idempotent (Asteria.Bootstrap.isAlreadyDeployed) so Antithesis
   # can restart this container at will.
   asteria-game:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:0546954
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:d0d9531
     container_name: asteria-game
     hostname: asteria-game.example
     environment:
