@@ -224,7 +224,7 @@ services:
                 fi
                 # promote failed (rare; e.g. cp interrupted) — fall through and retry
                 ;;
-              1|2|5|7)
+              1|2|5|6|7|8)
                 # Transient under Antithesis faults or a snapshot copied before
                 # enough immutable history was available. Refresh state and
                 # try again so Antithesis does not record this as a container
@@ -339,7 +339,7 @@ services:
                   continue
                 fi
                 ;;
-              1|2|5|7)
+              1|2|5|6|7|8)
                 ;;
               *)
                 tail -n 50 "$${attempt_log}" >&2 || true
