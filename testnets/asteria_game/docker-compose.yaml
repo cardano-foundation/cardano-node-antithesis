@@ -113,17 +113,20 @@ services:
       - relay2-state:/state
       - tracer:/tracer
 
-  # NOTE: the cardano-node-antithesis/sidecar component is
-  # intentionally absent from this testnet. Its image bakes
-  # composer scripts under /opt/antithesis/test/v1/convergence/
-  # and /opt/antithesis/test/v1/chain-sync-client/ — both target
-  # cluster-tip-agreement checks (and an adversary-daemon driver
-  # whose daemon isn't here). Antithesis's composer discovers
-  # those scripts at image-bake time and runs them regardless of
-  # whether the matching daemon is present, producing
-  # "Always: zero exit" findings that are orthogonal to the
-  # asteria game contract this testnet scores. Dropping the
-  # service drops the scripts.
+  sidecar:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:f889dbc
+    environment:
+      NETWORKMAGIC: 42
+      PORT: 3001
+      POOLS: "3"
+    container_name: sidecar
+    hostname: sidecar.example
+    depends_on:
+      tracer-sidecar:
+        condition: service_started
+    restart: always
+    tmpfs:
+      - /tmp
 
   tracer-sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
