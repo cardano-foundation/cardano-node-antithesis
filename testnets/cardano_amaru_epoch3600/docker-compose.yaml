@@ -44,9 +44,15 @@ x-cardano-relay-10-7-1: &cardano-relay-10-7-1
 x-amaru: &amaru
   # Amaru is relay-only in this testnet. It receives no stake pool keys,
   # no KES/VRF/opcert material, and no block-producing command.
+  #
+  # Each amaru-relay-N self-bootstraps from its paired cardano-node
+  # producer pN inside its own entrypoint, then exec's /bin/amaru run.
+  # Bootstrap happens during the test phase, not the Antithesis 6-min
+  # setup window — see specs/080-amaru-self-bootstrap/.
   image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
   entrypoint:
     - /bin/sh
+    - -ec
   environment:
     # Antithesis log ingestion is intentionally narrow: keep Amaru below
     # warning/error quiet by default. Upstream Amaru uses AMARU_LOG rather
@@ -54,10 +60,14 @@ x-amaru: &amaru
     AMARU_LOG: warn
     AMARU_TRACE: warn
     AMARU_COLOR: never
+    # Inherited from the previous standalone bootstrap-producer service:
+    # /bin/bootstrap-producer reads these to size its catch-up loop.
+    AMARU_NETWORK: testnet_42
+    AMARU_CLUSTER_READY_DEADLINE_SECONDS: "30"
+    AMARU_WAIT_DEADLINE_SECONDS: "30"
+    AMARU_POLL_INTERVAL_SECONDS: "5"
+    AMARU_BOOTSTRAP_RETRY_SECONDS: "5"
   restart: always
-  depends_on:
-    bootstrap-producer:
-      condition: service_started
 
 services:
   configurator:
@@ -129,21 +139,30 @@ services:
       - relay2-state:/state
       - tracer:/tracer
 
-  bootstrap-producer:
-    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
-    container_name: bootstrap-producer
-    hostname: bootstrap-producer.example
-    entrypoint:
-      - /bin/sh
-      - -ec
+  amaru-relay-1:
+    <<: *amaru
+    container_name: amaru-relay-1
+    hostname: amaru-relay-1.example
+    depends_on:
+      p1:
+        condition: service_started
     command:
       - |
+        relay="amaru-relay-1"
+        peer="p1.example:3001"
+
         retry="$${AMARU_BOOTSTRAP_RETRY_SECONDS:-20}"
-        final="/srv/amaru/testnet_42"
-        attempt_log="/srv/amaru/.logs/bootstrap-producer-attempt.log"
+        final="/srv/amaru"
+        work="$${final}/.work"
+        scratch_state="$${work}/cardano-state"
+        scratch_out="$${work}/out"
+        attempt_log="$${work}/bootstrap-attempt.log"
+        marker="/startup/$${relay}.started"
+        sentinel="$${final}/.bootstrap-complete"
 
         bundle_complete() {
-          test -d "$${final}/ledger.testnet_42.db/live" \
+          test -f "$${sentinel}" \
+            && test -d "$${final}/ledger.testnet_42.db/live" \
             && test -d "$${final}/chain.testnet_42.db" \
             && test -f "$${final}/nonces.json"
         }
@@ -155,45 +174,61 @@ services:
           test -f /live/protocolMagicId || return 1
           test -e /live/lock || return 1
 
-          mkdir -p /srv/amaru/.logs
-          rm -rf /cardano/state/.copy-tmp /cardano/state/*
-          mkdir -p /cardano/state/.copy-tmp
-          if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock /cardano/state/.copy-tmp/ 2>/srv/amaru/.logs/snapshot-copy.err; then
-            rm -rf /cardano/state/immutable /cardano/state/ledger /cardano/state/volatile /cardano/state/protocolMagicId /cardano/state/lock
-            mv /cardano/state/.copy-tmp/immutable /cardano/state/
-            mv /cardano/state/.copy-tmp/ledger /cardano/state/
-            mv /cardano/state/.copy-tmp/volatile /cardano/state/
-            mv /cardano/state/.copy-tmp/protocolMagicId /cardano/state/
-            mv /cardano/state/.copy-tmp/lock /cardano/state/
-            rmdir /cardano/state/.copy-tmp
-            rm -f /srv/amaru/.logs/snapshot-copy.err
+          mkdir -p "$${work}"
+          rm -rf "$${scratch_state}.tmp" "$${scratch_state}"
+          mkdir -p "$${scratch_state}.tmp"
+          if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock "$${scratch_state}.tmp/" 2>"$${work}/snapshot-copy.err"; then
+            mv "$${scratch_state}.tmp" "$${scratch_state}"
+            rm -f "$${work}/snapshot-copy.err"
             return 0
           fi
-          rm -rf /cardano/state/.copy-tmp
+          rm -rf "$${scratch_state}.tmp"
           return 1
+        }
+
+        promote() {
+          stage="$${final}/.staged"
+          rm -rf "$${stage}"
+          mkdir -p "$${stage}"
+          cp -rL "$${scratch_out}/testnet_42/." "$${stage}/" || return 1
+
+          # Sweep any stale top-level entries (except our scratch dirs).
+          find "$${final}" -mindepth 1 -maxdepth 1 \
+            ! -path "$${work}" \
+            ! -path "$${stage}" \
+            ! -path "$${sentinel}" \
+            -exec rm -rf {} +
+
+          for entry in "$${stage}"/*; do
+            mv "$${entry}" "$${final}/"
+          done
+          rmdir "$${stage}"
+          : > "$${sentinel}"
+          rm -rf "$${work}"
         }
 
         while :; do
           if bundle_complete; then
-            exit 0
+            break
           fi
 
           if refresh_snapshot; then
-            mkdir -p /srv/amaru/.logs
+            mkdir -p "$${scratch_out}"
             rc=0
-            /bin/bootstrap-producer /cardano/state /cardano/config/configs /srv/amaru testnet_42 >"$${attempt_log}" 2>&1 || rc=$$?
+            /bin/bootstrap-producer "$${scratch_state}" /cardano/config/configs "$${scratch_out}" testnet_42 >"$${attempt_log}" 2>&1 || rc=$$?
             case "$${rc}" in
               0)
-                if ! awk '/^wrote / { print; found=1 } END { exit found ? 0 : 1 }' "$${attempt_log}"; then
+                if promote; then
                   echo "bootstrap-producer: committed $${final}"
+                  continue
                 fi
-                exit 0
+                # promote failed (rare; e.g. cp interrupted) — fall through and retry
                 ;;
               1|2|5|7)
                 # Transient under Antithesis faults or a snapshot copied before
-                # enough immutable history was available. Refresh p1 state and
-                # try again inside this container so Antithesis does not record
-                # an expected readiness miss as a container failure.
+                # enough immutable history was available. Refresh state and
+                # try again so Antithesis does not record this as a container
+                # failure.
                 ;;
               *)
                 tail -n 50 "$${attempt_log}" >&2 || true
@@ -204,53 +239,19 @@ services:
 
           sleep "$${retry}"
         done
-    environment:
-      AMARU_NETWORK: testnet_42
-      AMARU_CLUSTER_READY_DEADLINE_SECONDS: "30"
-      AMARU_WAIT_DEADLINE_SECONDS: "30"
-      AMARU_POLL_INTERVAL_SECONDS: "5"
-      AMARU_BOOTSTRAP_RETRY_SECONDS: "5"
-    volumes:
-      - p1-state:/live:ro
-      - bootstrap-state:/cardano/state
-      - p1-configs:/cardano/config:ro
-      - amaru-bundle:/srv/amaru
-    depends_on:
-      p1:
-        condition: service_started
-    restart: "no"
 
-  amaru-relay-1:
-    <<: *amaru
-    container_name: amaru-relay-1
-    hostname: amaru-relay-1.example
-    depends_on:
-      bootstrap-producer:
-        condition: service_completed_successfully
-    command:
-      - -c
-      - |
-        set -eu
-        if [ ! -d /srv/amaru/ledger.testnet_42.db ] || [ ! -d /srv/amaru/chain.testnet_42.db ]; then
-          until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
-             && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
-             && [ -f /bundle/testnet_42/nonces.json ]; do
-            sleep 10
-          done
-          find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-          cp -rL /bundle/testnet_42/. /srv/amaru/
-        fi
         mkdir -p /startup
-        printf '%s\n' "$${HOSTNAME:-amaru-relay-1.example}" > /startup/amaru-relay-1.started
+        printf '%s\n' "$${HOSTNAME:-amaru-relay-1.example}" > "$${marker}"
         exec /bin/amaru run \
           --network testnet_42 \
           --ledger-dir /srv/amaru/ledger.testnet_42.db \
           --chain-dir /srv/amaru/chain.testnet_42.db \
           --era-history-file /amaru-runtime/era-history.json \
           --global-parameters-file /amaru-runtime/global-parameters.json \
-          --peer-address p1.example:3001
+          --peer-address "$${peer}"
     volumes:
-      - amaru-bundle:/bundle:ro
+      - p1-state:/live:ro
+      - p1-configs:/cardano/config:ro
       - ./amaru-runtime:/amaru-runtime:ro
       - amaru-startup:/startup
       - a1-state:/srv/amaru
@@ -260,32 +261,108 @@ services:
     container_name: amaru-relay-2
     hostname: amaru-relay-2.example
     depends_on:
-      bootstrap-producer:
-        condition: service_completed_successfully
+      p2:
+        condition: service_started
     command:
-      - -c
       - |
-        set -eu
-        if [ ! -d /srv/amaru/ledger.testnet_42.db ] || [ ! -d /srv/amaru/chain.testnet_42.db ]; then
-          until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
-             && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
-             && [ -f /bundle/testnet_42/nonces.json ]; do
-            sleep 10
+        relay="amaru-relay-2"
+        peer="p2.example:3001"
+
+        retry="$${AMARU_BOOTSTRAP_RETRY_SECONDS:-20}"
+        final="/srv/amaru"
+        work="$${final}/.work"
+        scratch_state="$${work}/cardano-state"
+        scratch_out="$${work}/out"
+        attempt_log="$${work}/bootstrap-attempt.log"
+        marker="/startup/$${relay}.started"
+        sentinel="$${final}/.bootstrap-complete"
+
+        bundle_complete() {
+          test -f "$${sentinel}" \
+            && test -d "$${final}/ledger.testnet_42.db/live" \
+            && test -d "$${final}/chain.testnet_42.db" \
+            && test -f "$${final}/nonces.json"
+        }
+
+        refresh_snapshot() {
+          test -d /live/immutable || return 1
+          test -d /live/ledger || return 1
+          test -d /live/volatile || return 1
+          test -f /live/protocolMagicId || return 1
+          test -e /live/lock || return 1
+
+          mkdir -p "$${work}"
+          rm -rf "$${scratch_state}.tmp" "$${scratch_state}"
+          mkdir -p "$${scratch_state}.tmp"
+          if cp -a /live/immutable /live/ledger /live/volatile /live/protocolMagicId /live/lock "$${scratch_state}.tmp/" 2>"$${work}/snapshot-copy.err"; then
+            mv "$${scratch_state}.tmp" "$${scratch_state}"
+            rm -f "$${work}/snapshot-copy.err"
+            return 0
+          fi
+          rm -rf "$${scratch_state}.tmp"
+          return 1
+        }
+
+        promote() {
+          stage="$${final}/.staged"
+          rm -rf "$${stage}"
+          mkdir -p "$${stage}"
+          cp -rL "$${scratch_out}/testnet_42/." "$${stage}/" || return 1
+
+          find "$${final}" -mindepth 1 -maxdepth 1 \
+            ! -path "$${work}" \
+            ! -path "$${stage}" \
+            ! -path "$${sentinel}" \
+            -exec rm -rf {} +
+
+          for entry in "$${stage}"/*; do
+            mv "$${entry}" "$${final}/"
           done
-          find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-          cp -rL /bundle/testnet_42/. /srv/amaru/
-        fi
+          rmdir "$${stage}"
+          : > "$${sentinel}"
+          rm -rf "$${work}"
+        }
+
+        while :; do
+          if bundle_complete; then
+            break
+          fi
+
+          if refresh_snapshot; then
+            mkdir -p "$${scratch_out}"
+            rc=0
+            /bin/bootstrap-producer "$${scratch_state}" /cardano/config/configs "$${scratch_out}" testnet_42 >"$${attempt_log}" 2>&1 || rc=$$?
+            case "$${rc}" in
+              0)
+                if promote; then
+                  echo "bootstrap-producer: committed $${final}"
+                  continue
+                fi
+                ;;
+              1|2|5|7)
+                ;;
+              *)
+                tail -n 50 "$${attempt_log}" >&2 || true
+                exit "$${rc}"
+                ;;
+            esac
+          fi
+
+          sleep "$${retry}"
+        done
+
         mkdir -p /startup
-        printf '%s\n' "$${HOSTNAME:-amaru-relay-2.example}" > /startup/amaru-relay-2.started
+        printf '%s\n' "$${HOSTNAME:-amaru-relay-2.example}" > "$${marker}"
         exec /bin/amaru run \
           --network testnet_42 \
           --ledger-dir /srv/amaru/ledger.testnet_42.db \
           --chain-dir /srv/amaru/chain.testnet_42.db \
           --era-history-file /amaru-runtime/era-history.json \
           --global-parameters-file /amaru-runtime/global-parameters.json \
-          --peer-address p2.example:3001
+          --peer-address "$${peer}"
     volumes:
-      - amaru-bundle:/bundle:ro
+      - p2-state:/live:ro
+      - p2-configs:/cardano/config:ro
       - ./amaru-runtime:/amaru-runtime:ro
       - amaru-startup:/startup
       - a2-state:/srv/amaru
@@ -352,10 +429,8 @@ volumes:
   p1-state:
   p2-state:
   p3-state:
-  bootstrap-state:
   relay1-state:
   relay2-state:
-  amaru-bundle:
   amaru-startup:
   a1-state:
   a2-state:

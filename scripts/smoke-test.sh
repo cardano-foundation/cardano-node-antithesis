@@ -184,35 +184,11 @@ else
 fi
 
 if [[ "$TESTNET" == cardano_amaru* ]]; then
+  # Each amaru-relay-N self-bootstraps inside its own entrypoint —
+  # there is no standalone bootstrap-producer service to wait on.
+  # The per-relay "bundle in place" gate below is the equivalent
+  # readiness signal.
   BOOTSTRAP_TIMEOUT="${AMARU_BOOTSTRAP_SMOKE_TIMEOUT:-1200}"
-  BOOTSTRAP_DEADLINE=$((SECONDS + BOOTSTRAP_TIMEOUT))
-
-  echo "Waiting for bootstrap-producer to complete (timeout ${BOOTSTRAP_TIMEOUT}s)..."
-  while true; do
-    STATE="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' bootstrap-producer 2>/dev/null || true)"
-    STATUS="${STATE%% *}"
-    EXIT_CODE="${STATE#* }"
-    if [ "$STATUS" = "exited" ]; then
-      if [ "$EXIT_CODE" = "0" ]; then
-        echo "OK: bootstrap-producer completed"
-        break
-      fi
-      echo "FAIL: bootstrap-producer exited with code ${EXIT_CODE}"
-      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-producer 2>&1
-      exit 1
-    fi
-    if [ "$STATUS" = "dead" ]; then
-      echo "FAIL: bootstrap-producer is dead"
-      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-producer 2>&1
-      exit 1
-    fi
-    if [ "$SECONDS" -ge "$BOOTSTRAP_DEADLINE" ]; then
-      echo "FAIL: bootstrap-producer did not complete within ${BOOTSTRAP_TIMEOUT}s"
-      docker compose -f "$COMPOSE_FILE" logs --tail 80 bootstrap-producer 2>&1
-      exit 1
-    fi
-    sleep 5
-  done
 
   for RELAY in amaru-relay-1 amaru-relay-2; do
     for ENV_REQUIREMENT in AMARU_LOG=warn AMARU_TRACE=warn AMARU_COLOR=never; do
@@ -224,20 +200,21 @@ if [[ "$TESTNET" == cardano_amaru* ]]; then
       fi
     done
 
-    echo "Waiting for ${RELAY} to consume bootstrap bundle..."
-    RELAY_DEADLINE=$((SECONDS + 180))
+    echo "Waiting for ${RELAY} to self-bootstrap (timeout ${BOOTSTRAP_TIMEOUT}s)..."
+    RELAY_DEADLINE=$((SECONDS + BOOTSTRAP_TIMEOUT))
     while ! docker exec "$RELAY" sh -c \
-        'test -d /srv/amaru/ledger.testnet_42.db/live \
+        'test -f /srv/amaru/.bootstrap-complete \
+          && test -d /srv/amaru/ledger.testnet_42.db/live \
           && test -d /srv/amaru/chain.testnet_42.db \
           && test -f /srv/amaru/nonces.json' 2>/dev/null; do
       STATE="$(docker inspect -f '{{.State.Status}}' "$RELAY" 2>/dev/null || true)"
       if [ "$STATE" = "exited" ] || [ "$STATE" = "dead" ]; then
-        echo "FAIL: ${RELAY} stopped before consuming bootstrap bundle"
+        echo "FAIL: ${RELAY} stopped before self-bootstrap completed"
         docker compose -f "$COMPOSE_FILE" logs --tail 80 "$RELAY" 2>&1
         exit 1
       fi
       if [ "$SECONDS" -ge "$RELAY_DEADLINE" ]; then
-        echo "FAIL: ${RELAY} did not copy bootstrap bundle"
+        echo "FAIL: ${RELAY} did not finish self-bootstrap within ${BOOTSTRAP_TIMEOUT}s"
         docker compose -f "$COMPOSE_FILE" logs --tail 80 "$RELAY" 2>&1
         exit 1
       fi
