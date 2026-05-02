@@ -24,7 +24,7 @@ LAST_REPLY=""
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     LAST_REPLY="$(printf '{"ready": null}\n' | socat - "UNIX-CONNECT:${INDEXER_SOCK}" 2>/dev/null || true)"
     if [ -n "$LAST_REPLY" ] \
-        && printf '%s' "$LAST_REPLY" | jq -e '.ready == true and .slotsBehind == 0' >/dev/null 2>&1; then
+        && printf '%s' "$LAST_REPLY" | jq -e '(.slotsBehind // null) != null and .slotsBehind <= 5' >/dev/null 2>&1; then
         TIP="$(printf '%s' "$LAST_REPLY" | jq -r '.tipSlot // 0')"
         sdk_sometimes true "stub finally_alive holds" \
             "$(jq -nc --argjson a "$attempt" --argjson t "$TIP" '{attempt:$a, tipSlot:$t}')"

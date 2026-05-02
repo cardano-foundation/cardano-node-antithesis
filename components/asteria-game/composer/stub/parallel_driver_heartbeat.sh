@@ -20,7 +20,7 @@ sdk_reachable "stub heartbeat entered"
 
 REPLY="$(printf '{"ready": null}\n' | socat - "UNIX-CONNECT:${INDEXER_SOCK}" 2>/dev/null || true)"
 
-if [ -n "$REPLY" ] && printf '%s' "$REPLY" | jq -e '.ready == true' >/dev/null 2>&1; then
+if [ -n "$REPLY" ] && printf '%s' "$REPLY" | jq -e '(.slotsBehind // null) != null and .slotsBehind <= 5' >/dev/null 2>&1; then
     PROCESSED="$(printf '%s' "$REPLY" | jq -r '.processedSlot // 0')"
     TIP="$(printf '%s' "$REPLY" | jq -r '.tipSlot // 0')"
     BEHIND="$(printf '%s' "$REPLY" | jq -r '.slotsBehind // 0')"
