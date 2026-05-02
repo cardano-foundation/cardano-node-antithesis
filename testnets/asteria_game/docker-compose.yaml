@@ -49,7 +49,7 @@ services:
       - p1-configs:/configs/1 # configs for p1
       - p2-configs:/configs/2 # configs for p2
       - p3-configs:/configs/3 # configs for p3
-      - utxo-keys:/utxo-keys # genesis + payment keys, read by asteria-game
+      - utxo-keys:/utxo-keys # funded address keys for tx-generator
 
   tracer:
     image: ghcr.io/intersectmbo/cardano-tracer@sha256:da628263a851b419c38d020d3a7dc3b65b20ee84e730faeb74babd6d96f28efe
@@ -113,6 +113,47 @@ services:
       - relay2-state:/state
       - tracer:/tracer
 
+  # tx-generator service is parked in tx-generator.disabled.yaml.
+  # It used to drive ADA transfers via N2C against relay1 and was
+  # removed from this compose so the main testnet runs without a
+  # synthetic transaction load. Restore from the parked file when
+  # reintroducing the daemon.
+  # tx-generator:
+  #   # Tag is bumped commit-by-commit while the downstream
+  #   # branch is in flight; the publish-images workflow
+  #   # resolves <tag> to a commit on this repo and
+  #   # rebuilds via `nix build .#docker-image`. Locally,
+  #   # `nix build` from components/tx-generator/ produces
+  #   # the exact tag and `docker load` makes compose pick
+  #   # it up without a pull.
+  #   image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:2012360
+  #   container_name: tx-generator
+  #   hostname: tx-generator.example
+  #   command:
+  #     - --relay-socket
+  #     - /state/node.socket
+  #     - --control-socket
+  #     - /state/tx-generator-control.sock
+  #     - --state-dir
+  #     - /state/txgen
+  #     - --master-seed-file
+  #     - /state/txgen/master.seed
+  #     - --faucet-skey-file
+  #     - /utxo-keys/genesis.1.skey
+  #     - --network-magic
+  #     - "42"
+  #   volumes:
+  #     # rw — daemon writes its control socket + state dir
+  #     # under /state.
+  #     - relay1-state:/state
+  #     - utxo-keys:/utxo-keys:ro
+  #   restart: always
+  #   depends_on:
+  #     relay1:
+  #       condition: service_started
+  #     configurator:
+  #       condition: service_completed_successfully
+
   sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:f889dbc
     environment:
@@ -155,23 +196,22 @@ services:
       tracer:
         condition: service_started
 
-  # asteria-game workload host. Long-lived utxo-indexer follows
-  # relay1's chain via N2C, exposes ready/utxos_at/await on
-  # /tmp/idx.sock (the listen socket inside this container).
-  # Composer scripts at /opt/antithesis/test/v1/stub/ drive the
-  # bootstrap (one-shot serial driver) plus heartbeat / eventually /
-  # finally assertions.
+  # Asteria game workload — the only difference from
+  # testnets/cardano_node_master/docker-compose.yaml. Long-lived
+  # utxo-indexer follows relay1's chain via N2C, exposes
+  # ready/utxos_at/await on /tmp/idx.sock; composer scripts at
+  # /opt/antithesis/test/v1/stub/ drive bootstrap (one-shot
+  # serial driver), the player loop, and the admin-singleton /
+  # consistency invariant snapshots.
   #
   # Built from upstream PR #98 (035-indexer-n2c-reconnect) —
   # supervisor with exponential-backoff reconnect handles N2C peer
   # close in-process, so the daemon stays up across relay restarts.
   # RocksDB persistence at /idx-db keeps state across full process
-  # restarts too.
-  #
-  # /utxo-keys is mounted so the bootstrap binary can read the
-  # genesis wallet skey and seed the asteria UTxO. The bootstrap is
-  # idempotent (Asteria.Bootstrap.isAlreadyDeployed) so Antithesis
-  # can restart this container at will.
+  # restarts too. /utxo-keys is mounted so the bootstrap binary
+  # can read the genesis wallet skey; /asteria-deploy holds the
+  # per-deploy seed TxIn so player + invariant binaries see the
+  # same applied validators.
   asteria-game:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:c99e992
     container_name: asteria-game
@@ -200,10 +240,6 @@ volumes:
   relay2-state:
   utxo-keys:
   asteria-game-db:
-  # Holds /asteria-deploy/seed.json — bootstrap writes the
-  # one-shot seed TxIn here before submitting the deploy tx;
-  # player + invariant binaries read it on startup to derive
-  # the per-deploy validator hashes / addresses.
   asteria-deploy:
 
 networks:
