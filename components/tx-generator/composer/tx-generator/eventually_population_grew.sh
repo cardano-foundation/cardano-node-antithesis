@@ -3,10 +3,16 @@
 # validator (≤1 min total per the antithesis-tests skill).
 # Snapshots the daemon's population size and asserts it
 # is non-zero. Fires after the post-fault settle window.
+#
+# Always exits 0. See parallel_driver_transact.sh for
+# the rationale.
 
-set -euo pipefail
+set -u
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin:$PATH"
+
+# See parallel_driver_transact.sh for why we don't
+# 'set -e' here.
 
 source "$(dirname "$0")/helper_sdk_lib.sh"
 
@@ -19,15 +25,45 @@ sdk_reachable "tx_generator_eventually_started"
 # its N2C connection.
 sleep 15
 
-RSP="$(printf '{"snapshot":null}\n' | nc -U -q 1 "$CONTROL_SOCKET" || true)"
-POP="$(printf '%s' "$RSP" | jq -r '.populationSize // 0')"
+RSP="$(printf '{"snapshot":null}\n' | nc -U -q 1 "$CONTROL_SOCKET" 2>/dev/null || true)"
+
+# If the daemon isn't reachable (control socket not yet
+# bound, supervisor mid-cycle, etc.) we can't make a
+# claim about the population either way. Surface a
+# reachability event and exit 0; do NOT fire the
+# 'did_not_grow' assertion against a daemon we never
+# successfully queried.
+if [ -z "$RSP" ]; then
+    sdk_reachable "tx_generator_eventually_daemon_unreachable"
+    exit 0
+fi
+
+# Reject responses that aren't valid JSON (defensive —
+# the daemon may have written a partial line).
+if ! POP="$(printf '%s' "$RSP" | jq -e -r '.populationSize // 0' 2>/dev/null)"; then
+    sdk_reachable "tx_generator_eventually_daemon_unreachable"
+    exit 0
+fi
+
+# Distinguish "no refill has been attempted yet" (lastTxId
+# is null in the snapshot, populationSize=0 trivially)
+# from "refill ran but population genuinely failed to
+# grow". The Always assertion 'did_not_grow' should only
+# fire on the latter — otherwise it spuriously trips on
+# every fork where the validator runs before the first
+# refill could land (e.g. vtime 42-48s on the run at
+# https://cardano.antithesis.com/report/JjPofIAbSixtn9DexNDJLl9I).
+LAST_TX_ID="$(printf '%s' "$RSP" | jq -r '.lastTxId // ""' 2>/dev/null || echo "")"
 
 if [ "$POP" -gt 0 ]; then
     sdk_sometimes true "tx_generator_population_grew" \
         "$(printf '{"populationSize":%s}' "$POP")"
-    exit 0
+elif [ -z "$LAST_TX_ID" ]; then
+    sdk_reachable "tx_generator_eventually_no_tx_yet" \
+        "$(printf '{"populationSize":%s}' "$POP")"
+else
+    sdk_unreachable "tx_generator_population_did_not_grow" \
+        "$(jq -nc --argjson p "$POP" --arg t "$LAST_TX_ID" \
+            '{populationSize:$p, lastTxId:$t}')"
 fi
-
-sdk_unreachable "tx_generator_population_did_not_grow" \
-    "$(printf '{"populationSize":%s}' "$POP")"
-exit 1
+exit 0
