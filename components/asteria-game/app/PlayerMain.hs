@@ -107,10 +107,26 @@ main = do
     playerIdStr <-
         fromMaybe "unknown" <$> lookupEnv "ASTERIA_PLAYER_ID"
     let playerId = T.pack playerIdStr
+    -- Wrap the whole pass: any uncaught exception (N2C connect
+    -- refused during a fault, wallet read race, transient registry
+    -- error) becomes an sdkUnreachable signal + exit 0 so the
+    -- composer's "Always: zero exit" property doesn't flag a
+    -- not-yet-ready window as a real failure.
+    result <- try (runPass playerId)
+    case result of
+        Left (e :: SomeException) ->
+            sdkUnreachable
+                ("asteria_player_pass_top_errored_" <> playerId)
+                (Just $ object ["error" .= T.pack (show e)])
+        Right () -> pure ()
+    sdkReachable ("asteria_player_pass_completed_" <> playerId) Nothing
+
+runPass :: Text -> IO ()
+runPass playerId = do
     sdkReachable
         ("asteria_player_started_" <> playerId)
         Nothing
-    rng <- newSystemSource (hash playerIdStr)
+    rng <- newSystemSource (hash (T.unpack playerId))
     settings <- settingsFromEnv
     walletKey <- readWalletKey genesisKeyPath
     -- Bootstrap is the source of truth for which UTxO seeded the
@@ -121,10 +137,6 @@ main = do
     mSeed <- readSeed
     case mSeed of
         Nothing ->
-            -- Bootstrap hasn't completed yet on this cluster.
-            -- Emit the unreachable signal and exit 0 so the
-            -- composer's "Always: zero exit" property doesn't
-            -- treat the not-yet-ready window as a real failure.
             sdkUnreachable
                 ("asteria_player_seed_missing_" <> playerId)
                 Nothing
@@ -134,16 +146,15 @@ main = do
                 sdkReachable
                     ("asteria_player_n2c_connected_" <> playerId)
                     Nothing
-                result <-
+                inner <-
                     try
                         (observeAndAct provider submitter walletKey rng playerId scripts)
-                case result of
+                case inner of
                     Left (e :: SomeException) ->
                         sdkUnreachable
                             ("asteria_player_pass_errored_" <> playerId)
                             (Just $ object ["error" .= T.pack (show e)])
                     Right () -> pure ()
-    sdkReachable ("asteria_player_pass_completed_" <> playerId) Nothing
 
 observeAndAct ::
     Provider IO ->
