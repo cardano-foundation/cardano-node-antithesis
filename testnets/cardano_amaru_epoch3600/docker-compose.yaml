@@ -49,7 +49,7 @@ x-amaru: &amaru
   # producer pN inside its own entrypoint, then exec's /bin/amaru run.
   # Bootstrap happens during the test phase, not the Antithesis 6-min
   # setup window — see specs/080-amaru-self-bootstrap/.
-  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
+  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:6910d79c7f26c972f7121e36e1aa6aac5ff68de1
   entrypoint:
     - /bin/sh
     - -ec

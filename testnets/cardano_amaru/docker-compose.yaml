@@ -44,7 +44,7 @@ x-cardano-relay-10-7-1: &cardano-relay-10-7-1
 x-amaru: &amaru
   # Amaru is relay-only in this testnet. It receives no stake pool keys,
   # no KES/VRF/opcert material, and no block-producing command.
-  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
+  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:6910d79c7f26c972f7121e36e1aa6aac5ff68de1
   entrypoint:
     - /bin/sh
   environment:
@@ -130,7 +130,7 @@ services:
       - tracer:/tracer
 
   bootstrap-producer:
-    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
+    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:6910d79c7f26c972f7121e36e1aa6aac5ff68de1
     container_name: bootstrap-producer
     hostname: bootstrap-producer.example
     entrypoint:
