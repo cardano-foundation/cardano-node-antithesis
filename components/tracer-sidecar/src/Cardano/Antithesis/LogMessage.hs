@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoFieldSelectors #-}
@@ -62,6 +64,19 @@ data LogMessageData
     deriving (Show, Generic, Eq)
 
 -- | Details of the new tip selection view.
+--
+-- Cardano-node has shipped two encodings of this object:
+--
+-- * Older nodes emit @"kind": "PraosChainSelectView"@ with a
+--   @"chainLength"@ field.
+-- * Newer nodes emit @"kind": "PraosTiebreakerView"@ with a
+--   @"blockNo"@ field.
+--
+-- Both refer to the same value (the tip's chain length /
+-- block number), so we accept either field name.  A
+-- mixed-version cluster (master testnet pins three different
+-- node images today) emits both forms; failing to accept the
+-- newer form silently drops every event from those hosts.
 data NewTipSelectView = NewTipSelectView
     { chainLength :: Int
     , issueNo :: Int
@@ -70,7 +85,28 @@ data NewTipSelectView = NewTipSelectView
     , slotNo :: Int
     , tieBreakVRF :: Text
     }
-    deriving (Show, Generic, FromJSON, Eq)
+    deriving (Show, Generic, Eq)
+
+instance FromJSON NewTipSelectView where
+    parseJSON = withObject "NewTipSelectView" $ \o -> do
+        chainLength <-
+            o .:? "chainLength" >>= \case
+                Just n -> pure n
+                Nothing -> o .: "blockNo"
+        issueNo <- o .: "issueNo"
+        issuerHash <- o .: "issuerHash"
+        kind <- o .: "kind"
+        slotNo <- o .: "slotNo"
+        tieBreakVRF <- o .: "tieBreakVRF"
+        pure
+            NewTipSelectView
+                { chainLength
+                , issueNo
+                , issuerHash
+                , kind
+                , slotNo
+                , tieBreakVRF
+                }
 
 instance FromJSON LogMessageData where
     parseJSON = withObject "LogMessageData" $ \o -> do
@@ -79,19 +115,29 @@ instance FromJSON LogMessageData where
         case kind of
             Just "AddedToCurrentChain" ->
                 AddedToCurrentChain
-                    <$> o .: "newTipSelectView"
+                    <$> parseEitherField o "newTipSelectView" "newSuffixSelectView"
                     <*> o .: "newtip"
             Just "TraceAddBlockEvent.SwitchedToAFork" ->
                 SwitchedToAFork
-                    <$> o .: "newTipSelectView"
+                    <$> parseEitherField o "newTipSelectView" "newSuffixSelectView"
                     <*> o .: "newtip"
-                    <*> o .: "oldTipSelectView"
+                    <*> parseEitherField o "oldTipSelectView" "oldSuffixSelectView"
             Just "ServerError" ->
                 ServerError
                     <$> o .: "reason"
             -- Fallback: capture the raw object for unknown tags
             _ ->
                 pure $ OtherLogMessageData $ Object o
+      where
+        -- Cardano-node 10.7+ renamed @newTipSelectView@ to
+        -- @newSuffixSelectView@ (and @oldTipSelectView@ to
+        -- @oldSuffixSelectView@) to match chain-selection
+        -- semantics.  master testnet pins three node images
+        -- spanning both naming schemes; accept either.
+        parseEitherField o oldName newName =
+            o .:? oldName >>= \case
+                Just v -> pure v
+                Nothing -> o .: newName
 
 -- LogMessage ------------------------------------------------------------------
 
