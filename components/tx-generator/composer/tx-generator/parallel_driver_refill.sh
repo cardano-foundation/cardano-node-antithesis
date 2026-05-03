@@ -32,7 +32,17 @@ REQ="$(printf '{"refill":{"seed":%s}}' "$SEED")"
 
 sdk_reachable "tx_generator_refill_driver_started"
 
-RSP="$(printf '%s\n' "$REQ" | nc -U -q 1 "$CONTROL_SOCKET" 2>/dev/null || true)"
+# Hard 5s wall-clock on the request/response. Without this the
+# kernel's nc behaviour can leave the script blocked for >25s when
+# the daemon's accept loop is wedged mid-reconnect under a fault
+# window — long enough for the composer's per-step deadline to kill
+# us, surfacing as a non-zero exit on the built-in
+# 'Commands finish with zero exit code' property. Treat any timeout
+# the same as the empty-response path: fire the unreachable
+# Reachability marker and exit 0.
+RSP="$(timeout --kill-after=2s 5s sh -c \
+    "printf '%s\\n' '$REQ' | nc -U -q 1 '$CONTROL_SOCKET'" \
+    2>/dev/null || true)"
 
 if [ -z "$RSP" ]; then
     sdk_reachable "tx_generator_refill_daemon_unreachable"
