@@ -1,0 +1,1336 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://cardano-foundation.github.io/cardano-node-antithesis/components/adversary-roadmap/">
+      
+      
+        <link rel="prev" href="../adversary/">
+      
+      
+        <link rel="next" href="../asteria-player/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Adversary roadmap - Cardano Node assets for Antithesis</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../css/terminal-player.css">
+    
+      <link rel="stylesheet" href="../../css/asciinema-player.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adversary-roadmap" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Cardano Node assets for Antithesis" class="md-header__button md-logo" aria-label="Cardano Node assets for Antithesis" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Cardano Node assets for Antithesis
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Adversary roadmap
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/cardano-foundation/cardano-node-antithesis" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Cardano Node assets for Antithesis" class="md-nav__button md-logo" aria-label="Cardano Node assets for Antithesis" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Cardano Node assets for Antithesis
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/cardano-foundation/cardano-node-antithesis" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Components
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Components
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tracer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tracer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tracer-sidecar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tracer-sidecar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sidecar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sidecar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configurator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configurator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adversary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adversary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adversary roadmap
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adversary roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mapping-from-tx-generator-now-established" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mapping from tx-generator (now established)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#implementation-seams-that-exist-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation seams that exist today
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tier-list-of-misbehaviour-archetypes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier list of misbehaviour archetypes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tier list of misbehaviour archetypes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tier-1-port-the-existing-surface-into-the-daemon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 1 — port the existing surface into the daemon
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tier-2-other-mini-protocols-downstream-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 2 — other mini-protocols, downstream side
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tier-3-upstream-peer-mode-the-canonical-byzantine-peer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 3 — upstream-peer mode (the canonical Byzantine peer)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tier-4-n2c-abuse-lower-priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tier 4 — N2C abuse (lower priority)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sequenced-pr-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sequenced PR plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tickets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tickets
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../asteria-player/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Asteria Player
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../testnets/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testnets
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Testnets
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../testnets/cardano-node-master/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cardano Node Master
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-run overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../triage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Triage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../query-logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Querying logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../tracer/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Components
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="adversary-roadmap">Adversary roadmap</h1>
+<p>Long-term plan for adversarial workload against the testnet. The
+<a href="../adversary/">adversary component</a> is now a long-running daemon
+(see Tier 1.1 below); this page tracks where it goes next.</p>
+<h2 id="status">Status</h2>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Archetype</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.1</td>
+<td><code>chain_sync_flap</code></td>
+<td><strong>landed</strong> (<a href="https://github.com/lambdasistemi/cardano-node-clients/pull/103">clients PR #103</a> scaffold, <a href="https://github.com/lambdasistemi/cardano-node-clients/pull/106">#106</a> real impl, <a href="https://github.com/cardano-foundation/cardano-node-antithesis/pull/99">antithesis PR #99</a> consumer)</td>
+</tr>
+<tr>
+<td>1.2</td>
+<td><code>chain_sync_thrash</code></td>
+<td>next — see <a href="https://github.com/lambdasistemi/cardano-node-clients/tree/main/specs/036-cardano-adversary-thrash"><code>specs/036-cardano-adversary-thrash/</code></a> in cardano-node-clients</td>
+</tr>
+<tr>
+<td>1.3</td>
+<td><code>chain_sync_slow_loris</code></td>
+<td>not started</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>block_fetch_replay</code>, <code>tx_submission_*</code>, <code>keepalive_abuse</code></td>
+<td>not started</td>
+</tr>
+<tr>
+<td>3</td>
+<td>upstream-peer Byzantine adversary</td>
+<td>epic <a href="https://github.com/cardano-foundation/cardano-node-antithesis/issues/91">#91</a>, not started</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>lsq_flood</code>, <code>local_tx_submission_garbage</code></td>
+<td>not started</td>
+</tr>
+</tbody>
+</table>
+<h2 id="goals">Goals</h2>
+<ol>
+<li><strong>Move the adversary from one-shot to long-running.</strong> ✅ Done in
+   <a href="https://github.com/cardano-foundation/cardano-node-antithesis/pull/99">PR #99</a>. The daemon now listens on a UNIX control socket,
+   composer drivers fire one NDJSON request per Antithesis tick.</li>
+<li><strong>Cover more of the protocol surface than chain-sync.</strong> In
+   progress: <code>chain_sync_flap</code> lives; thrash + slow-loris next; then
+   block-fetch, tx-submission, keep-alive, handshake, and upstream
+   (responder).</li>
+<li><strong>Steer adversarial choices with the Antithesis hypervisor.</strong> ✅
+   In place since PR #103. Every randomness draw routes through the
+   <code>RandomSource</code> typeclass; default impl shells out to
+   <code>antithesis_random</code> when present and falls back to <code>System.Random</code>
+   otherwise.</li>
+<li><strong>Move the daemon home to <a href="https://github.com/lambdasistemi/cardano-node-clients"><code>lambdasistemi/cardano-node-clients</code></a>.</strong>
+   ✅ Done. The package lives next to <code>cardano-tx-generator</code> and
+   shares its <code>Provider</code> / <code>Submitter</code> / <code>TxBuild</code> library surface
+   plus the same release flow.</li>
+</ol>
+<h2 id="architecture">Architecture</h2>
+<pre><code>                   +---------------------------------+
+                   |    cardano-adversary daemon     |
+                   |    (Haskell, in cardano-node-   |
+                   |    clients)                     |
+                   |                                 |
+   composer        |   - per-request N2N initiator   |
+   parallel_       |     connections to producers    |
+   driver_*.sh ---&gt;|   - reads chain points from     |
+   over NDJSON     |     tracer-sidecar's file       |
+   on UNIX socket  |   - exposes /state/adversary-   |
+                   |     control.sock                |
+                   |   - one request → one           |
+                   |     adversarial action          |
+                   +---------------------------------+
+</code></pre>
+<h3 id="mapping-from-tx-generator-now-established">Mapping from tx-generator (now established)</h3>
+<table>
+<thead>
+<tr>
+<th>tx-generator</th>
+<th>cardano-adversary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cardano-tx-generator</code> daemon</td>
+<td><code>cardano-adversary</code> daemon</td>
+</tr>
+<tr>
+<td><code>/state/tx-generator-control.sock</code></td>
+<td><code>/state/adversary-control.sock</code></td>
+</tr>
+<tr>
+<td><code>parallel_driver_transact.sh</code> / <code>_refill.sh</code></td>
+<td><code>parallel_driver_flaky_chain_sync.sh</code> (Tier 1.1)</td>
+</tr>
+<tr>
+<td><code>eventually_population_grew.sh</code></td>
+<td>(Tier 2 will add an <code>eventually_adversary_active.sh</code>)</td>
+</tr>
+<tr>
+<td><code>finally_pressure_summary.sh</code></td>
+<td>(Tier 2 will add a <code>finally_adversary_summary.sh</code>)</td>
+</tr>
+<tr>
+<td>Wire spec at <a href="https://github.com/lambdasistemi/cardano-node-clients/blob/main/specs/034-cardano-tx-generator/contracts/control-wire.md"><code>specs/034-cardano-tx-generator/contracts/control-wire.md</code></a></td>
+<td>Wire spec at <a href="https://github.com/lambdasistemi/cardano-node-clients/blob/main/specs/036-cardano-adversary/contracts/control-wire.md"><code>specs/036-cardano-adversary/contracts/control-wire.md</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="implementation-seams-that-exist-today">Implementation seams that exist today</h3>
+<ul>
+<li><code>Cardano.Node.Client.Adversary.{Application,ChainSync.Codec,ChainSync.Connection,ChainPoints}</code>
+  — the lifted N2N initiator library that backs <code>chain_sync_flap</code>
+  and will back the rest of Tier 1.</li>
+<li><code>Cardano.Node.Client.Adversary.RandomSource</code> — typeclass +
+  Antithesis-aware default (<code>antithesis_random</code> CLI when present,
+  <code>System.Random</code> fallback). Per-request determinism via
+  <code>splitFromSeed :: Word64 -&gt; StdGen</code>.</li>
+<li><code>Cardano.Node.Client.Adversary.Server</code> — NDJSON dispatcher. New
+  endpoints register themselves by extending <code>ServerHooks</code>.</li>
+<li><code>Cardano.Node.Client.Provider</code> / <code>Submitter</code> / <code>TxBuild</code> —
+  available for the N2C-side adversaries (mempool flooding,
+  malformed tx submission) when Tier 2/4 lands.</li>
+<li>A responder-library half for upstream-peer mode is <strong>not</strong> in the
+  tree yet; it arrives with Tier 3.</li>
+</ul>
+<h2 id="tier-list-of-misbehaviour-archetypes">Tier list of misbehaviour archetypes</h2>
+<p>Each archetype = one daemon endpoint + one composer
+<code>parallel_driver_*.sh</code> + a documented invariant the cluster must
+preserve under it. Order is implementation order, easiest first.</p>
+<h3 id="tier-1-port-the-existing-surface-into-the-daemon">Tier 1 — port the existing surface into the daemon</h3>
+<ol>
+<li><strong><code>chain_sync_flap</code></strong> ✅ — pick random intersection point, sync
+   <code>LIMIT</code> blocks, disconnect. Replaces the stand-alone <code>adversary</code>
+   binary that lived in <code>cardano-foundation/cardano-node-antithesis</code>.</li>
+<li><strong><code>chain_sync_thrash</code></strong> — same connection, repeatedly
+   <code>MsgFindIntersect</code> to a different random point without
+   completing the sync. Stresses the producer's intersection-finding
+   cache. Spec lives in
+   <a href="https://github.com/lambdasistemi/cardano-node-clients/tree/main/specs/036-cardano-adversary-thrash"><code>lambdasistemi/cardano-node-clients/specs/036-cardano-adversary-thrash/</code></a>.</li>
+<li><strong><code>chain_sync_slow_loris</code></strong> — open the connection, complete
+   handshake, then send <code>MsgRequestNext</code> at a deliberately slow
+   cadence; assert the connection is kept alive (or assert it gets
+   evicted, whichever the protocol promises).</li>
+</ol>
+<h3 id="tier-2-other-mini-protocols-downstream-side">Tier 2 — other mini-protocols, downstream side</h3>
+<ol>
+<li><strong><code>block_fetch_replay</code></strong> — <code>BlockFetch</code> client that requests
+   already-fetched ranges back-to-back, plus ranges straddling
+   rollback boundaries.</li>
+<li><strong><code>tx_submission_flood</code></strong> — N2N <code>TxSubmission2</code> client that
+   announces tx-ids the producer has not requested, or refuses to
+   deliver bodies after announcing them.</li>
+<li><strong><code>tx_submission_garbage</code></strong> — submits well-formed-CBOR but
+   ledger-invalid txs at high rate (mempool pressure).</li>
+<li><strong><code>keepalive_abuse</code></strong> — <code>KeepAlive</code> cookies out of order or never
+   replied to.</li>
+</ol>
+<h3 id="tier-3-upstream-peer-mode-the-canonical-byzantine-peer">Tier 3 — upstream-peer mode (the canonical Byzantine peer)</h3>
+<p>Tracked as its own epic (<a href="https://github.com/cardano-foundation/cardano-node-antithesis/issues/91">#91</a>). Cluster nodes must dial
+the adversary, so the adversary becomes a node-to-node <em>server</em>.
+Then:</p>
+<ol>
+<li><strong><code>upstream_fork_serve</code></strong> — announce a tip on the honest chain's
+   history but <code>MsgRollForward</code> with a fabricated header. ChainSel
+   must discard.</li>
+<li><strong><code>upstream_equivocate</code></strong> — serve two contradictory headers at
+   the same slot to two peers.</li>
+<li><strong><code>upstream_too_far_ahead</code></strong> — announce a tip 10× past the real
+    tip; producer must not fetch.</li>
+<li><strong><code>upstream_long_rollback</code></strong> — induce a rollback past <em>k</em> and
+    verify the honest peer rejects.</li>
+</ol>
+<p>Tier 3 needs a topology change (relays peer with adversary in their
+<code>topology.json</code>). That is a separate testnet variant; it does not
+disturb the current <code>cardano_node_master</code> testnet.</p>
+<h3 id="tier-4-n2c-abuse-lower-priority">Tier 4 — N2C abuse (lower priority)</h3>
+<ol>
+<li><strong><code>lsq_flood</code></strong> — open many <code>LocalStateQuery</code> sessions against a
+    relay, hold them.</li>
+<li><strong><code>local_tx_submission_garbage</code></strong> — N2C variant of #6.</li>
+</ol>
+<h2 id="sequenced-pr-plan">Sequenced PR plan</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Repo</th>
+<th>Description</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>antithesis</td>
+<td>Refresh <code>docs/components/adversary.md</code>, publish this roadmap</td>
+<td>✅ <a href="https://github.com/cardano-foundation/cardano-node-antithesis/pull/88">#88</a></td>
+</tr>
+<tr>
+<td>B</td>
+<td>clients</td>
+<td>Scaffold <code>cardano-adversary</code> daemon</td>
+<td>✅ <a href="https://github.com/lambdasistemi/cardano-node-clients/pull/103">#103</a></td>
+</tr>
+<tr>
+<td>C</td>
+<td>clients</td>
+<td><code>chain_sync_flap</code> endpoint (port from antithesis-side)</td>
+<td>✅ <a href="https://github.com/lambdasistemi/cardano-node-clients/pull/106">#106</a></td>
+</tr>
+<tr>
+<td>D</td>
+<td>antithesis</td>
+<td>Switch <code>components/adversary/</code> to consume the new image; delete the standalone binary</td>
+<td>✅ <a href="https://github.com/cardano-foundation/cardano-node-antithesis/pull/99">#99</a></td>
+</tr>
+<tr>
+<td>E</td>
+<td>clients</td>
+<td><code>chain_sync_thrash</code> endpoint (Tier 1.2)</td>
+<td>spec written, impl next</td>
+</tr>
+<tr>
+<td>F</td>
+<td>clients</td>
+<td><code>chain_sync_slow_loris</code> endpoint (Tier 1.3)</td>
+<td>not started</td>
+</tr>
+</tbody>
+</table>
+<p>After Tier 1 is fully green on Antithesis: start Tier 2 issues, one
+endpoint per PR. Tier 3 waits on appetite for the topology variant.</p>
+<h2 id="tickets">Tickets</h2>
+<p>Filed in <a href="https://github.com/cardano-foundation/cardano-node-antithesis"><code>cardano-foundation/cardano-node-antithesis</code></a>:</p>
+<ul>
+<li>✅ <a href="https://github.com/cardano-foundation/cardano-node-antithesis/issues/87">#87</a> — refresh adversary docs (closed by PR #88).</li>
+<li><a href="https://github.com/cardano-foundation/cardano-node-antithesis/issues/89">#89</a> — adversary roadmap epic (still open; tracks the rest of Tier 1+).</li>
+<li>✅ <a href="https://github.com/cardano-foundation/cardano-node-antithesis/issues/90">#90</a> — switch to consuming the upstream daemon image (closed by PR #99).</li>
+<li><a href="https://github.com/cardano-foundation/cardano-node-antithesis/issues/91">#91</a> — Tier 3 upstream-peer epic.</li>
+</ul>
+<p>Filed in <a href="https://github.com/lambdasistemi/cardano-node-clients"><code>lambdasistemi/cardano-node-clients</code></a>:</p>
+<ul>
+<li>✅ <a href="https://github.com/lambdasistemi/cardano-node-clients/issues/102">#102</a> — daemon scaffold (closed by PR #103).</li>
+<li>✅ <a href="https://github.com/lambdasistemi/cardano-node-clients/issues/104">#104</a> — <code>chain_sync_flap</code> (closed by PR #106).</li>
+<li><a href="https://github.com/lambdasistemi/cardano-node-clients/issues/107">#107</a> — <code>chain_sync_thrash</code> (Tier 1.2, next up).</li>
+</ul>
+<!-- MARKDOWN LINKS & IMAGES -->
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.indexes", "toc.integrate", "content.code.copy", "navigation.path"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+        <script src="../../js/asciinema-player.min.js"></script>
+      
+    
+  </body>
+</html>
