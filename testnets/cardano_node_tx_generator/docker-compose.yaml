@@ -121,7 +121,7 @@ services:
   # to a downstream commit and rebuild via
   # `nix build components/tx-generator#docker-image`.
   tx-generator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:PLACEHOLDER
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:ccd4950
     container_name: tx-generator
     hostname: tx-generator.example
     command:
