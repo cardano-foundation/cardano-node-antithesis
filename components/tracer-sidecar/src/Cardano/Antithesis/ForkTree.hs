@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 -- |
 -- Module      : Cardano.Antithesis.ForkTree
 -- Description : Pure cluster-wide fork tree built from per-node tip events
