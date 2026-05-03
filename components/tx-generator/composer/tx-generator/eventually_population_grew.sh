@@ -25,13 +25,19 @@ sdk_reachable "tx_generator_eventually_started"
 # its N2C connection.
 sleep 15
 
-RSP="$(printf '{"snapshot":null}\n' | nc -U -q 1 "$CONTROL_SOCKET" 2>/dev/null || true)"
+# Hard 5s wall-clock on the snapshot — see parallel_driver_*.sh
+# for the rationale (daemon accept-loop wedging under a fault
+# window can otherwise hang past the composer's per-step
+# deadline).
+RSP="$(timeout --kill-after=2s 5s sh -c \
+    "printf '{\"snapshot\":null}\\n' | nc -U -q 1 '$CONTROL_SOCKET'" \
+    2>/dev/null || true)"
 
 # If the daemon isn't reachable (control socket not yet
-# bound, supervisor mid-cycle, etc.) we can't make a
-# claim about the population either way. Surface a
-# reachability event and exit 0; do NOT fire the
-# 'did_not_grow' assertion against a daemon we never
+# bound, supervisor mid-cycle, 5s timeout above firing,
+# etc.) we can't make a claim about the population either
+# way. Surface a reachability event and exit 0; do NOT fire
+# the 'did_not_grow' assertion against a daemon we never
 # successfully queried.
 if [ -z "$RSP" ]; then
     sdk_reachable "tx_generator_eventually_daemon_unreachable"

@@ -50,14 +50,22 @@ REQ="$(printf '{"transact":{"seed":%s,"fanout":%s,"prob_fresh":%s}}' \
 
 sdk_reachable "tx_generator_transact_driver_started"
 
-RSP="$(printf '%s\n' "$REQ" | nc -U -q 1 "$CONTROL_SOCKET" 2>/dev/null || true)"
+# Hard 5s wall-clock on the request/response. Without this the
+# kernel's nc behaviour can leave the script blocked for >25s when
+# the daemon's accept loop is wedged mid-reconnect under a fault
+# window — long enough for the composer's per-step deadline to kill
+# us, surfacing as a non-zero exit on the built-in
+# 'Commands finish with zero exit code' property.
+RSP="$(timeout --kill-after=2s 5s sh -c \
+    "printf '%s\\n' '$REQ' | nc -U -q 1 '$CONTROL_SOCKET'" \
+    2>/dev/null || true)"
 
 # Empty RSP means the control socket isn't connectable
-# right now (daemon booting, or the supervisor briefly
-# tearing down the listener). That's a reachability
-# event, not a failure — exit 0 so the composer's
-# "Always exit 0" property holds and the next tick
-# retries.
+# right now (daemon booting, the supervisor briefly tearing
+# down the listener, or the 5s timeout above firing). That's
+# a reachability event, not a failure — exit 0 so the
+# composer's "Always exit 0" property holds and the next
+# tick retries.
 if [ -z "$RSP" ]; then
     sdk_reachable "tx_generator_transact_daemon_unreachable"
     exit 0
