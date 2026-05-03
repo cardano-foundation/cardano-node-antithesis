@@ -30,9 +30,11 @@ nav:
       - Adversary: components/adversary.md
       - Adversary roadmap: components/adversary-roadmap.md
       - Asteria Player: components/asteria-player.md
+      - Tx-generator: components/tx-generator.md
   - Testnets:
       - testnets/index.md
       - Cardano Node Master: testnets/cardano-node-master.md
+      - Cardano Node Tx-generator: testnets/cardano-node-tx-generator.md
   - Multi-run overview: overview.md
   - Triage: triage.md
   - Querying logs: query-logs.md
