@@ -9,6 +9,7 @@
 module Cardano.Antithesis.LogMessage
     ( LogMessage (..)
     , LogMessageData (..)
+    , NewTipSelectView (..)
     , Severity (..)
     ) where
 

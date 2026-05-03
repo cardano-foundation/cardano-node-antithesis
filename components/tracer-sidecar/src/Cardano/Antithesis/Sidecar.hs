@@ -15,9 +15,18 @@ module Cardano.Antithesis.Sidecar
     )
 where
 
+import Cardano.Antithesis.ForkTree
+    ( ForkTreeState
+    , Tip (..)
+    , clusterForkDepth
+    , initialForkTreeState
+    , recordExtension
+    , setTip
+    )
 import Cardano.Antithesis.LogMessage
     ( LogMessage (..)
     , LogMessageData (..)
+    , NewTipSelectView (..)
     , Severity (Critical)
     )
 import Cardano.Antithesis.Sdk
@@ -68,6 +77,18 @@ import System.IO (IOMode (AppendMode), withFile)
 
 -- spec ------------------------------------------------------------------------
 
+-- | Praos security parameter for the master testnet (k = 432).
+-- Forks shorter than this heal by definition; any cluster-wide
+-- divergence at this depth or beyond is unrecoverable.
+defaultK :: Int
+defaultK = 432
+
+-- | Cap on per-host ancestry walks when computing common
+-- ancestors.  Set generously above 'defaultK' so the walk can
+-- still detect a common ancestor at the boundary.
+defaultDepthCap :: Int
+defaultDepthCap = defaultK * 2
+
 mkSpec :: Int -> Spec
 mkSpec nPools = do
     mapM_
@@ -86,6 +107,9 @@ mkSpec nPools = do
 
     observe forwardAddedToCurrentChain
     observe recordAllChainPoints
+
+    -- Cluster-wide fork-depth probe (#119).
+    forkTreeProbe defaultK defaultDepthCap
   where
     recordAllChainPoints :: State -> LogMessage -> [Output]
     recordAllChainPoints
@@ -119,8 +143,17 @@ justANodeKill LogMessage{details} =
 
 -- State -----------------------------------------------------------------------
 
-newtype State = State
+data State = State
     { unreachedAssertions :: Set Text
+    , forkTree :: !ForkTreeState
+    , forkObserved :: !Bool
+    -- ^ Cluster-wide fork depth has been observed > 0 at least
+    -- once.  Used to fire the @\"cluster fork observed\"@
+    -- 'sometimes' assertion.
+    , forkExceededK :: !Bool
+    -- ^ Cluster-wide fork depth has crossed the @k@ boundary.
+    -- Used to fail the @\"cluster fork depth < k\"@
+    -- 'alwaysOrUnreachable' assertion.
     }
 
 initialState :: Spec -> (State, [Output])
@@ -129,7 +162,13 @@ initialState spec =
     , declarations spec
     )
   where
-    s0 = State mempty
+    s0 =
+        State
+            { unreachedAssertions = mempty
+            , forkTree = initialForkTreeState
+            , forkObserved = False
+            , forkExceededK = False
+            }
     setupFns = stateInitFunctions spec
 
 -- Spec ------------------------------------------------------------------------
@@ -171,14 +210,15 @@ alwaysOrUnreachable name f =
     initState s = s{unreachedAssertions = Set.insert name (unreachedAssertions s)}
 
     process :: State -> LogMessage -> (State, [Output])
-    process s@(State scanningFor) msg@LogMessage{json} = case f s msg of
-        False
-            | Set.member name scanningFor ->
-                ( State (Set.delete name scanningFor)
-                , [AntithesisSdk $ alwaysOrUnreachableFailed name json]
-                )
-            | otherwise -> (State scanningFor, [])
-        True -> (State scanningFor, [])
+    process s@State{unreachedAssertions = scanningFor} msg@LogMessage{json} =
+        case f s msg of
+            False
+                | Set.member name scanningFor ->
+                    ( s{unreachedAssertions = Set.delete name scanningFor}
+                    , [AntithesisSdk $ alwaysOrUnreachableFailed name json]
+                    )
+                | otherwise -> (s, [])
+            True -> (s, [])
 
 observe :: (State -> LogMessage -> [Output]) -> Spec
 observe process = do
@@ -200,15 +240,82 @@ sometimes name f =
     initState s = s{unreachedAssertions = Set.insert name (unreachedAssertions s)}
 
     process :: State -> LogMessage -> (State, [Output])
-    process s@(State scanningFor) msg
+    process s@State{unreachedAssertions = scanningFor} msg
         | Set.member name scanningFor && f s msg =
-            ( State (Set.delete name scanningFor)
+            ( s{unreachedAssertions = Set.delete name scanningFor}
             , [AntithesisSdk $ sometimesTracesReached name]
             )
-        | otherwise = (State scanningFor, [])
+        | otherwise = (s, [])
 
 sometimesTraces :: Text -> Spec
 sometimesTraces text = sometimes text $ \_s LogMessage{kind} -> kind == text
+
+-- Fork-tree probe (#119) ------------------------------------------------------
+
+-- | Cluster-wide fork-depth probe.  Three rules:
+--
+--   1. State updater: parse @AddedToCurrentChain@ /
+--      @SwitchedToAFork@ events, feed them into the
+--      'ForkTreeState', and recompute cluster fork depth.
+--      Sets 'forkObserved' once depth > 0; sets
+--      'forkExceededK' once depth >= @k@.
+--   2. @Sometimes: cluster fork observed@ — fires once
+--      'forkObserved' becomes 'True'.  Proves that fault
+--      injection actually exercises the fork-handling path,
+--      otherwise the @Always@ below is vacuous.
+--   3. @AlwaysOrUnreachable: cluster fork depth < k@ — fires
+--      once 'forkExceededK' becomes 'True'.  An unrecoverable
+--      divergence by Praos's definition.
+forkTreeProbe :: Int -> Int -> Spec
+forkTreeProbe k depthCap = do
+    Spec
+        $ tell
+            [ Rule
+                { _ruleProcess = updateForkTree k depthCap
+                , ruleDeclaration = Nothing
+                , ruleInit = id
+                }
+            ]
+    sometimes "cluster fork observed" $ \s _ -> forkObserved s
+    alwaysOrUnreachable "cluster fork depth < k" $ \s _ ->
+        not (forkExceededK s)
+
+-- | Parse a @"hash@slot"@ tip string into a 'Tip' record.
+parseTip :: NewTipSelectView -> Text -> Tip
+parseTip
+    NewTipSelectView{chainLength = clen, slotNo = sno}
+    newtipStr =
+        Tip
+            { tipHash = T.takeWhile (/= '@') newtipStr
+            , tipChainLength = clen
+            , tipSlotNo = sno
+            }
+
+-- | Apply a single trace event to the 'ForkTreeState' and
+-- update derived flags.  No SDK output here — the
+-- 'sometimes' / 'alwaysOrUnreachable' rules above turn the
+-- flags into observable assertions.
+updateForkTree :: Int -> Int -> State -> LogMessage -> (State, [Output])
+updateForkTree k depthCap s LogMessage{host, details} =
+    case details of
+        AddedToCurrentChain{newTipSelectView, newtip} ->
+            let newTip = parseTip newTipSelectView newtip
+                forkTree' = recordExtension host newTip (forkTree s)
+            in  (refresh s{forkTree = forkTree'}, [])
+        SwitchedToAFork{newTipSelectView, newtip} ->
+            let newTip = parseTip newTipSelectView newtip
+                forkTree' = setTip host newTip (forkTree s)
+            in  (refresh s{forkTree = forkTree'}, [])
+        _ -> (s, [])
+  where
+    refresh st = case clusterForkDepth depthCap (forkTree st) of
+        Nothing -> st
+        Just d ->
+            st
+                { forkObserved = forkObserved st || d > 0
+                , forkExceededK = forkExceededK st || d >= k
+                }
+
 
 declarations :: Spec -> [Output]
 declarations (Spec s) = mapMaybe (fmap AntithesisSdk . ruleDeclaration) $ execWriter s
