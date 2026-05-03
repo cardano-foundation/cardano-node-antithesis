@@ -7,6 +7,7 @@ let
     mkdir -p $out/opt/antithesis/test/v1/
     cp -r ${../composer}/. $out/opt/antithesis/test/v1
     chmod 0755 $out/opt/antithesis/test/v1/*/parallel_driver_*.sh
+    chmod 0755 $out/opt/antithesis/test/v1/*/finally_*.sh
   '';
 
   # Sleep-forever entrypoint: this container hosts the binary +
@@ -32,6 +33,7 @@ pkgs.dockerTools.buildImage {
     paths = [
       pkgs.coreutils
       pkgs.bash
+      pkgs.jq
       usrBinEnv
       sleep-forever
       antithesis-assets
