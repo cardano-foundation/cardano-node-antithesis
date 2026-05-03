@@ -213,7 +213,7 @@ services:
   # per-deploy seed TxIn so player + invariant binaries see the
   # same applied validators.
   asteria-game:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:034e4c8
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:68293af
     container_name: asteria-game
     hostname: asteria-game.example
     environment:
