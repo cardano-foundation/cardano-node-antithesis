@@ -106,7 +106,7 @@ services:
       - tracer:/tracer
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:65039df
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1ff6913
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -128,7 +128,7 @@ services:
   # if Antithesis chaos kills it, restart: always brings back an
   # idempotent host.
   adversary:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:69f49c5
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:5173fa8
     hostname: adversary.example
     volumes:
       # Read-only — tracer-sidecar writes chainPoints.log here.
@@ -141,7 +141,7 @@ services:
     restart: always
 
   tracer-sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:5271661
     hostname: tracer-sidecar.example
     command:
       - "/opt/cardano-tracer/logs"
