@@ -5,6 +5,10 @@
 # Same shape as eventually_alive.sh — confirm the indexer is at the
 # chain tip. End-of-run, not end-of-fault: a different signal from
 # the eventually_ probe even though the implementation matches.
+#
+# Budget matches eventually_alive: 60 s covers a post-kill cold-start
+# of the indexer (node-replaying exponential backoff + N2C handshake
+# + first-block write).
 
 set -u
 
@@ -12,8 +16,8 @@ set -u
 source "$(dirname "$0")/helper_sdk.sh"
 
 INDEXER_SOCK="${INDEXER_SOCK:-/tmp/idx.sock}"
-SLEEP_SETTLE="${SLEEP_SETTLE:-15}"
-MAX_ATTEMPTS="${MAX_ATTEMPTS:-5}"
+SLEEP_SETTLE="${SLEEP_SETTLE:-30}"
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-15}"
 RETRY_DELAY="${RETRY_DELAY:-2}"
 
 sdk_reachable "stub finally_alive entered"

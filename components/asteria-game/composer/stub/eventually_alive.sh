@@ -8,8 +8,13 @@
 # diagnose anything; richer convergence checks live in the sidecar
 # template (`finally_tips_agree`, `eventually_converged`).
 #
-# Total budget: 15 s settle + 5×2 s retries = 25 s worst case.
-# Stays well under the 1h-test post-fault window.
+# Total budget: 30 s settle + 15×2 s retries = 60 s worst case.
+# Sized to absorb an indexer cold-start when Antithesis kills the
+# asteria-game container (a node fault) right before the eventually_
+# fires: the indexer's reconnect goes through node-replaying with
+# exponential backoff (1s, 2s, 4s, 8s, 16s … ≈ 13 s to attempt 7) plus
+# N2C handshake + first-block write. 25 s wasn't enough; 60 s covers
+# the typical post-kill bootstrap.
 
 set -u
 
@@ -17,8 +22,8 @@ set -u
 source "$(dirname "$0")/helper_sdk.sh"
 
 INDEXER_SOCK="${INDEXER_SOCK:-/tmp/idx.sock}"
-SLEEP_SETTLE="${SLEEP_SETTLE:-15}"
-MAX_ATTEMPTS="${MAX_ATTEMPTS:-5}"
+SLEEP_SETTLE="${SLEEP_SETTLE:-30}"
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-15}"
 RETRY_DELAY="${RETRY_DELAY:-2}"
 
 sdk_reachable "stub eventually_alive entered"
