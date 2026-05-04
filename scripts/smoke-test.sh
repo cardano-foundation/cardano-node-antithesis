@@ -61,9 +61,12 @@ for i in $(seq 1 "$POOLS"); do
   done
 done
 
-echo "Checking sidecar convergence command..."
-docker compose -f "$COMPOSE_FILE" exec -T sidecar \
-  /opt/antithesis/test/v1/convergence/eventually_converged.sh
+# Convergence is now measured continuously by tracer-sidecar's
+# fork-tree probe (#119) — no shell-level eventually_converged.sh
+# check needed here.  The cardano-cli ping above already proves
+# each producer is alive and serving the chain; tracer-sidecar's
+# Always assertion enforces the cluster-wide unrecoverable-divergence
+# bound at runtime.
 
 # Adversary probe: if the testnet has the adversary container, exec
 # its driver once to prove the binary runs, the chainpoints file is
