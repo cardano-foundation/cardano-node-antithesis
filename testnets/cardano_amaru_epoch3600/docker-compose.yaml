@@ -151,6 +151,12 @@ services:
         relay="amaru-relay-1"
         peer="p1.example:3001"
 
+        # Tell Antithesis the relay is ready before bootstrap so the
+        # sidecar can emit "setup complete" inside the setup window.
+        # Bootstrap finishes during the test phase per spec 080.
+        mkdir -p /startup
+        printf '%s\n' "$${HOSTNAME:-amaru-relay-1.example}" > "/startup/amaru-relay-1.started"
+
         retry="$${AMARU_BOOTSTRAP_RETRY_SECONDS:-20}"
         final="/srv/amaru"
         work="$${final}/.work"
@@ -240,8 +246,6 @@ services:
           sleep "$${retry}"
         done
 
-        mkdir -p /startup
-        printf '%s\n' "$${HOSTNAME:-amaru-relay-1.example}" > "$${marker}"
         exec /bin/amaru run \
           --network testnet_42 \
           --ledger-dir /srv/amaru/ledger.testnet_42.db \
@@ -267,6 +271,12 @@ services:
       - |
         relay="amaru-relay-2"
         peer="p2.example:3001"
+
+        # Tell Antithesis the relay is ready before bootstrap so the
+        # sidecar can emit "setup complete" inside the setup window.
+        # Bootstrap finishes during the test phase per spec 080.
+        mkdir -p /startup
+        printf '%s\n' "$${HOSTNAME:-amaru-relay-2.example}" > "/startup/amaru-relay-2.started"
 
         retry="$${AMARU_BOOTSTRAP_RETRY_SECONDS:-20}"
         final="/srv/amaru"
@@ -351,8 +361,6 @@ services:
           sleep "$${retry}"
         done
 
-        mkdir -p /startup
-        printf '%s\n' "$${HOSTNAME:-amaru-relay-2.example}" > "$${marker}"
         exec /bin/amaru run \
           --network testnet_42 \
           --ledger-dir /srv/amaru/ledger.testnet_42.db \
