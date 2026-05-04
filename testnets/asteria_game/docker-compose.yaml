@@ -155,7 +155,7 @@ services:
   #       condition: service_completed_successfully
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:65039df
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1ff6913
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -170,7 +170,7 @@ services:
       - /tmp
 
   tracer-sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:5271661
     container_name: tracer-sidecar
     hostname: tracer-sidecar.example
     command:
