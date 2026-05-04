@@ -14,19 +14,17 @@ protocolConsts:
   k: 10
 
 --- # Optional Shelley Genesis Overide
-# Antithesis-only profile for the Amaru relay proof. The producer waits
-# until two complete Conway epochs (= 2*epochLength = 7200 slots) are
-# behind the immutable tip before it builds a bundle.
+# Antithesis profile for the Amaru relay proof. The producer waits
+# until two complete Conway epochs (= 2*epochLength slots) are behind
+# the immutable tip before it builds a bundle.
 #
-# Antithesis vtime under fault injection runs at ~1× wallclock, so with
-# the default 1-second slot length only ~3,600 slots elapse in a 1-h
-# budget — short of the 7,200 the predicate needs. Drop slotLength to
-# 0.36 s so the chain reaches 2 epochs in ~43 wallclock minutes,
-# leaving margin for bootstrap + amaru run inside the 1-h window.
-# Faster than ~0.24 s starts to risk leaders not finishing block
-# minting before the next slot.
-epochLength: 3600
-slotLength: 0.36
+# Antithesis vtime under fault injection runs at ~1× wallclock, so a
+# 1-second slot needs the chain to clock through 2*epochLength real
+# seconds. With the previous 3600-slot epochs that meant ~2 h before
+# the predicate could ever hold — outside a 1-h test budget. Drop to
+# 240-slot epochs so 2 epochs = 480 s ≈ 8 min, leaving plenty of
+# wallclock for bootstrap + amaru run inside a 1-h dispatch.
+epochLength: 240
 securityParam: 10
 activeSlotsCoeff: 0.2
 maxLovelaceSupply: 45000000000000000

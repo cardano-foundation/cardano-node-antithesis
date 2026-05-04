@@ -45,7 +45,7 @@ certificate, or stake-pool genesis assignment. They start with
 The Amaru testnets keep the observability and assertion services
 (`tracer`, `tracer-sidecar`, `log-tailer`, and `sidecar`) but remove the
 transaction perturbator workload. There is no `tx-generator` service in
-`cardano_amaru` or `cardano_amaru_epoch3600`; these profiles isolate the
+`cardano_amaru` or `cardano_amaru_epoch240`; these profiles isolate the
 cardano-node-to-Amaru bootstrap and relay-loading path.
 
 ## Fast Bootstrap Profile
@@ -71,13 +71,13 @@ startup. The dense active slot coefficient makes enough blocks immutable
 inside that short window; without it the immutable ChainDB tip can remain
 at genesis even after the slot threshold has passed.
 
-The `cardano_amaru_epoch3600` testnet keeps the same topology and
-bootstrap path but uses 3600-slot epochs:
+The `cardano_amaru_epoch240` testnet keeps the same topology and
+bootstrap path but uses 240-slot epochs:
 
 ```yaml
 protocolConsts:
   k: 10
-epochLength: 3600
+epochLength: 240
 securityParam: 10
 activeSlotsCoeff: 0.2
 TestConwayHardForkAtEpoch: 0
@@ -219,7 +219,7 @@ The long-epoch variant can be validated locally with a larger bootstrap
 timeout, but it is primarily intended for Antithesis:
 
 ```bash
-AMARU_BOOTSTRAP_SMOKE_TIMEOUT=9000 ./scripts/smoke-test.sh cardano_amaru_epoch3600 600
+AMARU_BOOTSTRAP_SMOKE_TIMEOUT=9000 ./scripts/smoke-test.sh cardano_amaru_epoch240 600
 ```
 
 The same smoke command runs in both the PR image-publish workflow and
