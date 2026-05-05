@@ -13,5 +13,10 @@
 # a real bug.
 
 set -u
+
+# shellcheck disable=SC1091
+source "$(dirname "$0")/helper_sdk.sh"
+
 export ASTERIA_INVARIANT=admin_singleton
-exec /bin/asteria-invariant
+sdk_run_signal_safe "stub anytime_admin_singleton container_stopped" \
+    /bin/asteria-invariant

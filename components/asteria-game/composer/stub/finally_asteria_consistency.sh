@@ -14,6 +14,11 @@
 # eventually/finally only — no polling loops here.
 
 set -u
+
+# shellcheck disable=SC1091
+source "$(dirname "$0")/helper_sdk.sh"
+
 sleep 15
 export ASTERIA_INVARIANT=consistency
-exec /bin/asteria-invariant
+sdk_run_signal_safe "stub finally_consistency container_stopped" \
+    /bin/asteria-invariant

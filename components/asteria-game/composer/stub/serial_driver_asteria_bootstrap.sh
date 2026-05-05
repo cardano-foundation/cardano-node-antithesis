@@ -14,4 +14,9 @@
 # safe — see Asteria.Bootstrap.isAlreadyDeployed.
 
 set -u
-exec /bin/asteria-bootstrap
+
+# shellcheck disable=SC1091
+source "$(dirname "$0")/helper_sdk.sh"
+
+sdk_run_signal_safe "stub asteria_bootstrap container_stopped" \
+    /bin/asteria-bootstrap

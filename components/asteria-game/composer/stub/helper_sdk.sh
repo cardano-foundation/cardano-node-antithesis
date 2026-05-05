@@ -52,3 +52,36 @@ sdk_always() {
     local cond=false; [ "$1" = "true" ] && cond=true
     _sdk_emit "Always" "always" "$cond" true "$2" "$2" "${3:-null}"
 }
+
+# sdk_run_signal_safe <sig_id> <binary> [args...]
+#
+# Run a binary and absorb signal-induced non-zero exits into an
+# sdk_unreachable signal + exit 0. Antithesis applies node faults
+# (stop/kill) to asteria-game mid-run; processes inside the
+# container then exit with codes like 137 (SIGKILL), 143 (SIGTERM),
+# or 255 (process aborted) — none of which are real test failures,
+# but the composer's "Always: Commands finish with zero exit code"
+# property would record them as bugs.
+#
+# Real non-zero exits (anything other than the signal-induced set)
+# propagate unchanged so genuine binary errors still surface.
+sdk_run_signal_safe() {
+    local sig_id="$1"; shift
+    "$@"
+    local rc=$?
+    case "$rc" in
+        0) return 0 ;;
+        # 128+9=137 SIGKILL
+        # 128+15=143 SIGTERM
+        # 128+1=129 SIGHUP
+        # 124 timeout(1) wrapper
+        # 255 generic abort / exec failed mid-call
+        129 | 137 | 143 | 124 | 255)
+            sdk_unreachable "$sig_id" \
+                "$(jq -nc --argjson r "$rc" \
+                    '{rc:$r, reason:"process exited with signal-induced code; container likely stopped mid-run"}')"
+            return 0
+            ;;
+        *) return "$rc" ;;
+    esac
+}

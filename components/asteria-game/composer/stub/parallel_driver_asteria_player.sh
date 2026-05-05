@@ -14,6 +14,11 @@
 # the asteria UTxO without acting, exercising the read path.
 
 set -u
+
+# shellcheck disable=SC1091
+source "$(dirname "$0")/helper_sdk.sh"
+
 PLAYER_ID="$(( ($(date +%s) % 3) + 1 ))"
 export ASTERIA_PLAYER_ID="$PLAYER_ID"
-exec /bin/asteria-game
+sdk_run_signal_safe "stub asteria_player_${PLAYER_ID} container_stopped" \
+    /bin/asteria-game
