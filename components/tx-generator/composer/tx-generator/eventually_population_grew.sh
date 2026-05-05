@@ -29,9 +29,7 @@ sleep 15
 # for the rationale (daemon accept-loop wedging under a fault
 # window can otherwise hang past the composer's per-step
 # deadline).
-RSP="$(timeout --kill-after=2s 5s sh -c \
-    "printf '{\"snapshot\":null}\\n' | nc -U -q 1 '$CONTROL_SOCKET'" \
-    2>/dev/null || true)"
+RSP="$(control_socket_request "$CONTROL_SOCKET" '{"snapshot":null}')"
 
 # If the daemon isn't reachable (control socket not yet
 # bound, supervisor mid-cycle, 5s timeout above firing,
