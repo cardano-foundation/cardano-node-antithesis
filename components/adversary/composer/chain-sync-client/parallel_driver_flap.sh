@@ -19,7 +19,13 @@
 
 set -euo pipefail
 
-SEED=$(antithesis_random 2>/dev/null \
+# Bound the antithesis_random call — empty additional_stderr/stdout
+# on the rare failing invocation in run d4c2996 + 61ad5ef showed the
+# binary never started, the script hung for 15s in $(antithesis_random)
+# until composer's per-command hard timeout SIGKILL'd it (exit 255).
+# Fall back to /dev/urandom whenever antithesis_random takes longer
+# than 2s; the seed still drives reproducible target/point picks.
+SEED=$(timeout 2 antithesis_random 2>/dev/null \
     || od -An -tx8 -N8 /dev/urandom | tr -d ' \n')
 
 exec cardano-adversary \

@@ -54,6 +54,8 @@ library
     , bytestring
     , cardano-ledger-byron
     , contra-tracer
+    , directory
+    , filepath
     , network
     , network-mux
     , ouroboros-consensus
@@ -75,6 +77,7 @@ library
     Adversary.Application
     Adversary.ChainSync.Codec
     Adversary.ChainSync.Connection
+    Adversary.SDK
 
   other-modules:
 
@@ -83,11 +86,15 @@ executable cardano-adversary
   main-is:        Main.hs
   build-depends:
     , adversary
+    , aeson
     , base
     , network
     , optparse-applicative
+    , ouroboros-network
     , ouroboros-network-api
     , random
+    , text
+    , time
 
   hs-source-dirs: app
 
