@@ -19,6 +19,29 @@ source "$(dirname "$0")/helper_sdk_lib.sh"
 
 CONTROL_SOCKET="${CONTROL_SOCKET:-/state/tx-generator-control.sock}"
 
+if [ "${TX_GEN_REFILL_DEADLINE_WRAPPED:-0}" != "1" ]; then
+    TX_GEN_REFILL_DEADLINE_WRAPPED=1 \
+        timeout --kill-after=2s 12s "$0" "$@"
+    rc=$?
+    case "$rc" in
+        0)
+            exit 0
+            ;;
+        124 | 129 | 137 | 143 | 255)
+            sdk_reachable "tx_generator_refill_driver_deadline" \
+                "$(jq -nc --argjson rc "$rc" \
+                    '{rc:$rc, reason:"driver exceeded its safety deadline or was interrupted by a container fault"}')"
+            exit 0
+            ;;
+        *)
+            sdk_unreachable "tx_generator_refill_driver_unexpected_exit" \
+                "$(jq -nc --argjson rc "$rc" \
+                    '{rc:$rc, reason:"driver returned non-zero outside the signal/deadline absorption set"}')"
+            exit 0
+            ;;
+    esac
+fi
+
 read_seed() {
     if command -v antithesis_random >/dev/null 2>&1; then
         antithesis_random
