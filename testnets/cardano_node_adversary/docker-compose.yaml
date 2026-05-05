@@ -141,7 +141,7 @@ services:
     restart: always
 
   tracer-sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:5271661
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:8dbf509
     hostname: tracer-sidecar.example
     command:
       - "/opt/cardano-tracer/logs"
