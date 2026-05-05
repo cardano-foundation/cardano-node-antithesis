@@ -1,0 +1,146 @@
+cabal-version: 3.0
+name:          asteria-game
+version:       0.1.0.0
+synopsis:      Asteria game bootstrap+player for the antithesis cluster
+description:
+  Long-running container that runs the asteria game
+  (https://github.com/txpipe/asteria) inside the cardano-node-antithesis
+  test cluster. Ships two execs: @asteria-bootstrap@ (idempotent
+  one-shot deploy of the asteria UTxO) and @asteria-game@ (the
+  long-running player loop). The cardano-node-clients TxBuild DSL,
+  parameter-applied Aiken validators, and Antithesis-controlled
+  randomness are all wired in here; the player loop layers on top in
+  subsequent PRs.
+
+license:       Apache-2.0
+license-file:  LICENSE
+author:        HAL team
+maintainer:    hal@cardano-foundation.org
+category:      Testing
+build-type:    Simple
+
+common settings
+  ghc-options:
+    -Wall -Wunused-imports -Wunused-packages -Wname-shadowing
+    -Wredundant-constraints
+
+  default-extensions:
+    DataKinds
+    DerivingStrategies
+    GADTs
+    ImportQualifiedPost
+    LambdaCase
+    NumericUnderscores
+    OverloadedStrings
+    RecordWildCards
+    ScopedTypeVariables
+    StrictData
+    TypeApplications
+
+library
+  import:           settings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  build-depends:
+    , aeson
+    , async
+    , base
+    , base16-bytestring
+    , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-alonzo
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-node-clients
+    , cardano-slotting
+    , containers
+    , directory
+    , file-embed
+    , filepath
+    , microlens
+    , mtl
+    , ouroboros-network:api
+    , plutus-core
+    , plutus-ledger-api
+    , plutus-tx
+    , random
+    , text
+
+  exposed-modules:
+    Asteria.Crypto
+    Asteria.Datums
+    Asteria.Deploy
+    Asteria.Game
+    Asteria.Provider
+    Asteria.RandomSource
+    Asteria.Sdk
+    Asteria.Validators
+    Asteria.Wallet
+
+executable asteria-bootstrap
+  import:           settings
+  main-is:          BootstrapMain.hs
+  hs-source-dirs:   app
+  default-language: GHC2021
+  build-depends:
+    , aeson
+    , asteria-game
+    , base
+    , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-node-clients
+    , containers
+    , microlens
+    , text
+
+executable asteria-game
+  import:           settings
+  main-is:          PlayerMain.hs
+  hs-source-dirs:   app
+  default-language: GHC2021
+  build-depends:
+    , aeson
+    , asteria-game
+    , base
+    , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-alonzo
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-node-clients
+    , cardano-slotting
+    , containers
+    , hashable
+    , microlens
+    , plutus-tx
+    , text
+    , time
+
+executable asteria-invariant
+  import:           settings
+  main-is:          InvariantMain.hs
+  hs-source-dirs:   app
+  default-language: GHC2021
+  build-depends:
+    , aeson
+    , asteria-game
+    , base
+    , bytestring
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-node-clients
+    , containers
+    , microlens
+    , plutus-ledger-api
+    , plutus-tx
+    , text
