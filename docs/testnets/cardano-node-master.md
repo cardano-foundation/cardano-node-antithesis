@@ -18,7 +18,8 @@ This testnet exercises the node-to-node protocol across multiple cardano-node ve
 | **tracer-sidecar** | Processes tracer logs into Antithesis assertions (chain convergence, error detection) |
 | **sidecar** | Network health checks, the Antithesis setup signal, and the host of the chain-sync `adversary` driver (see [Adversary](../components/adversary.md)). |
 | **log-tailer** | Streams the per-pool node logs into Antithesis's log explorer for offline triage. |
-| **asteria-game** | Single container that hosts the long-lived utxo-indexer plus three short-lived binaries (`asteria-bootstrap`, `asteria-game`, `asteria-invariant`) fired by composer scripts. See [Why asteria-game is here](#why-asteria-game-is-here) below and [Asteria Player](../components/asteria-player.md). |
+| **asteria-game** | Single container that hosts the long-lived utxo-indexer plus three short-lived binaries (`asteria-bootstrap`, `asteria-game`, `asteria-invariant`) fired by composer scripts. See [Why asteria-game is here](#why-asteria-game-is-here) below and [Asteria Game](../components/asteria-player.md). |
+| **tx-generator** | Long-running daemon that submits well-formed ADA transfers through relay1's N2C socket. Composer drivers fire deterministic `transact`, `refill`, `eventually`, and `finally` control-socket probes. See [Why tx-generator is here](#why-tx-generator-is-here) below and [Tx-generator](../components/tx-generator.md). |
 
 ## Why asteria-game is here
 
@@ -85,7 +86,89 @@ and are baked into the image at build time.
 
 For the architectural detail of how the binaries integrate with
 `cardano-node-clients` (provider, submitter, indexer, TxBuild DSL,
-fee bisection), see [Asteria Player](../components/asteria-player.md).
+fee bisection), see [Asteria Game](../components/asteria-player.md).
+
+## Why tx-generator is here
+
+`asteria-game` gives master Plutus-heavy script traffic. The
+tx-generator adds a complementary ADA-only workload: many simple,
+well-formed UTxO fan-out transactions that put pressure on mempool
+admission, ledger validation, rollback handling, and node-to-client
+submission without depending on Plutus execution.
+
+The service is deliberately composer-driven. The daemon is idle until
+Antithesis fires a short command:
+
+- **`parallel_driver_transact.sh`** - requests one deterministic
+  fan-out transaction from an existing population address.
+- **`parallel_driver_refill.sh`** - requests one faucet-funded top-up
+  into a fresh population address.
+- **`eventually_population_grew.sh`** - snapshots the daemon state and
+  asserts that a populated address set was observed.
+- **`finally_pressure_summary.sh`** - emits an end-of-run snapshot with
+  population size, UTxO value percentiles, tip slot, and last tx id.
+
+Why this belongs in the production-baseline testnet:
+
+- **Independent transaction pressure.** It continues driving ordinary
+  ADA transfers even when the Plutus workload is faulted, not yet
+  bootstrapped, or waiting on an invariant window.
+- **Replayable pressure.** Every command carries its own seed; with the
+  same persistent state and request payload, the daemon rebuilds the
+  same transaction. That makes Antithesis examples reproducible.
+- **N2C resilience surface.** The daemon maintains one multiplexed N2C
+  bearer to relay1 for ChainSync, LocalStateQuery, and
+  LocalTxSubmission. Relay restarts and network faults exercise the
+  reconnect and duplicate-submit recovery logic.
+- **Oracle properties.** Hard failures surface as
+  `tx_generator_*_submit_rejected`; liveness and pressure are scored
+  through `tx_generator_population_grew`,
+  `tx_generator_refill_landed`, and `tx_generator_pressure_summary`.
+
+### Promotion evidence
+
+The image promoted here is `tx-generator:69bf815`, referenced from
+downstream commit `4687a09`. It was validated on the sibling
+`cardano_node_tx_generator` testnet before promotion.
+
+| Evidence | Value |
+|----------|-------|
+| Antithesis test run | `9352ad089c67523bc2ba2c14d1d18b5b39b24f49797c640214eaf375abf74944` |
+| Triage report id | `OSIShLbA8Ixh6uRxqDdjWdtr` |
+| Started | `2026-05-05 12:48 UTC` |
+| Properties | `40/40` passed |
+| Findings | `0 new`, `0 ongoing`, `0 resolved`, `0 rare` |
+
+Shared images were checked against the nearest completed
+`cardano_node_master` run (`8ca5bdd583...`, started
+`2026-05-05 12:42 UTC`). The `configurator`, `log-tailer`,
+`sidecar`, `tracer-sidecar`, `cardano-node`, and `cardano-tracer`
+images matched. The expected workload-specific differences were
+`tx-generator:69bf815` in the tx-generator validation run and
+`asteria-game:f7ce4a2` in master.
+
+The validation run also cleared the four previous tx-generator
+composer zero-exit findings:
+
+| Composer command | Passing hits | Failing hits |
+|------------------|--------------|--------------|
+| `tx-generator/parallel_driver_transact.sh` | `5,288` | `0` |
+| `tx-generator/parallel_driver_refill.sh` | `3,506` | `0` |
+| `tx-generator/eventually_population_grew.sh` | `1,448` | `0` |
+| `tx-generator/finally_pressure_summary.sh` | `413` | `0` |
+
+Measured pressure in that run:
+
+| Measurement | Value |
+|-------------|-------|
+| Transact-driver starts | `5,709` |
+| Refill-driver starts | `4,597` |
+| Max concurrent composer commands | `12` |
+| Total virtual hours | `335.301` |
+| Virtual seconds per input | `0.743665` |
+| `tx_generator_population_grew` hits | `166` |
+| `tx_generator_refill_landed` hits | `43` |
+| `tx_generator_pressure_summary` hits | `413` |
 
 ## Network topology
 

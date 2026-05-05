@@ -29,7 +29,7 @@ nav:
       - Config: components/config.md
       - Adversary: components/adversary.md
       - Adversary roadmap: components/adversary-roadmap.md
-      - Asteria Player: components/asteria-player.md
+      - Asteria Game: components/asteria-player.md
       - Tx-generator: components/tx-generator.md
   - Testnets:
       - testnets/index.md

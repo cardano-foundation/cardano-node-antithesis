@@ -15,7 +15,7 @@ This repository contains test assets and configurations for running [Antithesis]
 Docker containers that set up and drive the Antithesis test environment. Depending on their role, they range from simple wrappers around external executables to complex services for actively or passively testing Cardano Nodes.
 
 - `adversary/`: A node-to-node downstream chain-sync client that connects to producers from a random intersection point, pulls a bounded number of blocks, then disconnects. Today's surface is downstream-only; the long-term plan is a long-running daemon with parallel-driver fan-out (see [adversary roadmap](components/adversary-roadmap.md)).
-- `asteria-player/`: Long-running container that plays the [asteria](https://github.com/txpipe/asteria) game inside the cluster, driving real Plutus traffic (spend script, mint, reference inputs, validity bounds) under fault injection.
+- `asteria-game/`: Workload container that hosts a long-lived UTxO indexer plus composer-fired bootstrap, player, and invariant binaries for the [asteria](https://github.com/txpipe/asteria) game.
 - `configurator/`: Generates genesis files, node configuration, and signing keys for the testnet using the [testnet-generation-tool](https://github.com/cardano-foundation/testnet-generation-tool).
 - `config/`: Antithesis platform configuration container.
 - `sidecar/`: Network health checks and Antithesis assertions that validate testnet status.
@@ -26,7 +26,7 @@ Docker containers that set up and drive the Antithesis test environment. Dependi
 
 Currently we provide and maintain one testnet configuration. Some old testnets are preserved in the [old-broken](https://github.com/cardano-foundation/cardano-node-antithesis/tree/main/old-broken) directory for historical reference.
 
-- `cardano_node_master/`: A mixed-version testnet with 3 block producers (10.5.3, 10.6.2, 10.7.1) and 2 relay nodes (10.6.2, 10.7.1). Includes a tracer, tracer-sidecar, and sidecar for observability and assertions. The topology exercises node-to-node protocol diversity across supported Cardano Node versions. See [cardano-node-master](testnets/cardano-node-master.md) for details.
+- `cardano_node_master/`: A mixed-version testnet with 3 block producers (10.5.3, 10.6.2, 10.7.1), 2 relay nodes (10.6.2, 10.7.1), tracer observability, Asteria Plutus workload pressure, and tx-generator ADA-transfer pressure. See [cardano-node-master](testnets/cardano-node-master.md) for details.
 
 ## Image publishing
 
