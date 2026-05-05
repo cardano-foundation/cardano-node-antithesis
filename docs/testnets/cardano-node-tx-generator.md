@@ -8,27 +8,43 @@ log-tailer) plus the tx-generator service active (not parked).
 ## Why a separate testnet
 
 `cardano_node_master` is the production-baseline testnet on the
-scheduled Antithesis cron. Feature work on the tx-generator daemon —
+scheduled Antithesis cron. Feature work on the tx-generator daemon -
 upstream pin bumps, composer-script changes, reconnect-resilience
-iteration — must not contaminate the master baseline. This testnet
-is the iteration surface; the daemon is promoted to master in a
-separate, explicitly-reviewed PR once it's perfectly stable.
+iteration - must not contaminate the master baseline. This testnet is
+the iteration surface. Promotion to master happens only after a
+dedicated faults-enabled Antithesis run proves the image and composer
+drivers are stable.
 
 ## Image set
 
-Identical to master's, byte-for-byte:
+Identical to master's shared image set, byte-for-byte. The only
+intentional service-set difference is that this testnet includes the
+tx-generator daemon under test.
 
 | Service          | Image                                                            |
 |------------------|------------------------------------------------------------------|
-| p1, relay1       | `ghcr.io/intersectmbo/cardano-node@sha256:c3cbc5aa…2c4b2`        |
-| p2, relay2       | `ghcr.io/intersectmbo/cardano-node@sha256:45857be8…42271`        |
-| p3               | `ghcr.io/intersectmbo/cardano-node@sha256:5ae211f9…d19f`         |
+| p1               | `ghcr.io/intersectmbo/cardano-node@sha256:5ae211f9…d19f`         |
+| p2, relay1       | `ghcr.io/intersectmbo/cardano-node@sha256:c3cbc5aa…2c4b2`        |
+| p3, relay2       | `ghcr.io/intersectmbo/cardano-node@sha256:45857be8…42271`        |
 | tracer           | `ghcr.io/intersectmbo/cardano-tracer@sha256:da628263…28efe`      |
 | configurator     | `…/configurator@sha256:6e6ba428…6a34d`                          |
-| sidecar          | `…/sidecar:65039df`                                              |
-| tracer-sidecar   | `…/tracer-sidecar@sha256:8474b148…0b5c689`                      |
+| sidecar          | `…/sidecar:1ff6913`                                              |
+| tracer-sidecar   | `…/tracer-sidecar:5271661`                                      |
 | log-tailer       | `…/log-tailer@sha256:a5d23c42…df56484`                          |
-| **tx-generator** | `…/tx-generator:<branch-sha>` (see [Tx-generator](../components/tx-generator.md)) |
+| **tx-generator** | `…/tx-generator:69bf815` (see [Tx-generator](../components/tx-generator.md)) |
+
+Validation on `2026-05-05` compared this run against the nearest
+completed `cardano_node_master` run:
+
+| Run | Testnet | Commit/source | Shared images |
+|-----|---------|---------------|---------------|
+| `9352ad089c...` | `cardano_node_tx_generator` | `4687a09` / `tx-generator:69bf815` | matched master |
+| `8ca5bdd583...` | `cardano_node_master` | `166da28` | matched tx-generator |
+
+The report-level resolved digests matched for `configurator`,
+`log-tailer`, `sidecar`, `tracer-sidecar`, `cardano-node`, and
+`cardano-tracer`. Expected differences: the tx-generator run added
+`tx-generator:69bf815`; the master run added `asteria-game:f7ce4a2`.
 
 ## Network topology
 
@@ -59,7 +75,7 @@ INTERNAL_NETWORK=true scripts/smoke-test.sh cardano_node_tx_generator 600
 
 ```bash
 gh workflow run "Antithesis on cardano-node testnet" \
-    --ref feat/tx-generator-n2c-reconnect-bump \
+    --ref chore/tx-generator-match-master-images \
     -f test=cardano_node_tx_generator \
     -f duration=1
 ```
@@ -90,10 +106,19 @@ INTERNAL_NETWORK=true scripts/smoke-test.sh cardano_node_tx_generator 600
 service being present in the resolved compose — driving 5 transacts
 end-to-end and asserting `populationSize > 1`.
 
-## Promotion to master
+## Promotion evidence
 
-When the daemon is stable, promotion is a separate PR that touches
-*only* `testnets/cardano_node_master/docker-compose.yaml`
-(un-park the tx-generator service, point at the latest published
-tag). This iteration testnet remains as the surface for further
-iteration after promotion.
+The `tx-generator:69bf815` image was promoted to
+`cardano_node_master` after the 1h faults-enabled run
+`9352ad089c67523bc2ba2c14d1d18b5b39b24f49797c640214eaf375abf74944`
+completed with:
+
+- `40/40` report properties passed.
+- `0` new, ongoing, resolved, or rare findings.
+- `0` failing hits for all four tx-generator composer commands.
+- `5,709` transact-driver starts, `4,597` refill-driver starts, and
+  `43` observed `tx_generator_refill_landed` hits.
+
+This iteration testnet remains useful after promotion: future
+tx-generator image pins should prove themselves here before replacing
+the image in `cardano_node_master`.

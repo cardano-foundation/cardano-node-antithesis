@@ -229,10 +229,74 @@ The composer assertions surface two classes of finding:
     - `tx_generator_population_grew` (Sometimes — gated)
     - `tx_generator_pressure_summary` (Reachability at run-end)
 
-The reconnect-resilience PR stack drove the count of (1) to **0** on
-a 1h faults-enabled Antithesis run on the dedicated
+## Validation evidence
+
+The tx-generator image promoted to
+[`cardano_node_master`](../testnets/cardano-node-master.md) is
+`tx-generator:69bf815`, referenced from downstream commit `4687a09`.
+It was validated on the dedicated
 [`cardano_node_tx_generator`](../testnets/cardano-node-tx-generator.md)
-testnet.
+testnet before promotion.
+
+| Evidence | Value |
+|----------|-------|
+| Antithesis test run | `9352ad089c67523bc2ba2c14d1d18b5b39b24f49797c640214eaf375abf74944` |
+| Triage report id | `OSIShLbA8Ixh6uRxqDdjWdtr` |
+| GitHub workflow | `25377129832` |
+| Started | `2026-05-05 12:48 UTC` |
+| Requested duration | `60m` |
+| Reported wall clock | `1h 7m` |
+| Reported test hours | `48h 0m` |
+| Properties | `40/40` passed |
+| Findings | `0 new`, `0 ongoing`, `0 resolved`, `0 rare` |
+
+The validation run used the same shared image set as the adjacent
+`cardano_node_master` run `8ca5bdd583...` from `2026-05-05 12:42 UTC`:
+the same `configurator`, `log-tailer`, `sidecar`, `tracer-sidecar`,
+`cardano-node`, and `cardano-tracer` images. The expected differences
+were that the tx-generator run added `tx-generator:69bf815`, while the
+master run included `asteria-game:f7ce4a2`.
+
+The four previous composer zero-exit findings were all cleared:
+
+| Composer command | Passing hits | Failing hits |
+|------------------|--------------|--------------|
+| `tx-generator/parallel_driver_transact.sh` | `5,288` | `0` |
+| `tx-generator/parallel_driver_refill.sh` | `3,506` | `0` |
+| `tx-generator/eventually_population_grew.sh` | `1,448` | `0` |
+| `tx-generator/finally_pressure_summary.sh` | `413` | `0` |
+
+Measured workload pressure in that run:
+
+| Measurement | Value |
+|-------------|-------|
+| `parallel_driver_transact.sh` starts | `5,709` |
+| `parallel_driver_refill.sh` starts | `4,597` |
+| `eventually_population_grew.sh` starts | `1,412` |
+| `finally_pressure_summary.sh` starts | `413` |
+| Max commands running concurrently | `12` |
+| Total virtual hours | `335.301` |
+| Virtual seconds per input | `0.743665` |
+| `tx_generator_population_grew` hits | `166` |
+| `tx_generator_refill_landed` hits | `43` |
+
+The `tx_generator_pressure_summary` property passed with `413` hits and
+`0` failing. The report exposes one exemplar snapshot:
+
+```json
+{
+  "lastTxId": null,
+  "p10_lovelace": null,
+  "p50_lovelace": null,
+  "p90_lovelace": null,
+  "populationSize": 0,
+  "tipSlot": 61
+}
+```
+
+That exemplar is a point-in-time SDK example selected by Antithesis;
+the workload properties above show that population growth and refill
+landing were observed elsewhere in the same run.
 
 ## Source
 

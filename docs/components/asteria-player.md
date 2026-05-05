@@ -1,10 +1,10 @@
-# Asteria Player
+# Asteria Game
 
-Long-running container that plays the [asteria][asteria] game inside the
-cardano-node-antithesis cluster. Drives realistic transaction traffic
-(spend script, mint, reference inputs, validity bounds, inline datums)
-through the cluster nodes so antithesis can fuzz state-space exploration
-against contention between players.
+Single workload container that plays the [asteria][asteria] game inside
+the cardano-node-antithesis cluster. It drives realistic transaction
+traffic - script spends, minting policies, reference scripts, validity
+bounds, inline datums - so Antithesis can explore node behavior under
+real ledger pressure instead of only empty-block production.
 
 This component is part of the phase-1 gatherer feature ([#56][issue-56]).
 
@@ -76,9 +76,9 @@ volumes:
 in [`testnets/cardano_node_master/docker-compose.yaml`][master-compose].
 
 The composer scripts that drive the binaries are baked into the
-image at build time at `/opt/antithesis/test/v1/stub/` —
-nothing extra to mount. The Antithesis composer mounts that path
-into its execution sandbox automatically when the test runs.
+image at build time at `/opt/antithesis/test/v1/stub/` - nothing extra
+to mount. The Antithesis composer mounts that path into its execution
+sandbox automatically when the test runs.
 
 ### Validation gate before merging into a scheduled testnet
 
@@ -110,70 +110,66 @@ need to mirror those choices.
 
 ## What it does
 
-The container ships two binaries:
+The container entrypoint is a long-lived `utxo-indexer` connected to
+`relay1` via N2C. The image also ships three short-lived binaries that
+the Antithesis composer fires as commands:
 
-- **`asteria-bootstrap`** — one-shot. Deploys the four asteria validators
-  as inline reference scripts, mints the admin NFT, locks the asteria
-  UTxO at the asteria spend address with inline `AsteriaDatum`, and
-  spawns the initial pellet UTxOs at known coordinates.
-- **`asteria-player`** — long-running. Reads game state via the N2C
-  local socket, picks an action (`mint_ship`, `move_ship`,
-  `gather_fuel`, `mine_asteria`, `quit`) using randomness sourced from
-  the antithesis hypervisor when available, submits the resulting tx,
-  sleeps a randomly-chosen interval, repeats.
+- **`asteria-bootstrap`** - serial, idempotent deploy. Picks or reuses
+  a deploy seed UTxO, parameter-applies the validators to that seed,
+  mints the one-shot `asteriaAdmin` NFT, and locks the initial
+  `AsteriaDatum` at the asteria spend address. Re-running is safe:
+  once the asteria UTxO exists, bootstrap observes it and skips the
+  mint path.
+- **`asteria-game`** - parallel workload pass. Reads the asteria UTxO
+  through the indexer, plans a move for one of three logical players,
+  and today lets player 1 build, sign, and submit a `spawnShip` Plutus
+  transaction. The binary exits after one pass; composer provides the
+  repetition and concurrency.
+- **`asteria-invariant`** - one-shot oracle. Depending on
+  `ASTERIA_INVARIANT`, checks either the `asteriaAdmin` singleton or
+  end-of-run state consistency between the asteria `ship_counter` and
+  the `SHIP*` tokens at the spacetime address.
 
-Composer scripts under `/opt/antithesis/test/v1/asteria/`:
+Composer scripts under `/opt/antithesis/test/v1/stub/`:
 
-- `parallel_driver_asteria_bootstrap.sh` — fires once at start.
-- `parallel_driver_asteria_player.sh` — long-running player loop, one
-  per replica.
-- `eventually_asteria_alive.sh` — confirms the bootstrap event landed
-  in the SDK fallback file within a bounded window.
-- `helper_sdk_lib.sh` — copy of the shared shell SDK helper.
+| Script | Role |
+|--------|------|
+| `serial_driver_asteria_bootstrap.sh` | Exclusive bootstrap/deploy command. |
+| `parallel_driver_asteria_player.sh` | Concurrent workload command; one observe/spawn pass. |
+| `parallel_driver_heartbeat.sh` | Indexer readiness probe during the run. |
+| `anytime_asteria_admin_singleton.sh` | Periodic singleton invariant. |
+| `eventually_alive.sh` | Post-fault indexer liveness probe. |
+| `finally_alive.sh` | End-of-run indexer liveness probe. |
+| `finally_asteria_consistency.sh` | End-of-run game-state consistency snapshot. |
+| `helper_sdk.sh` | Shared shell SDK emitter and signal-safe wrapper. |
 
-## Iterations
+## Assertions
 
-1. **Wiring proof** *(current).* Both binaries emit `sdk_reachable`
-   events to the JSONL fallback file and exit / sleep. No game logic
-   yet; this iteration only proves the Nix → docker image →
-   docker-compose → composer driver → SDK fallback pipeline is wired
-   correctly. See [PR #57][pr-57].
-2. **`cardano-node-clients` integration.** Pin
-   [`cardano-node-clients@f6a31ca`][cnc-fix] (closes the ref-script
-   fee bug that asteria's `move_ship` ref-input path needs) and
-   transitive `source-repository-package` dependencies. Player
-   connects to N2C and queries protocol parameters.
-3. **Real validators.** Compile [txpipe/asteria][asteria-onchain]'s
-   four Aiken validators (`asteria.spend`, `spacetime.spend`,
-   `pellet.spend`, `deploy.spend`) plus the two minting policies
-   (`shipyard.mint`, `fuel.mint`) with parameter application. Commit
-   compiled bytes alongside the Aiken sources for reproducibility.
-4. **Real bootstrap.** Replace the `sdk_reachable` placeholder with
-   the actual deployment tx.
-5. **Game loop.** `mintShip` / `moveShip` / `gatherFuel` /
-   `mineAsteria` driven by an injectable `RandomSource`; pure
-   library functions over `Provider` + `Submitter` from
-   `cardano-node-clients`.
-6. **Antithesis randomness.** Wire `RandomSource` to
-   `antithesis.random.get_random()` (Python subprocess wrapper;
-   `System.Random` fallback when the SDK isn't reachable). The
-   hypervisor controls every game decision.
-7. **Richer assertions.** `eventually_ship_counter_grew`,
-   `finally_someone_reached_origin`, `sdk_always(no_double_spend)`,
-   per-tx `sdk_sometimes` markers for unusual states.
+Asteria contributes both workload and oracles:
+
+- `asteria_bootstrap_asteria_created` / `asteria_bootstrap_already_deployed`
+  prove deployment either happened or was observed.
+- `asteria_player_ship_spawned_1` proves real Plutus spawn
+  transactions landed.
+- `asteria_admin_singleton` is an `Always` property: exactly one
+  `asteriaAdmin` NFT exists at the asteria spend address.
+- `asteria_state_consistent` is a `Sometimes` property comparing
+  `ship_counter` to `SHIP*` token count.
+- `stub eventually_alive holds` and `stub finally_alive holds` prove the
+  long-lived indexer is responsive and close to the chain tip.
 
 ## Build the image
 
 ### Nix
 
 ```bash
-cd components/asteria-player
+cd components/asteria-game
 nix build .#docker-image
 docker load < result
 version=$(nix eval --raw .#version)
 docker tag \
-    ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-player:$version \
-    ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-player:dev
+    ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:$version \
+    ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:dev
 ```
 
 `just load-docker-image` wraps the same steps.
@@ -185,25 +181,18 @@ INTERNAL_NETWORK=false docker compose \
     -f testnets/cardano_node_master/docker-compose.yaml up -d
 ```
 
-The compose file declares:
+The compose file declares one `asteria-game` service. Its main process
+is the indexer; the Antithesis composer invokes the baked-in scripts
+inside that container during a test run.
 
-- `asteria-bootstrap` — depends on `relay1`, exits 0 once the
-  bootstrap event is written.
-- `asteria-player-1` / `asteria-player-2` — depend on
-  `asteria-bootstrap` completing successfully; tail forever once
-  started.
-- `asteria-sdk` named volume — shared between all three so the
-  JSONL fallback file (`/sdk/sdk.jsonl`) is observable from any of
-  them.
-
-Inspect the JSONL fallback:
+For a local container smoke:
 
 ```bash
-docker run --rm \
-    -v cardano_node_master_asteria-sdk:/sdk:ro \
-    --entrypoint /bin/cat \
-    ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-player:dev \
-    /sdk/sdk.jsonl
+just logs asteria-game
+docker compose -f testnets/cardano_node_master/docker-compose.yaml \
+    exec asteria-game /bin/asteria-bootstrap
+docker compose -f testnets/cardano_node_master/docker-compose.yaml \
+    exec asteria-game /bin/asteria-game
 ```
 
 ## See Also
@@ -219,8 +208,6 @@ docker run --rm \
 [asteria]: https://github.com/txpipe/asteria
 [asteria-onchain]: https://github.com/txpipe/asteria/tree/main/onchain
 [issue-56]: https://github.com/cardano-foundation/cardano-node-antithesis/issues/56
-[pr-57]: https://github.com/cardano-foundation/cardano-node-antithesis/pull/57
-[cnc-fix]: https://github.com/lambdasistemi/cardano-node-clients/commit/f6a31ca6c169810a46e45648a0868d7a48eb1f02
 [master-why]: ../testnets/cardano-node-master.md#why-asteria-game-is-here
 [master-compose]: https://github.com/cardano-foundation/cardano-node-antithesis/blob/main/testnets/cardano_node_master/docker-compose.yaml
 [master-pr-128]: https://github.com/cardano-foundation/cardano-node-antithesis/pull/128

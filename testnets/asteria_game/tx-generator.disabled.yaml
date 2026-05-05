@@ -1,6 +1,7 @@
-# Parked tx-generator service. Removed from docker-compose.yaml in
-# this branch but kept here so the service definition survives and
-# can be restored verbatim when the daemon is reintroduced.
+# Optional tx-generator service for the asteria_game testnet. It is
+# parked because that testnet isolates the Asteria workload, but the
+# image tag is kept aligned with the validated tx-generator release so
+# local combined-workload checks do not resurrect an old daemon.
 #
 # This file is a compose override fragment, not a standalone compose:
 # tx-generator depends on relay1 which lives in docker-compose.yaml.
@@ -21,7 +22,7 @@ services:
     # `nix build` from components/tx-generator/ produces
     # the exact tag and `docker load` makes compose pick
     # it up without a pull.
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:2012360
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:69bf815
     container_name: tx-generator
     hostname: tx-generator.example
     command:
