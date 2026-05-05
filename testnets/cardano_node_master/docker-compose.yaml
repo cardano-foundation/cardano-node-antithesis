@@ -196,6 +196,44 @@ services:
       tracer:
         condition: service_started
 
+  # Asteria game workload — promoted from testnets/asteria_game/ on
+  # the strength of the 0-findings 1h Antithesis run on commit
+  # 9984a1e (PR #100). Long-lived utxo-indexer follows relay1's
+  # chain via N2C, exposes ready/utxos_at/await on /tmp/idx.sock;
+  # composer scripts at /opt/antithesis/test/v1/stub/ drive
+  # bootstrap (one-shot serial driver), the player loop, and the
+  # admin-singleton / consistency invariant snapshots. The player
+  # parallel_driver_ is the workload generator: builds + signs +
+  # submits spawnShip txs against relay1 every tick, providing
+  # sustained tx pressure under fault injection.
+  #
+  # Built from upstream PR #98 (035-indexer-n2c-reconnect) —
+  # supervisor with exponential-backoff reconnect handles N2C peer
+  # close in-process, so the daemon stays up across relay restarts.
+  # RocksDB persistence at /idx-db keeps state across full process
+  # restarts too. /utxo-keys is mounted so the bootstrap binary
+  # can read the genesis wallet skey; /asteria-deploy holds the
+  # per-deploy seed TxIn so player + invariant binaries see the
+  # same applied validators.
+  asteria-game:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:f7ce4a2
+    container_name: asteria-game
+    hostname: asteria-game.example
+    environment:
+      INDEXER_SOCK: /tmp/idx.sock
+      CARDANO_NODE_SOCKET_PATH: /state/node.socket
+      NETWORK_MAGIC: "42"
+    volumes:
+      - relay1-state:/state:ro
+      - utxo-keys:/utxo-keys:ro
+      - asteria-game-db:/idx-db
+      - asteria-deploy:/asteria-deploy
+    tmpfs:
+      - /tmp
+    depends_on:
+      relay1:
+        condition: service_started
+
 volumes:
   tracer:
   p1-configs:
@@ -204,6 +242,8 @@ volumes:
   relay1-state:
   relay2-state:
   utxo-keys:
+  asteria-game-db:
+  asteria-deploy:
 
 networks:
   default:
