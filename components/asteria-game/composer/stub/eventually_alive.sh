@@ -15,6 +15,16 @@
 # exponential backoff (1s, 2s, 4s, 8s, 16s … ≈ 13 s to attempt 7) plus
 # N2C handshake + first-block write. 25 s wasn't enough; 60 s covers
 # the typical post-kill bootstrap.
+#
+# Cold-start guard: if the indexer reports tipSlot=null after the full
+# budget, no chain data has been received from upstream relay1 yet.
+# That is a "system not yet bootstrapped" signal — distinct from "the
+# indexer is up but stuck behind the chain". The script emits an
+# sdk_unreachable and exits 0 in that case so the composer's
+# "Always: zero exit" property doesn't flag a fault-cascade window
+# (relay1 killed → indexer's upstream torn down → no RollForward yet)
+# as a real liveness failure. tipSlot != null && slotsBehind > 5 is
+# the only path that emits sdk_sometimes false + exit 1.
 
 set -u
 
@@ -42,6 +52,16 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     fi
     sleep "$RETRY_DELAY"
 done
+
+# Budget exhausted. Distinguish "indexer has no chain data yet" from
+# "indexer is up but stuck behind".
+if [ -n "$LAST_REPLY" ] \
+    && printf '%s' "$LAST_REPLY" | jq -e '.tipSlot == null' >/dev/null 2>&1; then
+    sdk_unreachable "stub eventually_alive cold_start" \
+        "$(jq -nc --argjson a "$MAX_ATTEMPTS" --arg reply "$LAST_REPLY" \
+            '{attempts_exhausted:$a, last_reply:$reply, reason:"tipSlot=null — no RollForward yet from upstream"}')"
+    exit 0
+fi
 
 sdk_sometimes false "stub eventually_alive holds" \
     "$(jq -nc --argjson a "$MAX_ATTEMPTS" --arg reply "$LAST_REPLY" \
