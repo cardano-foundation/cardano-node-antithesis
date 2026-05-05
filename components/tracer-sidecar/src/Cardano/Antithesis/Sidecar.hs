@@ -32,6 +32,8 @@ import Cardano.Antithesis.LogMessage
 import Cardano.Antithesis.Sdk
     ( alwaysOrUnreachableDeclaration
     , alwaysOrUnreachableFailed
+    , sometimesOptionalDeclaration
+    , sometimesOptionalReached
     , sometimesTracesDeclaration
     , sometimesTracesReached
     , writeSdkJsonl
@@ -110,6 +112,14 @@ mkSpec nPools = do
 
     -- Cluster-wide fork-depth probe (#119).
     forkTreeProbe defaultK defaultDepthCap
+
+    -- Issue #123, Layer 2 was here — a "did the adversary appear in
+    -- some producer's InboundGovernor stream" probe via substring
+    -- match on @adversary.example@. Verified empirically that
+    -- cardano-tracer emits InboundGovernor.Remote events with
+    -- peer IP (192.168.x.y) not hostname, so the substring check
+    -- never fires. Re-implementing this needs the tracer-side
+    -- hostname↔IP mapping, which is non-trivial. Removed for now.
   where
     recordAllChainPoints :: State -> LogMessage -> [Output]
     recordAllChainPoints
@@ -154,6 +164,11 @@ data State = State
     -- ^ Cluster-wide fork depth has crossed the @k@ boundary.
     -- Used to fail the @\"cluster fork depth < k\"@
     -- 'alwaysOrUnreachable' assertion.
+    , maxForkDepth :: !Int
+    -- ^ Largest cluster-wide fork depth observed during the run.
+    -- Surfaces as discrete Sometimes assertions per threshold so
+    -- the report renders a depth-by-depth checklist of how deep
+    -- the perturbation pushed the cluster.  Issue #123, Layer 3.
     }
 
 initialState :: Spec -> (State, [Output])
@@ -168,6 +183,7 @@ initialState spec =
             , forkTree = initialForkTreeState
             , forkObserved = False
             , forkExceededK = False
+            , maxForkDepth = 0
             }
     setupFns = stateInitFunctions spec
 
@@ -250,6 +266,29 @@ sometimes name f =
 sometimesTraces :: Text -> Spec
 sometimesTraces text = sometimes text $ \_s LogMessage{kind} -> kind == text
 
+-- | Optional Sometimes assertion ('must_hit' = false). The runtime
+-- doesn't flag a finding if the predicate never returns true — the
+-- report just shows the property as unhit. Use for coverage
+-- gradients: the depth-threshold checklist treats each unreached
+-- threshold as informational, not a bug (Issue #123 Layer 3).
+sometimesOptional
+    :: Text
+    -> (State -> LogMessage -> Bool)
+    -> Spec
+sometimesOptional name f =
+    Spec
+        $ tell
+            [Rule process (Just (sometimesOptionalDeclaration name)) initState]
+  where
+    initState s = s{unreachedAssertions = Set.insert name (unreachedAssertions s)}
+    process :: State -> LogMessage -> (State, [Output])
+    process s@State{unreachedAssertions = scanningFor} msg
+        | Set.member name scanningFor && f s msg =
+            ( s{unreachedAssertions = Set.delete name scanningFor}
+            , [AntithesisSdk $ sometimesOptionalReached name]
+            )
+        | otherwise = (s, [])
+
 -- Fork-tree probe (#119) ------------------------------------------------------
 
 -- | Cluster-wide fork-depth probe.  Three rules:
@@ -279,6 +318,28 @@ forkTreeProbe k depthCap = do
     sometimes "cluster fork observed" $ \s _ -> forkObserved s
     alwaysOrUnreachable "cluster fork depth < k" $ \s _ ->
         not (forkExceededK s)
+    -- Issue #123, Layer 3 — perturbation depth checklist.  One
+    -- discrete Sometimes assertion per meaningful fork-depth
+    -- threshold.  The highest passed threshold in the report tells
+    -- you how deep the cluster forked under fault injection without
+    -- drilling into per-event details.  Thresholds are sparse on
+    -- purpose (k = 432 makes per-integer rows wasteful and floods
+    -- the report).
+    forM_ depthThresholds $ \threshold ->
+        sometimesOptional
+            ( "cluster_fork_depth_"
+                <> T.pack (show threshold)
+                <> "_observed"
+            )
+            $ \s _ -> maxForkDepth s >= threshold
+
+-- | Sparse depth thresholds — covers "anything", "small fork",
+-- "medium fork", "large fork" without one row per integer.  k=432
+-- is the failure ceiling; thresholds beyond ~k/2 are uninteresting
+-- because crossing k is already its own AlwaysOrUnreachable
+-- assertion.
+depthThresholds :: [Int]
+depthThresholds = [2, 3, 5, 10, 50, 100, 200]
 
 -- | Parse a @"hash@slot"@ tip string into a 'Tip' record.
 parseTip :: NewTipSelectView -> Text -> Tip
@@ -314,6 +375,7 @@ updateForkTree k depthCap s LogMessage{host, details} =
             st
                 { forkObserved = forkObserved st || d > 0
                 , forkExceededK = forkExceededK st || d >= k
+                , maxForkDepth = max d (maxForkDepth st)
                 }
 
 

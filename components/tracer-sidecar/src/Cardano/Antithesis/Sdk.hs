@@ -4,8 +4,10 @@
 module Cardano.Antithesis.Sdk
     ( writeSdkJsonl
     , sometimesTracesDeclaration
+    , sometimesOptionalDeclaration
     , sometimesFailed
     , sometimesTracesReached
+    , sometimesOptionalReached
     , alwaysOrUnreachableDeclaration
     , alwaysOrUnreachableFailed
     )
@@ -95,6 +97,50 @@ sometimesTracesReached label =
         "display_type": "Sometimes",
         "hit":          true,
         "must_hit":     true,
+        "assert_type":  "sometimes",
+        "location": #{dummyLocation},
+        "details": null
+      }
+    }
+    |]
+
+-- | Optional ('must_hit' = false) Sometimes assertion declaration.
+-- Same shape as 'sometimesTracesDeclaration' but the runtime won't
+-- flag a finding when the assertion never fires — the report shows
+-- it as "passed if hit, no signal otherwise". Use for coverage
+-- gradients where missing the threshold is informational, not a
+-- bug (e.g. fork-depth checklist, Issue #123 Layer 3).
+sometimesOptionalDeclaration :: Text -> Value
+sometimesOptionalDeclaration label =
+    [aesonQQ|
+    {
+      "antithesis_assert": {
+        "id":           #{label},
+        "message":      #{label},
+        "condition":    false,
+        "display_type": "Sometimes",
+        "hit":          false,
+        "must_hit":     false,
+        "assert_type":  "sometimes",
+        "location": #{dummyLocation},
+        "details": null
+      }
+    }
+    |]
+
+-- | Optional ('must_hit' = false) Sometimes-reached event.
+-- Companion to 'sometimesOptionalDeclaration'.
+sometimesOptionalReached :: Text -> Value
+sometimesOptionalReached label =
+    [aesonQQ|
+    {
+      "antithesis_assert": {
+        "id":           #{label},
+        "message":      #{label},
+        "condition":    true,
+        "display_type": "Sometimes",
+        "hit":          true,
+        "must_hit":     false,
         "assert_type":  "sometimes",
         "location": #{dummyLocation},
         "details": null
