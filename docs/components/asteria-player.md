@@ -8,6 +8,106 @@ against contention between players.
 
 This component is part of the phase-1 gatherer feature ([#56][issue-56]).
 
+## Adding asteria-game to a testnet
+
+Drop the asteria-game container into any testnet's
+`docker-compose.yaml` to give Antithesis a real workload generator on
+top of an idle Cardano cluster. The container bundles a long-lived
+utxo-indexer plus three short-lived binaries fired by composer
+scripts (bootstrap, player, invariant) — see
+[the why-it's-here section in the master testnet doc][master-why]
+for the rationale.
+
+### Pre-requisites
+
+The host testnet must already have:
+
+- A relay that block producers connect to, e.g. `relay1`, with a
+  named volume mounted at `/state` so the asteria-game container
+  can read its node socket. The master testnet uses
+  `relay1-state:/state`.
+- A `utxo-keys` named volume populated by the configurator with
+  the genesis wallet skeys (the bootstrap binary needs them to
+  sign the deploy tx).
+- A network magic of `42`. Other magics are not currently wired —
+  `NETWORK_MAGIC` is hard-coded in the player's compose env.
+
+### Compose block
+
+Add this service block under `services:` at the bottom of your
+`docker-compose.yaml`:
+
+```yaml
+  asteria-game:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:<tag>
+    container_name: asteria-game
+    hostname: asteria-game.example
+    environment:
+      INDEXER_SOCK: /tmp/idx.sock
+      CARDANO_NODE_SOCKET_PATH: /state/node.socket
+      NETWORK_MAGIC: "42"
+    volumes:
+      - relay1-state:/state:ro            # read-only N2C socket
+      - utxo-keys:/utxo-keys:ro           # genesis skeys for bootstrap
+      - asteria-game-db:/idx-db           # RocksDB persistence
+      - asteria-deploy:/asteria-deploy    # per-deploy seed TxIn
+    tmpfs:
+      - /tmp                              # holds /tmp/idx.sock
+    depends_on:
+      relay1:
+        condition: service_started
+```
+
+Then declare the two new named volumes under the top-level
+`volumes:` block:
+
+```yaml
+volumes:
+  # … existing volumes …
+  asteria-game-db:
+  asteria-deploy:
+```
+
+`<tag>` is a 7-char short SHA from a commit on this repo. The
+`publish-images` workflow rebuilds the image and pushes
+`asteria-game:<short-sha>` whenever a commit touches
+`components/asteria-game/`. Pick the tag from any green
+`publish-images` run on `main`, or use the digest pinned by master
+in [`testnets/cardano_node_master/docker-compose.yaml`][master-compose].
+
+The composer scripts that drive the binaries are baked into the
+image at build time at `/opt/antithesis/test/v1/stub/` —
+nothing extra to mount. The Antithesis composer mounts that path
+into its execution sandbox automatically when the test runs.
+
+### Validation gate before merging into a scheduled testnet
+
+Per the project's "no broken container on main testnet" rule, a
+new testnet that adds asteria-game must dispatch a 1h Antithesis
+run via `workflow_dispatch` on the feature branch and confirm
+`findings_new ≤ baseline` before merging. The same gate applied
+when promoting asteria-game into [`cardano_node_master`][master-pr-128].
+
+### What does the cluster need to look like
+
+The asteria-game player drives `spawnShip` Plutus transactions
+that consume + replace the asteria UTxO. The cluster needs:
+
+- At least one block producer that accepts valid Plutus v3
+  transactions (the asteria validators are Aiken-compiled to
+  PlutusV3).
+- A relay reachable via `relay1.example:3001` (N2N) and
+  `relay1-state:/state/node.socket` (N2C). Aliasing it under a
+  different name requires editing
+  `components/asteria-game/composer/stub/parallel_driver_asteria_player.sh`.
+- Genesis funds in `utxo-keys/genesis.1.skey` sufficient for the
+  one-time bootstrap deploy plus a few thousand `spawnShip`
+  transactions over a 3h run.
+
+The master testnet meets all three by construction. New testnets
+that change the topology, network magic, or genesis layout will
+need to mirror those choices.
+
 ## What it does
 
 The container ships two binaries:
@@ -121,6 +221,9 @@ docker run --rm \
 [issue-56]: https://github.com/cardano-foundation/cardano-node-antithesis/issues/56
 [pr-57]: https://github.com/cardano-foundation/cardano-node-antithesis/pull/57
 [cnc-fix]: https://github.com/lambdasistemi/cardano-node-clients/commit/f6a31ca6c169810a46e45648a0868d7a48eb1f02
+[master-why]: ../testnets/cardano-node-master.md#why-asteria-game-is-here
+[master-compose]: https://github.com/cardano-foundation/cardano-node-antithesis/blob/main/testnets/cardano_node_master/docker-compose.yaml
+[master-pr-128]: https://github.com/cardano-foundation/cardano-node-antithesis/pull/128
 [HAL]: https://github.com/cardano-foundation/hal
 [CF]: https://github.com/cardano-foundation
 [Cardano]: https://cardano.org/
