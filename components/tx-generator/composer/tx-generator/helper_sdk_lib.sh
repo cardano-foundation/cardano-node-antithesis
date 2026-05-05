@@ -70,3 +70,16 @@ sdk_always() {
     [ "$cond_bool" = "true" ] && cond=true
     _sdk_emit "Always" "always" "$cond" true "$id" "$id" "$details"
 }
+
+# control_socket_request <socket> <json-request>
+#
+# Keep nc as timeout's direct child. The older
+# `timeout sh -c "printf ... | nc ..."` shape could leave the
+# pipeline alive past the composer's command deadline under faulted
+# socket behavior, surfacing as a built-in zero-exit failure.
+control_socket_request() {
+    local socket="$1" request="$2"
+    printf '%s\n' "$request" \
+        | timeout --kill-after=2s 5s nc -U -q 1 "$socket" 2>/dev/null \
+        || true
+}

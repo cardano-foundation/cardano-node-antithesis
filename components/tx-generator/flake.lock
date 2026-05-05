@@ -290,8 +290,8 @@
       },
       "original": {
         "owner": "lambdasistemi",
-        "ref": "711eb22",
         "repo": "cardano-node-clients",
+        "rev": "711eb22ac03e67b753f7ce70e635cddcf6f3cdce",
         "type": "github"
       }
     },

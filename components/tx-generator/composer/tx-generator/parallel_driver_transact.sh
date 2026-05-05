@@ -56,9 +56,7 @@ sdk_reachable "tx_generator_transact_driver_started"
 # window — long enough for the composer's per-step deadline to kill
 # us, surfacing as a non-zero exit on the built-in
 # 'Commands finish with zero exit code' property.
-RSP="$(timeout --kill-after=2s 5s sh -c \
-    "printf '%s\\n' '$REQ' | nc -U -q 1 '$CONTROL_SOCKET'" \
-    2>/dev/null || true)"
+RSP="$(control_socket_request "$CONTROL_SOCKET" "$REQ")"
 
 # Empty RSP means the control socket isn't connectable
 # right now (daemon booting, the supervisor briefly tearing
