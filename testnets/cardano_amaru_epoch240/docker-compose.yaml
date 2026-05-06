@@ -178,7 +178,17 @@ services:
       - a2-state:/srv/amaru
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:fb26cec
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1ff6913
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        for relay in amaru-relay-1 amaru-relay-2; do
+          while [ ! -f "/amaru-startup/$${relay}.started" ]; do
+            sleep 1
+          done
+        done
+        exec /sidecar.sh
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -189,9 +199,6 @@ services:
       MAX_ATTEMPTS: "15"
       RETRY_DELAY: "3"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
-      AMARU_STARTUP_REQUIRED: "true"
-      AMARU_STARTUP_DIR: "/amaru-startup"
-      AMARU_RELAYS: "amaru-relay-1 amaru-relay-2"
     container_name: sidecar
     hostname: sidecar.example
     volumes:
