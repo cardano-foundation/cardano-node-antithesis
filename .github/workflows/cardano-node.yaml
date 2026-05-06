@@ -58,8 +58,6 @@ jobs:
 
     - name: 📥 Checkout repository
       uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.inputs.ref_name || '' }}
 
     - name: 🔑 Login Docker Registry
       uses: docker/login-action@v3
@@ -91,34 +89,49 @@ jobs:
         moog --version
 
     - name: Configure moog wallet
-      run: printf '%s' "${{ secrets.MOOG_REQUESTER_WALLET }}" | base64 --decode > $MOOG_WALLET_FILE
+      run: printf '%s' "${{ secrets.MOOG_REQUESTER_WALLET }}" | base64 --decode > "$MOOG_WALLET_FILE"
 
     - name: Submit test
       id: request
       run: |
         set -euo pipefail
-        TRY=$(moog facts test-runs --whose cfhal | jq 'map(select(.key.commitId == "${{ github.sha }}")) | length')
-        TRY=$(($TRY + 1)) # start with try=1
-        echo "TRY=$TRY"
+        COMMIT="${{ github.sha }}"
+        TESTNET_DIR="testnets/$TESTNET"
+        TRY=$(moog facts test-runs --whose "$MOOG_REQUESTER" | jq \
+          --arg commit "$COMMIT" \
+          --arg directory "$TESTNET_DIR" \
+          --arg platform "$MOOG_PLATFORM" \
+          --arg repository "$GITHUB_REPOSITORY" \
+          --arg requester "$MOOG_REQUESTER" \
+          'map(select(
+            .key.type == "test-run"
+            and .key.commitId == $commit
+            and .key.directory == $directory
+            and .key.platform == $platform
+            and ((.key.repository.organization + "/" + .key.repository.repo) == $repository)
+            and .key.requester == $requester
+          )) | length')
+        TRY=$((TRY + 1)) # start with try=1
+        echo "TRY=$TRY for $TESTNET_DIR"
         if [ "${{ inputs.no-faults }}" = "true" ]; then
-          render_no_faults="--no-faults"
+          render_args=(--no-faults)
         else
-          render_no_faults=""
+          render_args=()
         fi
-        RESULT=$(moog requester create-test -d "testnets/$TESTNET" \
-          -c ${{ github.sha }} \
+        RESULT=$(moog requester create-test -d "$TESTNET_DIR" \
+          -c "$COMMIT" \
           -r "$GITHUB_REPOSITORY" \
-          --try $TRY \
-          -t $DURATION \
-          $render_no_faults)
-        echo $RESULT
+          --try "$TRY" \
+          -t "$DURATION" \
+          "${render_args[@]}")
+        echo "$RESULT"
 
         # Passing -e and -r in separate jq calls ensures we both unwrap
         # the string quotes and fail if the json isn't as expected.
-        ID=$(echo $RESULT | jq -e .value.testRunId | jq -r .)
-        TXID=$(echo $RESULT | jq -e .txHash | jq -r .)
+        ID=$(echo "$RESULT" | jq -e .value.testRunId | jq -r .)
+        TXID=$(echo "$RESULT" | jq -e .txHash | jq -r .)
         echo "id=$ID" >> "$GITHUB_OUTPUT"
         echo "txHash=$TXID" >> "$GITHUB_OUTPUT"
 
     - name: Wait for results
-      run: timeout $((($DURATION + 1) * 3600)) ./scripts/wait-for-test.sh "${{ steps.request.outputs.id }}"
+      run: timeout $(((DURATION + 1) * 3600)) ./scripts/wait-for-test.sh "${{ steps.request.outputs.id }}"
