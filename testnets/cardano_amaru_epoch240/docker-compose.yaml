@@ -179,8 +179,8 @@ services:
 
   sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1ff6913
+    entrypoint: /bin/bash
     command:
-      - /bin/bash
       - -ec
       - |
         for relay in amaru-relay-1 amaru-relay-2; do
@@ -188,7 +188,7 @@ services:
             sleep 1
           done
         done
-        exec /sidecar.sh
+        exec /bin/sidecar
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
