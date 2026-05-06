@@ -6,9 +6,15 @@
 # chain tip. End-of-run, not end-of-fault: a different signal from
 # the eventually_ probe even though the implementation matches.
 #
-# Budget matches eventually_alive: 60 s covers a post-kill cold-start
-# of the indexer (node-replaying exponential backoff + N2C handshake
-# + first-block write).
+# Budget: 3 s settle + 8×1 s retries = 11 s worst case. Same tight
+# bound as eventually_alive — finally_ commands have a longer composer
+# cap (~54 s observed) but there's no benefit to a longer settle window
+# at end-of-run, and the tight budget makes the script robust to
+# whatever the actual cap turns out to be.
+#
+# Always exits 0 — the SDK records the outcome; a non-zero shell exit
+# would duplicate the signal under the composer's "Always: zero exit
+# code" property.
 
 set -u
 
@@ -16,9 +22,9 @@ set -u
 source "$(dirname "$0")/helper_sdk.sh"
 
 INDEXER_SOCK="${INDEXER_SOCK:-/tmp/idx.sock}"
-SLEEP_SETTLE="${SLEEP_SETTLE:-30}"
-MAX_ATTEMPTS="${MAX_ATTEMPTS:-15}"
-RETRY_DELAY="${RETRY_DELAY:-2}"
+SLEEP_SETTLE="${SLEEP_SETTLE:-3}"
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-8}"
+RETRY_DELAY="${RETRY_DELAY:-1}"
 
 sdk_reachable "stub finally_alive entered"
 
@@ -40,4 +46,4 @@ done
 sdk_sometimes false "stub finally_alive holds" \
     "$(jq -nc --argjson a "$MAX_ATTEMPTS" --arg reply "$LAST_REPLY" \
         '{attempts_exhausted:$a, last_reply:$reply}')"
-exit 1
+exit 0
