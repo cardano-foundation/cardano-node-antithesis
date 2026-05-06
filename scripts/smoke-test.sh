@@ -26,6 +26,19 @@ while IFS= read -r IMAGE; do
   fi
 done < <(docker compose --progress quiet -f "$COMPOSE_FILE" config --images)
 
+if [[ "$TESTNET" == cardano_amaru* ]]; then
+  GENESIS_EPOCH_LENGTH="$(awk '/^epochLength: /{ print $2; exit }' "testnets/${TESTNET}/testnet.yaml")"
+  RUNTIME_EPOCH_LENGTH="$(jq -r '.epoch_length' "testnets/${TESTNET}/amaru-runtime/global-parameters.json")"
+  RUNTIME_ERA_EPOCH_LENGTH="$(jq -r '.eras[-1].params.epoch_size_slots' "testnets/${TESTNET}/amaru-runtime/era-history.json")"
+
+  if [ "$RUNTIME_EPOCH_LENGTH" != "$GENESIS_EPOCH_LENGTH" ] \
+      || [ "$RUNTIME_ERA_EPOCH_LENGTH" != "$GENESIS_EPOCH_LENGTH" ]; then
+    echo "FAIL: Amaru runtime epoch length does not match Shelley genesis"
+    echo "genesis=${GENESIS_EPOCH_LENGTH} global-parameters=${RUNTIME_EPOCH_LENGTH} era-history=${RUNTIME_ERA_EPOCH_LENGTH}"
+    exit 1
+  fi
+fi
+
 cleanup() {
   echo "Tearing down..."
   docker compose --progress quiet -f "$COMPOSE_FILE" down --volumes --remove-orphans 2>/dev/null || true
@@ -229,6 +242,12 @@ if [[ "$TESTNET" == cardano_amaru* ]]; then
       echo "FAIL: ${RELAY} did not stay running after bootstrap bundle load"
       echo "state=${STATE} restarts_before=${RESTARTS_BEFORE} restarts_after=${RESTARTS_AFTER}"
       docker compose -f "$COMPOSE_FILE" logs --tail 80 "$RELAY" 2>&1
+      exit 1
+    fi
+    if docker compose -f "$COMPOSE_FILE" logs "$RELAY" 2>&1 \
+        | grep -E 'Failed to create ledger|no ledger stable snapshot|Invalid VRF proof|chain_sync\.validate_header\.failed' >/dev/null; then
+      echo "FAIL: ${RELAY} emitted a bootstrap/validation failure"
+      docker compose -f "$COMPOSE_FILE" logs --tail 120 "$RELAY" 2>&1
       exit 1
     fi
     echo "OK: ${RELAY} consumed bundle and stayed running"
