@@ -1,5 +1,5 @@
-x-cardano-node-10-7-1: &cardano-node-10-7-1
-  image: ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+x-cardano-node: &cardano-node
+  image: ghcr.io/intersectmbo/cardano-node@sha256:5ae211f92eac18ed27b9e2f73c190b56bf4c1a7145d282e78ca58597a385d19f
   environment:
     CARDANO_BLOCK_PRODUCER: true
   command: >
@@ -21,8 +21,7 @@ x-cardano-node-10-7-1: &cardano-node-10-7-1
     tracer-sidecar:
       condition: service_started
 
-x-cardano-relay-10-7-1: &cardano-relay-10-7-1
-  image: ghcr.io/intersectmbo/cardano-node@sha256:3275d357053d21f3220f74b0854fd584e1fe322dfa1bbb78effd760c3191d14c
+x-cardano-relay: &cardano-relay
   environment:
     CARDANO_BLOCK_PRODUCER: false
   command: >
@@ -86,7 +85,7 @@ services:
     restart: always
 
   p1:
-    <<: *cardano-node-10-7-1
+    <<: *cardano-node
     container_name: p1
     hostname: p1.example
     volumes:
@@ -95,7 +94,8 @@ services:
       - tracer:/tracer
 
   p2:
-    <<: *cardano-node-10-7-1
+    <<: *cardano-node
+    image: ghcr.io/intersectmbo/cardano-node@sha256:c3cbc5aa0b758ba211567791539a67001e661fbe7a09275e37449e8b1252c4b2
     container_name: p2
     hostname: p2.example
     volumes:
@@ -104,7 +104,8 @@ services:
       - tracer:/tracer
 
   p3:
-    <<: *cardano-node-10-7-1
+    <<: *cardano-node
+    image: ghcr.io/intersectmbo/cardano-node@sha256:45857be8d86b314a05cd46d310b74b24e5f5870469f90c6464994a7f78142271
     container_name: p3
     hostname: p3.example
     volumes:
@@ -113,7 +114,8 @@ services:
       - tracer:/tracer
 
   relay1:
-    <<: *cardano-relay-10-7-1
+    <<: *cardano-relay
+    image: ghcr.io/intersectmbo/cardano-node@sha256:c3cbc5aa0b758ba211567791539a67001e661fbe7a09275e37449e8b1252c4b2
     container_name: relay1
     hostname: relay1.example
     volumes:
@@ -123,7 +125,8 @@ services:
       - tracer:/tracer
 
   relay2:
-    <<: *cardano-relay-10-7-1
+    <<: *cardano-relay
+    image: ghcr.io/intersectmbo/cardano-node@sha256:45857be8d86b314a05cd46d310b74b24e5f5870469f90c6464994a7f78142271
     container_name: relay2
     hostname: relay2.example
     volumes:
