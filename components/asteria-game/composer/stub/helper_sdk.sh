@@ -11,9 +11,9 @@
 _sdk_output_dir() { printf '%s' "${ANTITHESIS_OUTPUT_DIR:-/tmp}"; }
 
 _sdk_emit() {
-    # args: display_type assert_type condition hit id message details_json
+    # args: display_type assert_type condition hit id message details_json [must_hit]
     local display_type="$1" assert_type="$2" condition="$3"
-    local hit="$4" id="$5" msg="$6" details_json="${7:-null}"
+    local hit="$4" id="$5" msg="$6" details_json="${7:-null}" must_hit="${8:-true}"
     local dir
     dir="$(_sdk_output_dir)"
     mkdir -p "$dir"
@@ -25,13 +25,14 @@ _sdk_emit() {
         --argjson cond "$condition" \
         --argjson hit "$hit" \
         --argjson details "$details_json" \
+        --argjson must_hit "$must_hit" \
         '{antithesis_assert: {
             id: $id,
             message: $msg,
             condition: $cond,
             display_type: $dt,
             hit: $hit,
-            must_hit: true,
+            must_hit: $must_hit,
             assert_type: $at,
             location: {file:"", function:"", class:"", begin_line:0, begin_column:0},
             details: $details
@@ -42,9 +43,28 @@ sdk_reachable()   { _sdk_emit "Reachable"             "reachability" true  true 
 sdk_unreachable() { _sdk_emit "AlwaysOrUnreachable"   "always"       false true "$1" "$1" "${2:-null}"; }
 
 # sdk_sometimes <true|false> <id> [details_json]
+#
+# Emits a Sometimes assertion with must_hit:true. Antithesis flags it
+# as failed if the run never sees a hit with condition:true at least
+# once. Use ONLY for paths where the success state is reachable across
+# the timelines explored.
 sdk_sometimes() {
     local cond=false; [ "$1" = "true" ] && cond=true
     _sdk_emit "Sometimes" "sometimes" "$cond" true "$2" "$2" "${3:-null}"
+}
+
+# sdk_sometimes_optional <true|false> <id> [details_json]
+#
+# Same shape as sdk_sometimes but with must_hit:false — observational
+# coverage, never a finding. Use this for branches where condition:true
+# is not guaranteed reachable across the explored timelines (rare
+# branches, fault-cascade fallbacks, cold-start probes). Replaces the
+# previous use of sdk_unreachable for "informational only" emits;
+# AlwaysOrUnreachable with hit:true + condition:false IS a finding,
+# while sdk_sometimes_optional false is silent.
+sdk_sometimes_optional() {
+    local cond=false; [ "$1" = "true" ] && cond=true
+    _sdk_emit "Sometimes" "sometimes" "$cond" true "$2" "$2" "${3:-null}" false
 }
 
 # sdk_always <true|false> <id> [details_json]

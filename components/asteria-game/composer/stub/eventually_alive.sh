@@ -64,7 +64,13 @@ done
 # in the report's Sometimes-assertion table.
 if [ -n "$LAST_REPLY" ] \
     && printf '%s' "$LAST_REPLY" | jq -e '.tipSlot == null' >/dev/null 2>&1; then
-    sdk_sometimes false "stub eventually_alive cold_start" \
+    # must_hit:false — the cold-start branch isn't guaranteed to be
+    # reached across timelines (depends on whether a fault-cascade
+    # window coincides with an eventually_ dispatch). The earlier
+    # sdk_sometimes (must_hit:true) emit fired as a finding when it
+    # only saw condition:false, defeating the intent that this be
+    # informational coverage only.
+    sdk_sometimes_optional false "stub eventually_alive cold_start" \
         "$(jq -nc --argjson a "$MAX_ATTEMPTS" --arg reply "$LAST_REPLY" \
             '{attempts_exhausted:$a, last_reply:$reply, reason:"tipSlot=null — no RollForward yet from upstream"}')"
     exit 0
