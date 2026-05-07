@@ -47,7 +47,14 @@ sleep "$SLEEP_SETTLE"
 
 LAST_REPLY=""
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-    LAST_REPLY="$(printf '{"ready": null}\n' | socat - "UNIX-CONNECT:${INDEXER_SOCK}" 2>/dev/null || true)"
+    # `timeout 1 socat`: socat blocks indefinitely on UNIX-CONNECT
+    # waiting for the indexer's reply with no internal deadline.
+    # Without bounding, each loop iteration runs as long as the
+    # indexer takes — observed wall times of 70 s for the whole
+    # script when several iterations stalled, well past composer's
+    # per-command cap. 1 s per attempt keeps the loop's worst case
+    # at 3 s settle + 8 × 1 s = 11 s.
+    LAST_REPLY="$(printf '{"ready": null}\n' | timeout 1 socat - "UNIX-CONNECT:${INDEXER_SOCK}" 2>/dev/null || true)"
     if [ -n "$LAST_REPLY" ] \
         && printf '%s' "$LAST_REPLY" | jq -e '(.slotsBehind // null) != null and .slotsBehind <= 5' >/dev/null 2>&1; then
         TIP="$(printf '%s' "$LAST_REPLY" | jq -r '.tipSlot // 0')"

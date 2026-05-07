@@ -18,7 +18,12 @@ set -u
 # shellcheck disable=SC1091
 source "$(dirname "$0")/helper_sdk.sh"
 
-sleep 15
+# 10 s settle + 30 s binary cap = 40 s worst case, comfortably
+# under composer's finally per-command cap (~54 s observed). The
+# binary queries chain UTxOs and counts SHIP tokens; under
+# partition it can hang on N2C handshake, hence the `timeout 30`
+# bound. Earlier 15 s + unbounded binary blew past 54 s.
+sleep 10
 export ASTERIA_INVARIANT=consistency
 sdk_run_signal_safe "stub finally_consistency container_stopped" \
-    /bin/asteria-invariant
+    timeout 30 /bin/asteria-invariant

@@ -20,5 +20,12 @@ source "$(dirname "$0")/helper_sdk.sh"
 
 PLAYER_ID="$(( ($(date +%s) % 3) + 1 ))"
 export ASTERIA_PLAYER_ID="$PLAYER_ID"
+# `timeout 12 /bin/asteria-game` — the binary has no internal
+# deadline and can hang on N2C handshake or chain-follower reads
+# under cluster perturbation. Composer's parallel_driver per-command
+# cap is ~16 s; bounding to 12 s gives margin for the bash trap +
+# sdk_run_signal_safe emit. Timeout exits 124 → caught by
+# sdk_run_signal_safe → recorded via sdk_sometimes_optional false
+# (no finding).
 sdk_run_signal_safe "stub asteria_player_${PLAYER_ID} container_stopped" \
-    /bin/asteria-game
+    timeout 12 /bin/asteria-game
