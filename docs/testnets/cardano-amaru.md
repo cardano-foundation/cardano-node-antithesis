@@ -22,7 +22,7 @@ The producer image is pinned to the `amaru-bootstrap` commit that passed
 CI and published the runtime image:
 
 ```text
-ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
+ghcr.io/lambdasistemi/amaru-bootstrap-producer:23452f83f8ed87f3515fb67a26ceb2fbb390b296
 ```
 
 ## Stake Roles

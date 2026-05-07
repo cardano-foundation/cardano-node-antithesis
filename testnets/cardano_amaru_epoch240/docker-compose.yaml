@@ -50,7 +50,7 @@ x-amaru: &amaru
   # in lambdasistemi/amaru-bootstrap. Logs go to the container's
   # stdout (no in-volume log files), so Antithesis Logs Explorer
   # captures bootstrap-producer + amaru tracing output.
-  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:e49d75657f97325d048b065ef709193941995792
+  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:23452f83f8ed87f3515fb67a26ceb2fbb390b296
   entrypoint: amaru-relay-bootstrap
   environment:
     # Default to info so Logs Explorer captures sync events. Override
