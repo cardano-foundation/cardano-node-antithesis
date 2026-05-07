@@ -5,7 +5,7 @@
   "max_lovelace_supply": 45000000000000000,
   "slots_per_kes_period": 129600,
   "max_kes_evolution": 62,
-  "epoch_length": 3600,
+  "epoch_length": 360,
   "stability_window": 150,
   "randomness_stabilization_window": 200,
   "system_start": 0

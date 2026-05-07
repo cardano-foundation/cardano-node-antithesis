@@ -3,7 +3,7 @@ set -euo pipefail
 
 # -------------------------- CONFIG --------------------------
 REGISTRY="${REGISTRY:-ghcr.io/cardano-foundation/cardano-node-antithesis}"
-TESTNETS="${TESTNETS:-cardano_node_master cardano_amaru cardano_amaru_epoch3600}"
+TESTNETS="${TESTNETS:-cardano_node_master cardano_amaru cardano_amaru_epoch360}"
 ALWAYS_BUILD_COMPONENTS="${ALWAYS_BUILD_COMPONENTS:-sidecar}"
 ARTIFACT_COMPONENTS="${ARTIFACT_COMPONENTS:-sidecar}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"

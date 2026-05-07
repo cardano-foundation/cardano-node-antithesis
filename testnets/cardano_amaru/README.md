@@ -44,7 +44,7 @@ line or a bounded tail for a non-retryable failure.
 The producer image is pinned by full source commit SHA:
 
 ```text
-ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
+ghcr.io/lambdasistemi/amaru-bootstrap-producer:23452f83f8ed87f3515fb67a26ceb2fbb390b296
 ```
 
 The cardano-node release image is pinned in Compose by digest only:

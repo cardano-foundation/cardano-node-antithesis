@@ -22,7 +22,7 @@ The producer image is pinned to the `amaru-bootstrap` commit that passed
 CI and published the runtime image:
 
 ```text
-ghcr.io/lambdasistemi/amaru-bootstrap-producer:pr-32-ad64e76778b0408ec66f353c7e58c8a1e7d4045f
+ghcr.io/lambdasistemi/amaru-bootstrap-producer:23452f83f8ed87f3515fb67a26ceb2fbb390b296
 ```
 
 ## Stake Roles
@@ -45,7 +45,7 @@ certificate, or stake-pool genesis assignment. They start with
 The Amaru testnets keep the observability and assertion services
 (`tracer`, `tracer-sidecar`, `log-tailer`, and `sidecar`) but remove the
 transaction perturbator workload. There is no `tx-generator` service in
-`cardano_amaru` or `cardano_amaru_epoch3600`; these profiles isolate the
+`cardano_amaru` or `cardano_amaru_epoch360`; these profiles isolate the
 cardano-node-to-Amaru bootstrap and relay-loading path.
 
 ## Fast Bootstrap Profile
@@ -71,21 +71,22 @@ startup. The dense active slot coefficient makes enough blocks immutable
 inside that short window; without it the immutable ChainDB tip can remain
 at genesis even after the slot threshold has passed.
 
-The `cardano_amaru_epoch3600` testnet keeps the same topology and
-bootstrap path but uses 3600-slot epochs:
+The `cardano_amaru_epoch360` testnet keeps the same topology and
+bootstrap path but uses 360-slot epochs:
 
 ```yaml
 protocolConsts:
   k: 10
-epochLength: 3600
+epochLength: 360
 securityParam: 10
 activeSlotsCoeff: 0.2
 TestConwayHardForkAtEpoch: 0
 ```
 
 It is meant for one-hour Antithesis campaigns, where simulated time can
-cover enough chain time for two complete Conway epochs. It is not part of
-the default wall-clock smoke matrix.
+cover enough chain time for two complete Conway epochs while keeping the
+epoch longer than the Conway `6k/f` timing window. It is not part of the
+default wall-clock smoke matrix.
 
 ## Log Budget
 
@@ -219,7 +220,7 @@ The long-epoch variant can be validated locally with a larger bootstrap
 timeout, but it is primarily intended for Antithesis:
 
 ```bash
-AMARU_BOOTSTRAP_SMOKE_TIMEOUT=9000 ./scripts/smoke-test.sh cardano_amaru_epoch3600 600
+AMARU_BOOTSTRAP_SMOKE_TIMEOUT=9000 ./scripts/smoke-test.sh cardano_amaru_epoch360 600
 ```
 
 The same smoke command runs in both the PR image-publish workflow and

@@ -43,4 +43,4 @@ The `justfile` wraps `docker compose` commands. All images must be available loc
 
 - [cardano_node_master](cardano-node-master.md): Mixed-version testnet with producers, relays, and N2N ecosystem clients
 - [cardano_amaru](cardano-amaru.md): cardano-node 10.7.1 testnet with an in-cluster `amaru-bootstrap-producer` and two relay-only Amaru nodes gated on the produced bundle
-- `cardano_amaru_epoch3600`: Antithesis-only `cardano_amaru` variant with 3600-slot epochs for one-hour campaigns
+- `cardano_amaru_epoch360`: Antithesis-only `cardano_amaru` variant with 360-slot epochs for one-hour campaigns

@@ -9,7 +9,7 @@
       },
       "end": null,
       "params": {
-        "epoch_size_slots": 3600,
+        "epoch_size_slots": 360,
         "slot_length": 1000,
         "era_name": "Conway"
       }
