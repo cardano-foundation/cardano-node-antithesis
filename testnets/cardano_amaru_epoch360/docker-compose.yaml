@@ -254,6 +254,6 @@ volumes:
 
 networks:
   default:
-    name: cardano-amaru-epoch3600-testnet
+    name: cardano-amaru-epoch360-testnet
     driver: bridge
     internal: ${INTERNAL_NETWORK}

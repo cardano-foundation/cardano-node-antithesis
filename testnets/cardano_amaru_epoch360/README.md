@@ -1,4 +1,4 @@
-# Cardano Amaru 240-Slot Epoch Testnet
+# Cardano Amaru 360-Slot Epoch Testnet
 
 This testnet is the Antithesis-only long-epoch variant of
 `cardano_amaru`. It keeps the same Amaru bootstrap path:
@@ -21,20 +21,20 @@ This testnet uses a one-hour epoch bootstrap profile:
 ```yaml
 protocolConsts:
   k: 10
-epochLength: 240
+epochLength: 360
 securityParam: 10
 activeSlotsCoeff: 0.2
 TestConwayHardForkAtEpoch: 0
 ```
 
 The producer requires two complete Conway epochs behind the immutable
-tip. With `epochLength: 240` (slot length 1 s), the first useful snapshot is expected only
-after roughly two hours of chain slot time. This variant is therefore
-intended for Antithesis runs, where a one-hour campaign can cover about
-48 hours of test time, not for GitHub's wall-clock smoke-test job. Dense
-block production is still part of the profile because the producer reads
-immutable chunks only; sparse block production can leave the immutable
-tip at genesis for too long.
+tip. With `epochLength: 360` and 1-second slots, the first useful
+bootstrap point is expected after about 12 minutes of chain time. This
+variant is therefore intended for one-hour Antithesis campaigns, not for
+GitHub's default wall-clock smoke-test matrix. Dense block production is
+still part of the profile because the producer reads immutable chunks
+only; sparse block production can leave the immutable tip at genesis for
+too long.
 
 The Amaru relay containers are intentionally quiet for Antithesis log
 ingestion: compose sets `AMARU_LOG=warn`, `AMARU_TRACE=warn`, and
@@ -124,7 +124,7 @@ at least once.
 Validate the Compose model:
 
 ```bash
-INTERNAL_NETWORK=false docker compose -f testnets/cardano_amaru_epoch240/docker-compose.yaml config
+INTERNAL_NETWORK=false docker compose -f testnets/cardano_amaru_epoch360/docker-compose.yaml config
 ```
 
 Do not add this testnet to the default GitHub smoke-test matrix. A local
@@ -132,13 +132,13 @@ wall-clock smoke run needs a much larger bootstrap timeout than the fast
 `cardano_amaru` profile:
 
 ```bash
-AMARU_BOOTSTRAP_SMOKE_TIMEOUT=9000 ./scripts/smoke-test.sh cardano_amaru_epoch240 600
+AMARU_BOOTSTRAP_SMOKE_TIMEOUT=9000 ./scripts/smoke-test.sh cardano_amaru_epoch360 600
 ```
 
 The smoke test proves the cardano-node network and sidecar convergence
 checks still start. Because this profile has no `tx-generator`, the
 generic tx-generator smoke gate is skipped. For
-`cardano_amaru_epoch240`, the smoke also waits for
+`cardano_amaru_epoch360`, the smoke also waits for
 `bootstrap-producer` to complete, checks that both relay-only Amaru nodes
 copied the bundle into private state and stayed running after
 `amaru run` opened the stores, then executes the same Amaru startup
@@ -148,8 +148,8 @@ property that Antithesis discovers under
 For the bootstrap-specific proof, inspect:
 
 ```bash
-docker compose -f testnets/cardano_amaru_epoch240/docker-compose.yaml logs -f bootstrap-producer
-docker compose -f testnets/cardano_amaru_epoch240/docker-compose.yaml ps bootstrap-producer amaru-relay-1 amaru-relay-2
+docker compose -f testnets/cardano_amaru_epoch360/docker-compose.yaml logs -f bootstrap-producer
+docker compose -f testnets/cardano_amaru_epoch360/docker-compose.yaml ps bootstrap-producer amaru-relay-1 amaru-relay-2
 ```
 
 Expected completion sequence:
