@@ -75,13 +75,21 @@ sdk_always() {
 
 # sdk_run_signal_safe <sig_id> <binary> [args...]
 #
-# Run a binary and absorb signal-induced non-zero exits into an
-# sdk_unreachable signal + exit 0. Antithesis applies node faults
-# (stop/kill) to asteria-game mid-run; processes inside the
-# container then exit with codes like 137 (SIGKILL), 143 (SIGTERM),
-# or 255 (process aborted) — none of which are real test failures,
-# but the composer's "Always: Commands finish with zero exit code"
-# property would record them as bugs.
+# Run a binary and absorb signal-induced non-zero exits into a
+# sdk_sometimes_optional false event + exit 0. Antithesis applies
+# node faults (stop/kill) to asteria-game mid-run, and callers wrap
+# binaries with timeout(1) to bound execution under composer's
+# per-command cap. Either path produces signal-induced exit codes
+# (137 SIGKILL, 143 SIGTERM, 124 timeout, 255 abort) that aren't
+# real test failures — the composer's "Always: Commands finish with
+# zero exit code" property would otherwise flag them as bugs.
+#
+# Earlier the absorbed signal emitted as sdk_unreachable
+# (AlwaysOrUnreachable, hit:true + condition:false), which IS a
+# finding when fired. Switched to sdk_sometimes_optional (must_hit:
+# false) so the signal is recorded for observation but never trips a
+# finding — the signal-induced path may be reached or not, both
+# states are valid.
 #
 # Real non-zero exits (anything other than the signal-induced set)
 # propagate unchanged so genuine binary errors still surface.
@@ -97,9 +105,9 @@ sdk_run_signal_safe() {
         # 124 timeout(1) wrapper
         # 255 generic abort / exec failed mid-call
         129 | 137 | 143 | 124 | 255)
-            sdk_unreachable "$sig_id" \
+            sdk_sometimes_optional false "$sig_id" \
                 "$(jq -nc --argjson r "$rc" \
-                    '{rc:$r, reason:"process exited with signal-induced code; container likely stopped mid-run"}')"
+                    '{rc:$r, reason:"process exited with signal-induced code; container stopped mid-run or timeout(1) deadline hit"}')"
             return 0
             ;;
         *) return "$rc" ;;

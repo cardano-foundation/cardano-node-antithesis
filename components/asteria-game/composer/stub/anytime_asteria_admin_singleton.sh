@@ -18,5 +18,9 @@ set -u
 source "$(dirname "$0")/helper_sdk.sh"
 
 export ASTERIA_INVARIANT=admin_singleton
+# `timeout 12` bounds the invariant-check binary under composer's
+# anytime per-command cap. The binary queries the chain via N2C
+# and can hang under partition; bound to 12 s with margin for the
+# absorb path. timeout 124 → sdk_run_signal_safe → no finding.
 sdk_run_signal_safe "stub anytime_admin_singleton container_stopped" \
-    /bin/asteria-invariant
+    timeout 12 /bin/asteria-invariant

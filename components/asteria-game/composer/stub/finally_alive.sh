@@ -32,7 +32,9 @@ sleep "$SLEEP_SETTLE"
 
 LAST_REPLY=""
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-    LAST_REPLY="$(printf '{"ready": null}\n' | socat - "UNIX-CONNECT:${INDEXER_SOCK}" 2>/dev/null || true)"
+    # `timeout 1 socat` — bounds each attempt; see eventually_alive.sh
+    # for rationale.
+    LAST_REPLY="$(printf '{"ready": null}\n' | timeout 1 socat - "UNIX-CONNECT:${INDEXER_SOCK}" 2>/dev/null || true)"
     if [ -n "$LAST_REPLY" ] \
         && printf '%s' "$LAST_REPLY" | jq -e '(.slotsBehind // null) != null and .slotsBehind <= 5' >/dev/null 2>&1; then
         TIP="$(printf '%s' "$LAST_REPLY" | jq -r '.tipSlot // 0')"

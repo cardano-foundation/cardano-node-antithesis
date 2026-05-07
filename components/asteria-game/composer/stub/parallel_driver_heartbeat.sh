@@ -18,7 +18,9 @@ INDEXER_SOCK="${INDEXER_SOCK:-/tmp/idx.sock}"
 
 sdk_reachable "stub heartbeat entered"
 
-REPLY="$(printf '{"ready": null}\n' | socat - "UNIX-CONNECT:${INDEXER_SOCK}" 2>/dev/null || true)"
+# `timeout 1 socat` bounds the heartbeat under composer's
+# parallel_driver per-command cap (~16 s).
+REPLY="$(printf '{"ready": null}\n' | timeout 1 socat - "UNIX-CONNECT:${INDEXER_SOCK}" 2>/dev/null || true)"
 
 if [ -n "$REPLY" ] && printf '%s' "$REPLY" | jq -e '(.slotsBehind // null) != null and .slotsBehind <= 5' >/dev/null 2>&1; then
     PROCESSED="$(printf '%s' "$REPLY" | jq -r '.processedSlot // 0')"

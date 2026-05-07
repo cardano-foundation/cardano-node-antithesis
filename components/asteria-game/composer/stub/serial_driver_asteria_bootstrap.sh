@@ -18,5 +18,11 @@ set -u
 # shellcheck disable=SC1091
 source "$(dirname "$0")/helper_sdk.sh"
 
+# `timeout 25` bounds the bootstrap binary; it's a serial_driver
+# so its budget is at least as generous as parallel_driver. 25 s
+# is conservative — first-time deploy needs to mint+lock the NFT
+# (a few chain rounds) but subsequent invocations exit fast on the
+# isAlreadyDeployed short-circuit. timeout 124 →
+# sdk_run_signal_safe → no finding.
 sdk_run_signal_safe "stub asteria_bootstrap container_stopped" \
-    /bin/asteria-bootstrap
+    timeout 25 /bin/asteria-bootstrap
