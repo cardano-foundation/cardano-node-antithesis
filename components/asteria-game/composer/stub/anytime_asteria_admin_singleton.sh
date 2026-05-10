@@ -17,6 +17,14 @@ set -u
 # shellcheck disable=SC1091
 source "$(dirname "$0")/helper_sdk.sh"
 
+# Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
+# observation + exit 0. sdk_run_signal_safe already handles the
+# wrapped binary's exit code, but a signal delivered to bash itself
+# between the invocation and the case statement (or before the
+# binary even starts) would still trip Always:zero-exit-code.
+# See #142.
+sdk_install_signal_trap "stub anytime_admin_singleton signal"
+
 export ASTERIA_INVARIANT=admin_singleton
 # `timeout 12` bounds the invariant-check binary under composer's
 # anytime per-command cap. The binary queries the chain via N2C

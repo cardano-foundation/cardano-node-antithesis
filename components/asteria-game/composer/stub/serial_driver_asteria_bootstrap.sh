@@ -18,6 +18,11 @@ set -u
 # shellcheck disable=SC1091
 source "$(dirname "$0")/helper_sdk.sh"
 
+# Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
+# observation + exit 0; defense in depth around sdk_run_signal_safe.
+# See #142.
+sdk_install_signal_trap "stub asteria_bootstrap signal"
+
 # `timeout 25` bounds the bootstrap binary; it's a serial_driver
 # so its budget is at least as generous as parallel_driver. 25 s
 # is conservative — first-time deploy needs to mint+lock the NFT
