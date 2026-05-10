@@ -18,6 +18,11 @@ set -u
 # shellcheck disable=SC1091
 source "$(dirname "$0")/helper_sdk.sh"
 
+# Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
+# observation + exit 0; defense in depth around sdk_run_signal_safe.
+# See #142.
+sdk_install_signal_trap "stub finally_consistency signal"
+
 # 10 s settle + 30 s binary cap = 40 s worst case, comfortably
 # under composer's finally per-command cap (~54 s observed). The
 # binary queries chain UTxOs and counts SHIP tokens; under

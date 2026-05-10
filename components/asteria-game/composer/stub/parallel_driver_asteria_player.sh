@@ -18,6 +18,11 @@ set -u
 # shellcheck disable=SC1091
 source "$(dirname "$0")/helper_sdk.sh"
 
+# Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
+# observation + exit 0; defense in depth around sdk_run_signal_safe.
+# See #142.
+sdk_install_signal_trap "stub asteria_player signal"
+
 PLAYER_ID="$(( ($(date +%s) % 3) + 1 ))"
 export ASTERIA_PLAYER_ID="$PLAYER_ID"
 # `timeout 12 /bin/asteria-game` — the binary has no internal
