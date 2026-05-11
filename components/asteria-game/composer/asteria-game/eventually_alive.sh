@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# eventually_alive.sh — stub post-fault liveness probe via the indexer.
+# eventually_alive.sh — post-fault liveness probe via the indexer.
 #
 # Antithesis stops fault injection before this script starts. The
 # check is intentionally small: confirm the long-lived utxo-indexer
@@ -43,15 +43,15 @@ RETRY_DELAY="${RETRY_DELAY:-1}"
 
 # Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
 # observation + exit 0; see #142 for context.
-sdk_install_signal_trap "stub eventually_alive signal"
+sdk_install_signal_trap "asteria_game eventually_alive signal"
 
-sdk_reachable "stub eventually_alive entered"
+sdk_reachable "asteria_game eventually_alive entered"
 
 sleep "$SLEEP_SETTLE"
 
 # Body wrapped via sdk_run_signal_safe_fn so signal-induced exits
 # anywhere in the loop get absorbed the same way the single-binary
-# launches in sibling stubs already do.
+# launches in sibling scripts already do.
 # shellcheck disable=SC2329  # invoked indirectly by sdk_run_signal_safe_fn below
 _eventually_alive_body() {
     local last_reply=""
@@ -74,7 +74,7 @@ _eventually_alive_body() {
                     >/dev/null 2>&1; then
             local tip
             tip="$(printf '%s' "$last_reply" | jq -r '.tipSlot // 0')"
-            sdk_sometimes true "stub eventually_alive holds" \
+            sdk_sometimes true "asteria_game eventually_alive holds" \
                 "$(jq -nc --argjson a "$attempt" --argjson t "$tip" \
                     '{attempt:$a, tipSlot:$t}')"
             return 0
@@ -96,17 +96,17 @@ _eventually_alive_body() {
         # emit fired as a finding when it only saw condition:false,
         # defeating the intent that this be informational coverage
         # only.
-        sdk_sometimes_optional false "stub eventually_alive cold_start" \
+        sdk_sometimes_optional false "asteria_game eventually_alive cold_start" \
             "$(jq -nc --argjson a "$MAX_ATTEMPTS" --arg reply "$last_reply" \
                 '{attempts_exhausted:$a, last_reply:$reply, reason:"tipSlot=null — no RollForward yet from upstream"}')"
         return 0
     fi
 
-    sdk_sometimes false "stub eventually_alive holds" \
+    sdk_sometimes false "asteria_game eventually_alive holds" \
         "$(jq -nc --argjson a "$MAX_ATTEMPTS" --arg reply "$last_reply" \
             '{attempts_exhausted:$a, last_reply:$reply}')"
 }
 
-sdk_run_signal_safe_fn "stub eventually_alive container_stopped" \
+sdk_run_signal_safe_fn "asteria_game eventually_alive container_stopped" \
     _eventually_alive_body
 exit 0

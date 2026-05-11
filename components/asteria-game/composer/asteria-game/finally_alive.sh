@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# finally_alive.sh — stub post-workload liveness probe via the indexer.
+# finally_alive.sh — post-workload liveness probe via the indexer.
 #
 # Runs after every parallel_driver completes (no fault injection).
 # Same shape as eventually_alive.sh — confirm the indexer is at the
@@ -28,15 +28,15 @@ RETRY_DELAY="${RETRY_DELAY:-1}"
 
 # Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
 # observation + exit 0; see #142 for context.
-sdk_install_signal_trap "stub finally_alive signal"
+sdk_install_signal_trap "asteria_game finally_alive signal"
 
-sdk_reachable "stub finally_alive entered"
+sdk_reachable "asteria_game finally_alive entered"
 
 sleep "$SLEEP_SETTLE"
 
 # Body wrapped via sdk_run_signal_safe_fn so signal-induced exits
 # anywhere in the loop get absorbed the same way the single-binary
-# launches in sibling stubs already do.
+# launches in sibling scripts already do.
 # shellcheck disable=SC2329  # invoked indirectly by sdk_run_signal_safe_fn below
 _finally_alive_body() {
     local last_reply=""
@@ -53,7 +53,7 @@ _finally_alive_body() {
                     >/dev/null 2>&1; then
             local tip
             tip="$(printf '%s' "$last_reply" | jq -r '.tipSlot // 0')"
-            sdk_sometimes true "stub finally_alive holds" \
+            sdk_sometimes true "asteria_game finally_alive holds" \
                 "$(jq -nc --argjson a "$attempt" --argjson t "$tip" \
                     '{attempt:$a, tipSlot:$t}')"
             return 0
@@ -61,11 +61,11 @@ _finally_alive_body() {
         sleep "$RETRY_DELAY"
     done
 
-    sdk_sometimes false "stub finally_alive holds" \
+    sdk_sometimes false "asteria_game finally_alive holds" \
         "$(jq -nc --argjson a "$MAX_ATTEMPTS" --arg reply "$last_reply" \
             '{attempts_exhausted:$a, last_reply:$reply}')"
 }
 
-sdk_run_signal_safe_fn "stub finally_alive container_stopped" \
+sdk_run_signal_safe_fn "asteria_game finally_alive container_stopped" \
     _finally_alive_body
 exit 0

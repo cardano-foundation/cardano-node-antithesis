@@ -21,7 +21,7 @@ source "$(dirname "$0")/helper_sdk.sh"
 # Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
 # observation + exit 0; defense in depth around sdk_run_signal_safe.
 # See #142.
-sdk_install_signal_trap "stub asteria_bootstrap signal"
+sdk_install_signal_trap "asteria_game asteria_bootstrap signal"
 
 # `timeout --kill-after=2 25` bounds the bootstrap binary; it's a
 # serial_driver so its budget is at least as generous as
@@ -32,5 +32,5 @@ sdk_install_signal_trap "stub asteria_bootstrap signal"
 # binary's slow-cleanup path can't outlive the deadline and exit
 # rc=1 (Haskell default unhandled-exception code) which
 # sdk_run_signal_safe doesn't absorb. See #145.
-sdk_run_signal_safe "stub asteria_bootstrap container_stopped" \
+sdk_run_signal_safe "asteria_game asteria_bootstrap container_stopped" \
     timeout --kill-after=2 25 /bin/asteria-bootstrap

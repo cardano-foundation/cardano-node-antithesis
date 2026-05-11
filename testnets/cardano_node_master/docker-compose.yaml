@@ -195,7 +195,7 @@ services:
   # the strength of the 0-findings 1h Antithesis run on commit
   # 9984a1e (PR #100). Long-lived utxo-indexer follows relay1's
   # chain via N2C, exposes ready/utxos_at/await on /tmp/idx.sock;
-  # composer scripts at /opt/antithesis/test/v1/stub/ drive
+  # composer scripts at /opt/antithesis/test/v1/asteria-game/ drive
   # bootstrap (one-shot serial driver), the player loop, and the
   # admin-singleton / consistency invariant snapshots. The player
   # parallel_driver_ is the workload generator: builds + signs +

@@ -21,7 +21,7 @@ source "$(dirname "$0")/helper_sdk.sh"
 # Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
 # observation + exit 0; defense in depth around sdk_run_signal_safe.
 # See #142.
-sdk_install_signal_trap "stub asteria_player signal"
+sdk_install_signal_trap "asteria_game asteria_player signal"
 
 PLAYER_ID="$(( ($(date +%s) % 3) + 1 ))"
 export ASTERIA_PLAYER_ID="$PLAYER_ID"
@@ -36,5 +36,5 @@ export ASTERIA_PLAYER_ID="$PLAYER_ID"
 # does NOT absorb 1, so the property fired (#145, observed runtimes
 # 27–47 s on commit 8690faa). --kill-after=2 escalates to SIGKILL
 # 2 s after SIGTERM, producing exit 137 which IS absorbed.
-sdk_run_signal_safe "stub asteria_player_${PLAYER_ID} container_stopped" \
+sdk_run_signal_safe "asteria_game asteria_player_${PLAYER_ID} container_stopped" \
     timeout --kill-after=2 12 /bin/asteria-game

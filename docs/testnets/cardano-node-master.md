@@ -81,7 +81,7 @@ What this gives Antithesis to score:
 The container is the **load + oracle** of the test. Its image is
 pinned by SHA in `docker-compose.yaml`; building it locally goes
 through `components/asteria-game/`. The composer scripts that drive
-it live alongside the binaries in `components/asteria-game/composer/stub/`
+it live alongside the binaries in `components/asteria-game/composer/asteria-game/`
 and are baked into the image at build time.
 
 For the architectural detail of how the binaries integrate with

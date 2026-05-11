@@ -200,7 +200,7 @@ services:
   # testnets/cardano_node_master/docker-compose.yaml. Long-lived
   # utxo-indexer follows relay1's chain via N2C, exposes
   # ready/utxos_at/await on /tmp/idx.sock; composer scripts at
-  # /opt/antithesis/test/v1/stub/ drive bootstrap (one-shot
+  # /opt/antithesis/test/v1/asteria-game/ drive bootstrap (one-shot
   # serial driver), the player loop, and the admin-singleton /
   # consistency invariant snapshots.
   #
