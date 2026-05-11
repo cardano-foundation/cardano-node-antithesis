@@ -26,9 +26,12 @@ source "$(dirname "$0")/helper_sdk.sh"
 sdk_install_signal_trap "stub anytime_admin_singleton signal"
 
 export ASTERIA_INVARIANT=admin_singleton
-# `timeout 12` bounds the invariant-check binary under composer's
-# anytime per-command cap. The binary queries the chain via N2C
-# and can hang under partition; bound to 12 s with margin for the
-# absorb path. timeout 124 → sdk_run_signal_safe → no finding.
+# `timeout --kill-after=2 12` bounds the invariant-check binary
+# under composer's anytime per-command cap. Plain SIGTERM at 12 s
+# is not enough — the Haskell binary can catch it, run slow N2C
+# cleanup, and exit rc=1 (Haskell default unhandled-exception code)
+# on a torn socket; sdk_run_signal_safe doesn't absorb 1, so the
+# property would fire. --kill-after=2 escalates to SIGKILL 2 s
+# after SIGTERM → exit 137 → absorbed. See #145.
 sdk_run_signal_safe "stub anytime_admin_singleton container_stopped" \
-    timeout 12 /bin/asteria-invariant
+    timeout --kill-after=2 12 /bin/asteria-invariant
