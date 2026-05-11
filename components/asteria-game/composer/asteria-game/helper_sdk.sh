@@ -127,7 +127,7 @@ sdk_run_signal_safe() {
 # sdk_run_signal_safe_fn <sig_id> <fn_name>
 #
 # Same absorption contract as sdk_run_signal_safe, but for an entire
-# shell function body — needed for stubs whose work is a multi-stage
+# shell function body — needed for scripts whose work is a multi-stage
 # pipeline (printf | timeout 1 socat | jq), not a single binary call.
 # Caller defines a function and passes its name; the function runs in
 # the current shell (so it sees outer locals + traps) and its overall
@@ -160,7 +160,7 @@ sdk_run_signal_safe_fn() {
 # the script tries to write to a pipe whose reader has closed — a
 # common shape under parallel scheduling on shared FDs.
 #
-# Idempotent: safe to call once at the top of every stub script
+# Idempotent: safe to call once at the top of every script
 # right after `source helper_sdk.sh`.
 sdk_install_signal_trap() {
     local sig_id="$1"

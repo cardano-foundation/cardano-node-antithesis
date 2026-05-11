@@ -76,7 +76,7 @@ volumes:
 in [`testnets/cardano_node_master/docker-compose.yaml`][master-compose].
 
 The composer scripts that drive the binaries are baked into the
-image at build time at `/opt/antithesis/test/v1/stub/` - nothing extra
+image at build time at `/opt/antithesis/test/v1/asteria-game/` - nothing extra
 to mount. The Antithesis composer mounts that path into its execution
 sandbox automatically when the test runs.
 
@@ -99,7 +99,7 @@ that consume + replace the asteria UTxO. The cluster needs:
 - A relay reachable via `relay1.example:3001` (N2N) and
   `relay1-state:/state/node.socket` (N2C). Aliasing it under a
   different name requires editing
-  `components/asteria-game/composer/stub/parallel_driver_asteria_player.sh`.
+  `components/asteria-game/composer/asteria-game/parallel_driver_asteria_player.sh`.
 - Genesis funds in `utxo-keys/genesis.1.skey` sufficient for the
   one-time bootstrap deploy plus a few thousand `spawnShip`
   transactions over a 3h run.
@@ -130,7 +130,7 @@ the Antithesis composer fires as commands:
   end-of-run state consistency between the asteria `ship_counter` and
   the `SHIP*` tokens at the spacetime address.
 
-Composer scripts under `/opt/antithesis/test/v1/stub/`:
+Composer scripts under `/opt/antithesis/test/v1/asteria-game/`:
 
 | Script | Role |
 |--------|------|
@@ -155,7 +155,7 @@ Asteria contributes both workload and oracles:
   `asteriaAdmin` NFT exists at the asteria spend address.
 - `asteria_state_consistent` is a `Sometimes` property comparing
   `ship_counter` to `SHIP*` token count.
-- `stub eventually_alive holds` and `stub finally_alive holds` prove the
+- `asteria_game eventually_alive holds` and `asteria_game finally_alive holds` prove the
   long-lived indexer is responsive and close to the chain tip.
 
 ## Build the image

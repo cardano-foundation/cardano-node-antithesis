@@ -21,7 +21,7 @@ source "$(dirname "$0")/helper_sdk.sh"
 # Absorb in-bash signals (SIGTERM/SIGINT/SIGPIPE) into a silent
 # observation + exit 0; defense in depth around sdk_run_signal_safe.
 # See #142.
-sdk_install_signal_trap "stub finally_consistency signal"
+sdk_install_signal_trap "asteria_game finally_consistency signal"
 
 # 10 s settle + 30 s binary cap + 2 s SIGKILL grace = 42 s worst
 # case, comfortably under composer's finally per-command cap (~54 s
@@ -33,5 +33,5 @@ sdk_install_signal_trap "stub finally_consistency signal"
 # code) which sdk_run_signal_safe doesn't absorb. See #145.
 sleep 10
 export ASTERIA_INVARIANT=consistency
-sdk_run_signal_safe "stub finally_consistency container_stopped" \
+sdk_run_signal_safe "asteria_game finally_consistency container_stopped" \
     timeout --kill-after=2 30 /bin/asteria-invariant

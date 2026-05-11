@@ -23,7 +23,7 @@ source "$(dirname "$0")/helper_sdk.sh"
 # between the invocation and the case statement (or before the
 # binary even starts) would still trip Always:zero-exit-code.
 # See #142.
-sdk_install_signal_trap "stub anytime_admin_singleton signal"
+sdk_install_signal_trap "asteria_game anytime_admin_singleton signal"
 
 export ASTERIA_INVARIANT=admin_singleton
 # `timeout --kill-after=2 12` bounds the invariant-check binary
@@ -33,5 +33,5 @@ export ASTERIA_INVARIANT=admin_singleton
 # on a torn socket; sdk_run_signal_safe doesn't absorb 1, so the
 # property would fire. --kill-after=2 escalates to SIGKILL 2 s
 # after SIGTERM → exit 137 → absorbed. See #145.
-sdk_run_signal_safe "stub anytime_admin_singleton container_stopped" \
+sdk_run_signal_safe "asteria_game anytime_admin_singleton container_stopped" \
     timeout --kill-after=2 12 /bin/asteria-invariant
