@@ -23,11 +23,14 @@ source "$(dirname "$0")/helper_sdk.sh"
 # See #142.
 sdk_install_signal_trap "stub asteria_bootstrap signal"
 
-# `timeout 25` bounds the bootstrap binary; it's a serial_driver
-# so its budget is at least as generous as parallel_driver. 25 s
-# is conservative — first-time deploy needs to mint+lock the NFT
-# (a few chain rounds) but subsequent invocations exit fast on the
-# isAlreadyDeployed short-circuit. timeout 124 →
-# sdk_run_signal_safe → no finding.
+# `timeout --kill-after=2 25` bounds the bootstrap binary; it's a
+# serial_driver so its budget is at least as generous as
+# parallel_driver. 25 s is conservative — first-time deploy needs
+# to mint+lock the NFT (a few chain rounds) but subsequent
+# invocations exit fast on the isAlreadyDeployed short-circuit.
+# `--kill-after=2` escalates to SIGKILL 2 s after SIGTERM so the
+# binary's slow-cleanup path can't outlive the deadline and exit
+# rc=1 (Haskell default unhandled-exception code) which
+# sdk_run_signal_safe doesn't absorb. See #145.
 sdk_run_signal_safe "stub asteria_bootstrap container_stopped" \
-    timeout 25 /bin/asteria-bootstrap
+    timeout --kill-after=2 25 /bin/asteria-bootstrap

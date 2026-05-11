@@ -23,12 +23,15 @@ source "$(dirname "$0")/helper_sdk.sh"
 # See #142.
 sdk_install_signal_trap "stub finally_consistency signal"
 
-# 10 s settle + 30 s binary cap = 40 s worst case, comfortably
-# under composer's finally per-command cap (~54 s observed). The
-# binary queries chain UTxOs and counts SHIP tokens; under
-# partition it can hang on N2C handshake, hence the `timeout 30`
-# bound. Earlier 15 s + unbounded binary blew past 54 s.
+# 10 s settle + 30 s binary cap + 2 s SIGKILL grace = 42 s worst
+# case, comfortably under composer's finally per-command cap (~54 s
+# observed). The binary queries chain UTxOs and counts SHIP tokens;
+# under partition it can hang on N2C handshake, hence the
+# `timeout 30` bound. `--kill-after=2` escalates to SIGKILL 2 s
+# after SIGTERM so the binary's slow-cleanup path can't outlive the
+# deadline and exit rc=1 (Haskell default unhandled-exception
+# code) which sdk_run_signal_safe doesn't absorb. See #145.
 sleep 10
 export ASTERIA_INVARIANT=consistency
 sdk_run_signal_safe "stub finally_consistency container_stopped" \
-    timeout 30 /bin/asteria-invariant
+    timeout --kill-after=2 30 /bin/asteria-invariant
