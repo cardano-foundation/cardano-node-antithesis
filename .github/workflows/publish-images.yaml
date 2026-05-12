@@ -46,7 +46,6 @@ jobs:
       id: images
       run: |
         scripts/push-cardano_node_master_images.sh
-        scripts/push-asteria_game_images.sh
 
   smoke-test:
     name: Compose smoke test
@@ -60,16 +59,3 @@ jobs:
           ref: ${{ github.event.inputs.ref_name || '' }}
       - name: Run smoke test
         run: ./scripts/smoke-test.sh cardano_node_master 600
-
-  smoke-test-asteria-game:
-    name: Compose smoke test (asteria_game)
-    runs-on: ubuntu-latest
-    needs: publish-images
-    timeout-minutes: 15
-    steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.inputs.ref_name || '' }}
-      - name: Run smoke test
-        run: ./scripts/smoke-test.sh asteria_game 600
