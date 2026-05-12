@@ -23,9 +23,18 @@
       url =
         "github:lambdasistemi/cardano-node-clients/711eb22ac03e67b753f7ce70e635cddcf6f3cdce";
     };
+    # Shared composer-SDK helper (signal hardening + sdk.jsonl emit).
+    # `flake = false` keeps this a raw source path; the docker-image
+    # derivation copies `helper_sdk_common.sh` next to the per-component
+    # helper so the runtime `source $(dirname "$0")/helper_sdk_common.sh`
+    # resolves at composer execution time.
+    composer-sdk = {
+      url = "path:../composer-sdk";
+      flake = false;
+    };
   };
 
-  outputs = inputs@{ self, nixpkgs, flake-parts, cardano-node-clients, ... }:
+  outputs = inputs@{ self, nixpkgs, flake-parts, cardano-node-clients, composer-sdk, ... }:
     let
       version = self.dirtyShortRev or self.shortRev or "dev";
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
@@ -37,6 +46,7 @@
               cardano-node-clients.packages.${system}.cardano-tx-generator;
             docker-image = pkgs.callPackage ./nix/docker-image.nix {
               inherit tx-generator-bin version;
+              composer-sdk-src = composer-sdk;
             };
           in {
             packages = {
