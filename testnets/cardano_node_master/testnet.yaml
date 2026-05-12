@@ -1,5 +1,5 @@
 --- # Required Testnet Parameters
-poolCount: 3
+poolCount: 4
 poolCost: 340000000
 poolMargin: 0.0
 poolPledge: 0

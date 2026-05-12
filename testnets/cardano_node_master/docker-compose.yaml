@@ -49,6 +49,7 @@ services:
       - p1-configs:/configs/1 # configs for p1
       - p2-configs:/configs/2 # configs for p2
       - p3-configs:/configs/3 # configs for p3
+      - p4-configs:/configs/4 # configs for p4
       - utxo-keys:/utxo-keys # funded address keys for tx-generator
 
   tracer:
@@ -91,6 +92,15 @@ services:
       - p3-configs:/configs:ro
       - tracer:/tracer
 
+  p4:
+    <<: *cardano-node
+    image: ghcr.io/intersectmbo/cardano-node@sha256:007da778998d0bdb043fb834c62b9da1c95e33610f31f6f9cccab29a945e2b99
+    container_name: p4
+    hostname: p4.example
+    volumes:
+      - p4-configs:/configs:ro
+      - tracer:/tracer
+
   relay1:
     <<: *cardano-relay
     image: ghcr.io/intersectmbo/cardano-node@sha256:c3cbc5aa0b758ba211567791539a67001e661fbe7a09275e37449e8b1252c4b2
@@ -111,6 +121,17 @@ services:
       - p1-configs:/configs:ro
       - ./relay-topology.json:/configs/configs/topology.json:ro
       - relay2-state:/state
+      - tracer:/tracer
+
+  relay3:
+    <<: *cardano-relay
+    image: ghcr.io/intersectmbo/cardano-node@sha256:007da778998d0bdb043fb834c62b9da1c95e33610f31f6f9cccab29a945e2b99
+    container_name: relay3
+    hostname: relay3.example
+    volumes:
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay3-state:/state
       - tracer:/tracer
 
   # Tx-generator workload — promoted from cardano_node_tx_generator
@@ -154,7 +175,7 @@ services:
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
-      POOLS: "3"
+      POOLS: "4"
     container_name: sidecar
     hostname: sidecar.example
     depends_on:
@@ -171,7 +192,7 @@ services:
     command:
       - "/opt/cardano-tracer/logs"
     environment:
-      POOLS: "3"
+      POOLS: "4"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
     volumes:
       - tracer:/opt/cardano-tracer
@@ -234,8 +255,10 @@ volumes:
   p1-configs:
   p2-configs:
   p3-configs:
+  p4-configs:
   relay1-state:
   relay2-state:
+  relay3-state:
   utxo-keys:
   asteria-game-db:
   asteria-deploy:

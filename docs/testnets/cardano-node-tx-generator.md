@@ -48,10 +48,10 @@ The report-level resolved digests matched for `configurator`,
 
 ## Network topology
 
-Same 3-pool +2-relay shape as master (p1 ↔ p2 ↔ p3 ring; relay1 +
-relay2 connect to all producers). The tx-generator container connects
-to **relay1** via N2C over a single multiplexed bearer (ChainSync +
-LocalStateQuery + LocalTxSubmission).
+Same 3-pool +2-relay shape as the 2026-05-05 validation baseline
+(p1 ↔ p2 ↔ p3 ring; relay1 + relay2 connect to all producers). The
+tx-generator container connects to **relay1** via N2C over a single
+multiplexed bearer (ChainSync + LocalStateQuery + LocalTxSubmission).
 
 Network name is `cardano-node-tx-generator-testnet` (distinct from
 master's `cardano-node-testnet`) so both testnets can coexist

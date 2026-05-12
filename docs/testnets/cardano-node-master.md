@@ -6,8 +6,8 @@ A mixed-version Cardano testnet for Antithesis fault-injection testing.
 
 This testnet exercises the node-to-node protocol across multiple cardano-node versions:
 
-- **3 block producers**: p1 (10.5.3), p2 (10.6.2), p3 (10.7.1) — forge blocks in a ring topology (p1↔p2↔p3)
-- **2 relay nodes**: relay1 (10.6.2), relay2 (10.7.1) — non-producing nodes connected to all producers
+- **4 block producers**: p1 (10.5.3), p2 (10.6.2), p3 (10.7.1), p4 (11.0.1) — forge blocks in a ring topology (p1↔p2↔p3↔p4)
+- **3 relay nodes**: relay1 (10.6.2), relay2 (10.7.1), relay3 (11.0.1) — non-producing nodes connected to all producers
 
 ### Supporting services
 
@@ -70,7 +70,7 @@ What this gives Antithesis to score:
   spacetime.spend, shipyard.mint) execute on every ship spawn —
   exercises ref-input handling, datum decoding, redeemer validation,
   exec-budget accounting.
-- **Multi-version interop**. Producers p1/p2/p3 run three different
+- **Multi-version interop**. Producers p1/p2/p3/p4 run four different
   cardano-node versions; the same Plutus tx must validate identically
   across versions or the cluster forks.
 - **Invariants that survive faults**. `asteria_admin_singleton`
@@ -173,10 +173,11 @@ Measured pressure in that run:
 ## Network topology
 
 ```
-p1 (10.5.3) ←→ p2 (10.6.2) ←→ p3 (10.7.1) ←→ p1
-   ↑                ↑               ↑
-relay1 (10.6.2) ----+---------------+
-relay2 (10.7.1) ----+---------------+
+p1 (10.5.3) ←→ p2 (10.6.2) ←→ p3 (10.7.1) ←→ p4 (11.0.1) ←→ p1
+   ↑                ↑               ↑               ↑
+relay1 (10.6.2) ----+---------------+---------------+
+relay2 (10.7.1) ----+---------------+---------------+
+relay3 (11.0.1) ----+---------------+---------------+
 ```
 
 Producers form a ring. Relays connect to all producers.

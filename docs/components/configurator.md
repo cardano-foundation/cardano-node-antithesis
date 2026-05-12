@@ -6,9 +6,9 @@ Generates genesis files, node configuration, topology, and signing keys for the 
 
 1. Reads `testnet.yaml` for genesis parameters (pool count, network magic, epoch length, protocol version)
 2. Runs the [testnet-generation-tool](https://github.com/cardano-foundation/testnet-generation-tool) to produce genesis files and pool keys
-3. Generates a ring topology for producers (p1↔p2↔p3)
+3. Generates a ring topology for producers (`p1` through `pN`, where `N` is `poolCount`)
 4. Sets the system start time to the current time
-5. Writes configs to per-pool volumes (p1-configs, p2-configs, p3-configs)
+5. Writes configs to per-pool volumes (`p1-configs` through `pN-configs`)
 
 ## Image
 

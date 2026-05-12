@@ -3,8 +3,8 @@
 Iteration testnet for the Haskell `cardano-tx-generator` daemon
 ([upstream](https://github.com/lambdasistemi/cardano-node-clients)).
 
-The daemon is exercised by the standard 3-pool +2-relay Cardano cluster
-(same compose shape as `cardano_node_master`) plus the sidecar /
+The daemon is exercised by the 3-pool +2-relay Cardano cluster used by
+the 2026-05-05 validation baseline plus the sidecar /
 tracer-sidecar / log-tailer / tracer instrumentation.
 
 ## Why a separate testnet
