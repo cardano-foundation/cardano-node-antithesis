@@ -9,6 +9,7 @@ SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin:$PATH"
 
 source "$(dirname "$0")/helper_sdk_lib.sh"
+sdk_install_signal_trap "tx_generator_pressure_signal"
 
 CONTROL_SOCKET="${CONTROL_SOCKET:-/state/tx-generator-control.sock}"
 

@@ -27,6 +27,7 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin:$PATH"
 # script before any exit-0 path runs.
 
 source "$(dirname "$0")/helper_sdk_lib.sh"
+sdk_install_signal_trap "tx_generator_transact_signal"
 
 CONTROL_SOCKET="${CONTROL_SOCKET:-/state/tx-generator-control.sock}"
 FANOUT="${TX_GEN_FANOUT:-6}"
