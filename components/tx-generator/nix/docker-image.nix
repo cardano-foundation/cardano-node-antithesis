@@ -1,4 +1,4 @@
-{ pkgs, tx-generator-bin, version, ... }:
+{ pkgs, tx-generator-bin, version, composer-sdk-src, ... }:
 let
   # Bake the antithesis composer scripts under the
   # canonical /opt/antithesis/test/v1/tx-generator/ path.
@@ -8,6 +8,15 @@ let
   antithesis-drivers = pkgs.runCommand "antithesis-drivers" { } ''
     mkdir -p $out/opt/antithesis/test/v1/
     cp -r ${../composer}/. $out/opt/antithesis/test/v1
+    # cp from the Nix store preserves read-only mode bits — make
+    # the destination writable before dropping the shared helper in.
+    chmod -R u+w $out/opt/antithesis/test/v1
+    # Drop the shared composer-sdk helper alongside the component's
+    # own helper_sdk_lib.sh so `source "$(dirname "$0")/helper_sdk_common.sh"`
+    # resolves at runtime. Single source of truth across components,
+    # wired in via the `composer-sdk` flake input (path:../composer-sdk).
+    cp ${composer-sdk-src}/helper_sdk_common.sh \
+       $out/opt/antithesis/test/v1/tx-generator/helper_sdk_common.sh
     chmod 0755 $out/opt/antithesis/test/v1/*/parallel_driver_*.sh \
                $out/opt/antithesis/test/v1/*/eventually_*.sh \
                $out/opt/antithesis/test/v1/*/finally_*.sh

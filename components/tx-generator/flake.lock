@@ -327,6 +327,18 @@
         "type": "github"
       }
     },
+    "composer-sdk": {
+      "flake": false,
+      "locked": {
+        "path": "../composer-sdk",
+        "type": "path"
+      },
+      "original": {
+        "path": "../composer-sdk",
+        "type": "path"
+      },
+      "parent": []
+    },
     "customConfig": {
       "locked": {
         "lastModified": 1630400035,
@@ -1624,6 +1636,7 @@
     "root": {
       "inputs": {
         "cardano-node-clients": "cardano-node-clients",
+        "composer-sdk": "composer-sdk",
         "flake-parts": "flake-parts_3",
         "nixpkgs": "nixpkgs_2"
       }

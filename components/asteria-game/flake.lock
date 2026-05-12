@@ -444,6 +444,18 @@
         "type": "github"
       }
     },
+    "composer-sdk": {
+      "flake": false,
+      "locked": {
+        "path": "../composer-sdk",
+        "type": "path"
+      },
+      "original": {
+        "path": "../composer-sdk",
+        "type": "path"
+      },
+      "parent": []
+    },
     "customConfig": {
       "locked": {
         "lastModified": 1630400035,
@@ -2239,6 +2251,7 @@
       "inputs": {
         "CHaP": "CHaP",
         "cardano-node-clients": "cardano-node-clients",
+        "composer-sdk": "composer-sdk",
         "flake-parts": "flake-parts_3",
         "hackageNix": "hackageNix_4",
         "haskellNix": "haskellNix_3",
