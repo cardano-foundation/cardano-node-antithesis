@@ -34,7 +34,6 @@ nav:
   - Testnets:
       - testnets/index.md
       - Cardano Node Master: testnets/cardano-node-master.md
-      - Cardano Node Tx-generator: testnets/cardano-node-tx-generator.md
   - Multi-run overview: overview.md
   - Triage: triage.md
   - Querying logs: query-logs.md

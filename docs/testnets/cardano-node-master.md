@@ -128,8 +128,9 @@ Why this belongs in the production-baseline testnet:
 ### Promotion evidence
 
 The image promoted here is `tx-generator:69bf815`, referenced from
-downstream commit `4687a09`. It was validated on the sibling
-`cardano_node_tx_generator` testnet before promotion.
+downstream commit `4687a09`. It was validated on a sibling
+`cardano_node_tx_generator` testnet before promotion (since removed;
+the workload now lives directly in this testnet).
 
 | Evidence | Value |
 |----------|-------|
