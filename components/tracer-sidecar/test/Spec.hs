@@ -1,3 +1,4 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -7,7 +8,12 @@ module Spec (spec)
 where
 
 import App (tailJsonLinesFromTracerLogDir)
-import Cardano.Antithesis.LogMessage (LogMessage)
+import Cardano.Antithesis.LogMessage
+    ( LogMessage (..)
+    , LogMessageData (..)
+    , NewTipSelectView (..)
+    , Severity (..)
+    )
 import Cardano.Antithesis.Sidecar
     ( Output (..)
     , initialState
@@ -24,11 +30,15 @@ import Control.Concurrent
 import Control.Concurrent.Async (async, cancel)
 import Data.Aeson
     ( ToJSON (toJSON)
-    , Value
+    , Value (..)
     , decodeStrict'
     , eitherDecodeStrict
     , encode
+    , object
+    , (.=)
     )
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Char8 qualified as B8
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Lazy.Char8 qualified as BL8
@@ -42,6 +52,8 @@ import Data.List
 import Data.Maybe
     ( mapMaybe
     )
+import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Time
 import ForkTreeSpec qualified
 import System.FilePath ((</>))
@@ -77,6 +89,27 @@ spec = do
                 expectationFailure
                     $ "Some messages couldn't be decoded: " <> show errs
 
+    describe "cluster fork-depth assertion" $ do
+        it "does not count stale relay lag as producer fork depth" $ do
+            let propSpec = mkSpec 3
+                msgs =
+                    added "relay1" "root" 0
+                        : sameProducerChain 432
+                (_finalState, actualVals) =
+                    processMessages propSpec (initialState propSpec) msgs
+
+            failedAssertionIds actualVals
+                `shouldNotContain` ["cluster fork depth < k"]
+
+        it "still fails when producers diverge by k" $ do
+            let propSpec = mkSpec 3
+                (_finalState, actualVals) =
+                    processMessages propSpec (initialState propSpec)
+                        $ divergentProducerChains 432
+
+            failedAssertionIds actualVals
+                `shouldContain` ["cluster fork depth < k"]
+
     describe "tailJsonLinesFromTracerLogDir" $ do
         it "works on 10 files with 10 values"
             $ withSystemTempDirectory "tracer-log-dir"
@@ -103,6 +136,77 @@ jsonifyOutput :: Output -> Value
 jsonifyOutput (StdOut msg) = toJSON $ "### STDOUT: " <> msg
 jsonifyOutput (AntithesisSdk v) = v
 jsonifyOutput (RecordChainPoint msg) = toJSON $ "### chainPoints.log: " <> msg
+
+failedAssertionIds :: [Output] -> [Text]
+failedAssertionIds outputs =
+    [ assertionId
+    | AntithesisSdk (Object o) <- outputs
+    , Just (Object assertion) <-
+        [KeyMap.lookup (Key.fromString "antithesis_assert") o]
+    , Just (Bool True) <- [KeyMap.lookup (Key.fromString "hit") assertion]
+    , Just (Bool False) <-
+        [KeyMap.lookup (Key.fromString "condition") assertion]
+    , Just (String assertionId) <-
+        [KeyMap.lookup (Key.fromString "id") assertion]
+    ]
+
+sameProducerChain :: Int -> [LogMessage]
+sameProducerChain depth =
+    [added host "root" 0 | host <- producerHosts]
+        <> concat
+            [ [added host ("h" <> T.pack (show n)) n | host <- producerHosts]
+            | n <- [1 .. depth]
+            ]
+
+divergentProducerChains :: Int -> [LogMessage]
+divergentProducerChains depth =
+    [added host "root" 0 | host <- producerHosts]
+        <> concat
+            [ [ added "p1.example" ("a" <> T.pack (show n)) n
+              , added "p2" ("b" <> T.pack (show n)) n
+              , added "p3" ("c" <> T.pack (show n)) n
+              ]
+            | n <- [1 .. depth]
+            ]
+
+producerHosts :: [Text]
+producerHosts = ["p1.example", "p2", "p3"]
+
+added :: Text -> Text -> Int -> LogMessage
+added host hash chainLength =
+    LogMessage
+        { at = UTCTime (fromGregorian 2026 5 8) 0
+        , ns = "ChainDB.AddBlockEvent.AddedToCurrentChain"
+        , details =
+            AddedToCurrentChain
+                { newTipSelectView = tipSelectView chainLength
+                , newtip = hash <> "@" <> T.pack (show chainLength)
+                }
+        , sev = Notice
+        , thread = "test"
+        , host = host
+        , kind = "AddedToCurrentChain"
+        , json =
+            object
+                [ "host" .= host
+                , "data"
+                    .= object
+                        [ "kind" .= ("AddedToCurrentChain" :: Text)
+                        , "newtip" .= (hash <> "@" <> T.pack (show chainLength))
+                        ]
+                ]
+        }
+
+tipSelectView :: Int -> NewTipSelectView
+tipSelectView chainLength =
+    NewTipSelectView
+        { chainLength = chainLength
+        , issueNo = 0
+        , issuerHash = "issuer"
+        , kind = "PraosTiebreakerView"
+        , slotNo = chainLength
+        , tieBreakVRF = "vrf"
+        }
 
 myGoldenTest :: [Value] -> Golden [Value]
 myGoldenTest actualOutput =
