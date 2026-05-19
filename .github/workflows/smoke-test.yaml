@@ -4,27 +4,32 @@ name: Compose smoke test
 # after `publish-images` so the smoke-test result rolls up
 # to the PR check suite. This standalone workflow is the
 # manual escape hatch for re-running the same script
-# against an arbitrary ref via `workflow_dispatch`, without
-# rebuilding the images.
+# against an arbitrary ref and a single profile via
+# `workflow_dispatch`, without rebuilding the images.
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: "Smoke-test profile (testnets/<profile>/docker-compose.yaml)"
+        required: false
+        default: cardano_node_master
+        type: choice
+        options:
+          - cardano_node_master
+          - cardano_amaru
+          - cardano_amaru_epoch240
+          - cardano_amaru_epoch360
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.profile }}
   cancel-in-progress: true
 
 jobs:
   smoke-test:
-    name: Smoke test
+    name: Smoke test ${{ inputs.profile }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      - name: Run cardano_node_master smoke test
-        run: ./scripts/smoke-test.sh cardano_node_master 600
-      - name: Run cardano_amaru smoke test
-        run: ./scripts/smoke-test.sh cardano_amaru 600
-      - name: Run cardano_amaru_epoch240 smoke test
-        run: ./scripts/smoke-test.sh cardano_amaru_epoch240 600
-      - name: Run cardano_amaru_epoch360 smoke test
-        run: ./scripts/smoke-test.sh cardano_amaru_epoch360 600
+      - name: Run ${{ inputs.profile }} smoke test
+        run: ./scripts/smoke-test.sh ${{ inputs.profile }} 600
