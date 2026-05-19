@@ -248,9 +248,11 @@ The success evidence is:
 - `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
   it samples both relay startup markers, and `finally_amaru_started.sh`
   fails the run if those markers are still missing at the final check.
-  These Amaru proof commands are baked into the sidecar image under the
-  existing `convergence` Test Composer template so the sidecar exposes
-  one coherent template to Antithesis.
+  In the `cardano_amaru_epoch240` and `cardano_amaru_epoch360` profiles
+  these Amaru proof commands are owned by the Amaru-specific
+  `amaru-prober` component under `/opt/antithesis/test/v1/amaru/`; the
+  base `cardano_amaru` profile still ships them inside the pinned
+  sidecar image's `convergence` template until that profile is migrated.
 - the Amaru profiles give the sidecar convergence checks a larger
   post-fault recovery budget than the default profile (`30s` settle,
   `15` attempts, `3s` delay) because the one-hour Antithesis campaign

@@ -3,9 +3,9 @@ set -euo pipefail
 
 # -------------------------- CONFIG --------------------------
 REGISTRY="${REGISTRY:-ghcr.io/cardano-foundation/cardano-node-antithesis}"
-TESTNETS="${TESTNETS:-cardano_node_master cardano_amaru cardano_amaru_epoch360}"
-ALWAYS_BUILD_COMPONENTS="${ALWAYS_BUILD_COMPONENTS:-sidecar}"
-ARTIFACT_COMPONENTS="${ARTIFACT_COMPONENTS:-sidecar}"
+TESTNETS="${TESTNETS:-cardano_node_master cardano_amaru cardano_amaru_epoch240 cardano_amaru_epoch360}"
+ALWAYS_BUILD_COMPONENTS="${ALWAYS_BUILD_COMPONENTS:-sidecar amaru-prober}"
+ARTIFACT_COMPONENTS="${ARTIFACT_COMPONENTS:-sidecar amaru-prober}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKTREE_ROOT="${WORKTREE_ROOT:-/tmp/cardano-node-antithesis-image-builds}"
 HEAD_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD)"

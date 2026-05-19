@@ -24,3 +24,7 @@ jobs:
         run: ./scripts/smoke-test.sh cardano_node_master 600
       - name: Run cardano_amaru smoke test
         run: ./scripts/smoke-test.sh cardano_amaru 600
+      - name: Run cardano_amaru_epoch240 smoke test
+        run: ./scripts/smoke-test.sh cardano_amaru_epoch240 600
+      - name: Run cardano_amaru_epoch360 smoke test
+        run: ./scripts/smoke-test.sh cardano_amaru_epoch360 600

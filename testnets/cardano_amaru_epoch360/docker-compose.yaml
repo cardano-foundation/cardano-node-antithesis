@@ -178,17 +178,12 @@ services:
       - a2-state:/srv/amaru
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1ff6913
-    entrypoint: /bin/bash
-    command:
-      - -ec
-      - |
-        for relay in amaru-relay-1 amaru-relay-2; do
-          while [ ! -f "/amaru-startup/$${relay}.started" ]; do
-            sleep 1
-          done
-        done
-        exec /bin/sidecar
+    # Sidecar carries only the generic convergence composer template after
+    # commit "move Antithesis composer checks to Amaru prober". The
+    # marker-gate wait is now sidecar.sh's own AMARU_STARTUP_REQUIRED=true
+    # branch — no more inline /bin/bash wrapper here. Amaru-specific
+    # composer commands live in the amaru-prober service below.
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:${SIDECAR_TAG:-dev}
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -199,10 +194,34 @@ services:
       MAX_ATTEMPTS: "15"
       RETRY_DELAY: "3"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+      AMARU_STARTUP_REQUIRED: "true"
+      AMARU_STARTUP_DIR: "/amaru-startup"
+      AMARU_RELAYS: "amaru-relay-1 amaru-relay-2"
     container_name: sidecar
     hostname: sidecar.example
     volumes:
       - tracer:/opt/cardano-tracer
+      - amaru-startup:/amaru-startup:ro
+    depends_on:
+      tracer-sidecar:
+        condition: service_started
+    restart: always
+    tmpfs:
+      - /tmp
+
+  amaru-prober:
+    # Amaru-owned composer carrier. Ships /opt/antithesis/test/v1/amaru/
+    # with parallel_driver_amaru_started.sh and finally_amaru_started.sh.
+    # Long-running entrypoint waits for relay startup markers and then
+    # idles; Antithesis composer `docker exec`s into here per tick.
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/amaru-prober:${AMARU_PROBER_TAG:-dev}
+    container_name: amaru-prober
+    hostname: amaru-prober.example
+    environment:
+      AMARU_STARTUP_DIR: "/amaru-startup"
+      AMARU_RELAYS: "amaru-relay-1 amaru-relay-2"
+      ANTITHESIS_OUTPUT_DIR: "/tmp"
+    volumes:
       - amaru-startup:/amaru-startup:ro
     depends_on:
       tracer-sidecar:

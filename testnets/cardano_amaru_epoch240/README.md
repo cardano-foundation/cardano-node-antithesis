@@ -109,15 +109,16 @@ bootstrap loading and should not require Amaru to serve blocks as a
 responder.
 
 Each relay also writes a startup marker into the shared `amaru-startup`
-volume immediately before the `amaru run` exec. The sidecar mounts that
-volume, and its image contains the Amaru startup proof scripts in the
-existing `convergence` Test Composer template so Antithesis can score
-`parallel_driver_amaru_started.sh` and `finally_amaru_started.sh` as
-explicit properties instead of asking readers to infer startup from
-container background-monitor logs. In this profile the sidecar also
-waits for those markers before emitting Antithesis setup-complete, so
-fault injection starts only after Amaru has consumed the bootstrap bundle
-at least once.
+volume immediately before the `amaru run` exec. The Amaru-owned
+`amaru-prober` container mounts that volume read-only and ships the
+Amaru startup proof scripts in its own `amaru` Test Composer template so
+Antithesis can score `parallel_driver_amaru_started.sh` and
+`finally_amaru_started.sh` as explicit properties instead of asking
+readers to infer startup from container background-monitor logs. The
+generic `sidecar` still mounts the same volume and waits for those
+markers via its own `AMARU_STARTUP_REQUIRED=true` branch before emitting
+Antithesis setup-complete, so fault injection starts only after Amaru
+has consumed the bootstrap bundle at least once.
 
 ## Local Commands
 

@@ -13,6 +13,15 @@ MAGIC=42
 
 export INTERNAL_NETWORK=true
 
+# Resolve image tags for components that are rebuilt against HEAD on every
+# publish-images run. The compose files reference these as ${SIDECAR_TAG}
+# and ${AMARU_PROBER_TAG}; default to the current short SHA so a local
+# smoke after `nix build` against the same checkout pulls the image
+# matching the worktree's components/ tree.
+HEAD_TAG="$(git rev-parse --short=7 HEAD 2>/dev/null || echo dev)"
+export SIDECAR_TAG="${SIDECAR_TAG:-$HEAD_TAG}"
+export AMARU_PROBER_TAG="${AMARU_PROBER_TAG:-$HEAD_TAG}"
+
 echo "Validating Antithesis-compatible image references..."
 while IFS= read -r IMAGE; do
   if [ -z "$IMAGE" ]; then
@@ -86,6 +95,30 @@ done
 echo "Checking sidecar convergence command..."
 docker exec sidecar \
   /opt/antithesis/test/v1/convergence/eventually_converged.sh
+
+# Layer-1 boundary proof: every container that should expose Antithesis
+# composer commands must actually carry a non-empty /opt/antithesis/test/v1/
+# tree. This catches the regression where a downstream pin rebuilds a
+# carrier image with an empty composer dir (see commits 5f38658 / 06ddffb).
+echo "Asserting composer command trees are non-empty..."
+COMPOSER_CARRIERS="sidecar"
+if docker compose --progress quiet -f "$COMPOSE_FILE" config --services \
+    | grep -Fxq amaru-prober; then
+  COMPOSER_CARRIERS="$COMPOSER_CARRIERS amaru-prober"
+fi
+for SVC in $COMPOSER_CARRIERS; do
+  LISTING="$(docker exec "$SVC" find /opt/antithesis/test/v1 -type f \
+              \( -name 'parallel_driver_*.sh' -o -name 'eventually_*.sh' \
+                 -o -name 'finally_*.sh' -o -name 'serial_driver_*.sh' \
+                 -o -name 'singleton_driver_*.sh' -o -name 'first_*.sh' \
+                 -o -name 'anytime_*.sh' \) 2>/dev/null | sort)"
+  if [ -z "$LISTING" ]; then
+    echo "FAIL: ${SVC} exposes an empty composer command tree"
+    exit 1
+  fi
+  echo "OK: ${SVC} composer commands:"
+  echo "$LISTING" | sed 's/^/  /'
+done
 
 # When present, tx-generator proves the daemon comes up, drives one
 # refill, lets the indexer observe it, then lands a small burst of
@@ -254,8 +287,23 @@ if [[ "$TESTNET" == cardano_amaru* ]]; then
   done
 
   echo "Checking Amaru startup Antithesis property..."
-  docker exec sidecar \
-    /opt/antithesis/test/v1/convergence/finally_amaru_started.sh
+  if docker compose --progress quiet -f "$COMPOSE_FILE" config --services \
+      | grep -Fxq amaru-prober; then
+    # Layer-1 hard enumeration of the Amaru composer contract.
+    docker exec amaru-prober \
+      test -x /opt/antithesis/test/v1/amaru/parallel_driver_amaru_started.sh
+    docker exec amaru-prober \
+      test -x /opt/antithesis/test/v1/amaru/finally_amaru_started.sh
+    docker exec amaru-prober \
+      /opt/antithesis/test/v1/amaru/parallel_driver_amaru_started.sh
+    docker exec amaru-prober \
+      /opt/antithesis/test/v1/amaru/finally_amaru_started.sh
+  else
+    # Base cardano_amaru testnet still ships the Amaru composer commands
+    # from the sidecar image until its compose is migrated.
+    docker exec sidecar \
+      /opt/antithesis/test/v1/convergence/finally_amaru_started.sh
+  fi
 fi
 
 echo "PASS: all ${POOLS} nodes responding"

@@ -101,7 +101,31 @@ jobs:
         else
           render_no_faults=""
         fi
-        RESULT=$(moog requester create-test -d "testnets/$TESTNET" \
+
+        # Render compose env placeholders before handing the test
+        # directory to `moog requester create-test -d`. moog packages the
+        # directory verbatim; it does not run docker compose, so any
+        # ${VAR:-default} placeholder in docker-compose.yaml would ship
+        # to Antithesis as a literal `:dev` tag and never resolve to the
+        # HEAD-built image. The HEAD short SHA matches the tag that
+        # publish-images.yaml pushed for ALWAYS_BUILD_COMPONENTS on this
+        # commit.
+        HEAD_TAG=$(git rev-parse --short=7 HEAD)
+        REQUEST_DIR=$(mktemp -d)
+        cp -a "testnets/$TESTNET/." "$REQUEST_DIR/"
+        REQUEST_COMPOSE="$REQUEST_DIR/docker-compose.yaml"
+        if [ -f "$REQUEST_COMPOSE" ]; then
+          sed -i \
+            -e "s|\${SIDECAR_TAG:-dev}|$HEAD_TAG|g" \
+            -e "s|\${AMARU_PROBER_TAG:-dev}|$HEAD_TAG|g" \
+            "$REQUEST_COMPOSE"
+          if grep -nE '\$\{SIDECAR_TAG|\$\{AMARU_PROBER_TAG' "$REQUEST_COMPOSE"; then
+            echo "FAIL: unresolved image-tag placeholder in $REQUEST_COMPOSE" >&2
+            exit 1
+          fi
+        fi
+
+        RESULT=$(moog requester create-test -d "$REQUEST_DIR" \
           -c ${{ github.sha }} \
           -r "$GITHUB_REPOSITORY" \
           --try $TRY \
