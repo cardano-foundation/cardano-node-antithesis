@@ -185,7 +185,7 @@ services:
     # marker-gate wait is now sidecar.sh's own AMARU_STARTUP_REQUIRED=true
     # branch — no more inline /bin/bash wrapper here. Amaru-specific
     # composer commands live in the amaru-prober service below.
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:${SIDECAR_TAG:-dev}
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:18c836d
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
@@ -216,7 +216,7 @@ services:
     # with parallel_driver_amaru_started.sh and finally_amaru_started.sh.
     # Long-running entrypoint waits for relay startup markers and then
     # idles; Antithesis composer `docker exec`s into here per tick.
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/amaru-prober:${AMARU_PROBER_TAG:-dev}
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/amaru-prober:18c836d
     container_name: amaru-prober
     hostname: amaru-prober.example
     environment:
