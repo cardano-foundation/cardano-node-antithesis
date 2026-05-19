@@ -100,6 +100,8 @@ docker exec sidecar \
 # composer commands must actually carry a non-empty /opt/antithesis/test/v1/
 # tree. This catches the regression where a downstream pin rebuilds a
 # carrier image with an empty composer dir (see commits 5f38658 / 06ddffb).
+# Uses bash globbing inside the container: composer carriers ship bash and
+# coreutils but not findutils, so `find` is unavailable.
 echo "Asserting composer command trees are non-empty..."
 COMPOSER_CARRIERS="sidecar"
 if docker compose --progress quiet -f "$COMPOSE_FILE" config --services \
@@ -107,11 +109,17 @@ if docker compose --progress quiet -f "$COMPOSE_FILE" config --services \
   COMPOSER_CARRIERS="$COMPOSER_CARRIERS amaru-prober"
 fi
 for SVC in $COMPOSER_CARRIERS; do
-  LISTING="$(docker exec "$SVC" find /opt/antithesis/test/v1 -type f \
-              \( -name 'parallel_driver_*.sh' -o -name 'eventually_*.sh' \
-                 -o -name 'finally_*.sh' -o -name 'serial_driver_*.sh' \
-                 -o -name 'singleton_driver_*.sh' -o -name 'first_*.sh' \
-                 -o -name 'anytime_*.sh' \) 2>/dev/null | sort)"
+  LISTING="$(docker exec "$SVC" bash -c '
+    shopt -s nullglob
+    files=(/opt/antithesis/test/v1/*/parallel_driver_*.sh
+           /opt/antithesis/test/v1/*/eventually_*.sh
+           /opt/antithesis/test/v1/*/finally_*.sh
+           /opt/antithesis/test/v1/*/serial_driver_*.sh
+           /opt/antithesis/test/v1/*/singleton_driver_*.sh
+           /opt/antithesis/test/v1/*/first_*.sh
+           /opt/antithesis/test/v1/*/anytime_*.sh)
+    for f in "${files[@]}"; do printf "%s\n" "$f"; done | LC_ALL=C sort
+  ')"
   if [ -z "$LISTING" ]; then
     echo "FAIL: ${SVC} exposes an empty composer command tree"
     exit 1
