@@ -242,9 +242,12 @@ The success evidence is:
   volumes;
 - `amaru-relay-1` and `amaru-relay-2` enter `amaru run` and remain
   running without a restart during the smoke gate;
-- the sidecar delays Antithesis setup-complete until those relay startup
-  markers exist, so the one-hour campaign starts fault injection only
-  after Amaru has consumed the bootstrap bundle at least once;
+- in the `cardano_amaru_epoch240` and `cardano_amaru_epoch360` profiles
+  the `amaru-prober` container delays its own Antithesis setup-complete
+  signal until both relay startup markers exist, so the campaign starts
+  fault injection only after Amaru has consumed the bootstrap bundle at
+  least once. The sidecar is Amaru-agnostic in those profiles and emits
+  setup-complete as soon as the cardano-node fleet responds to ping;
 - `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
   it samples both relay startup markers, and `finally_amaru_started.sh`
   fails the run if those markers are still missing at the final check.

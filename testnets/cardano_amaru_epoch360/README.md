@@ -115,10 +115,12 @@ Amaru startup proof scripts in its own `amaru` Test Composer template so
 Antithesis can score `parallel_driver_amaru_started.sh` and
 `finally_amaru_started.sh` as explicit properties instead of asking
 readers to infer startup from container background-monitor logs. The
-generic `sidecar` still mounts the same volume and waits for those
-markers via its own `AMARU_STARTUP_REQUIRED=true` branch before emitting
-Antithesis setup-complete, so fault injection starts only after Amaru
-has consumed the bootstrap bundle at least once.
+`amaru-prober` entrypoint emits its own Antithesis setup-complete signal
+only after it has observed every relay marker, so fault injection cannot
+start before Amaru has consumed the bootstrap bundle at least once. The
+generic `sidecar` is Amaru-agnostic: it carries only the convergence
+composer template and emits its own setup-complete as soon as the
+cardano-node fleet responds to `cardano-cli ping`.
 
 ## Local Commands
 
@@ -161,13 +163,15 @@ Expected completion sequence:
    volumes.
 3. `amaru-relay-1` and `amaru-relay-2` start with `amaru run` and stay
    running without a restart during the smoke gate.
-4. The sidecar setup signal is delayed until both relay startup markers
-   exist.
+4. The `amaru-prober` setup signal is delayed until both relay startup
+   markers exist; the sidecar setup signal fires as soon as the
+   cardano-node fleet responds to ping and is independent of Amaru.
 5. `parallel_driver_amaru_started.sh` emits `amaru_relays_started` when
    it samples both relay startup markers; `finally_amaru_started.sh`
    fails the run if those markers are still missing at the final check.
-   Both commands run from the `convergence` template so Antithesis does
-   not mix separate test directories in one sidecar.
+   Both commands ship from the `amaru-prober` container under
+   `/opt/antithesis/test/v1/amaru/`, so Antithesis does not mix Amaru
+   probes into the generic sidecar's `convergence` template.
 6. The sidecar uses a larger post-fault convergence budget in this
    profile (`30s` settle, `15` attempts, `3s` delay) so a final check is
    not scored while producer tips are still catching up after faults
