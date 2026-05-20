@@ -183,7 +183,7 @@ services:
     # Sidecar carries only the generic convergence composer template.
     # Amaru-specific readiness, marker waits, and composer commands live
     # in the amaru-prober service below; sidecar has no Amaru coupling.
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:18c836d
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:9d691fd
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
