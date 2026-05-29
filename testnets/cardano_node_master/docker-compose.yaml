@@ -57,6 +57,8 @@ services:
 
     hostname: tracer.example
     container_name: tracer
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
     volumes:
       - tracer:/opt/cardano-tracer
       - ./tracer-config.yaml:/tracer-config.yaml:ro
@@ -145,6 +147,8 @@ services:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:69bf815
     container_name: tx-generator
     hostname: tx-generator.example
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
     command:
       - --relay-socket
       - /state/node.socket
@@ -178,6 +182,8 @@ services:
       POOLS: "4"
     container_name: sidecar
     hostname: sidecar.example
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
     depends_on:
       tracer-sidecar:
         condition: service_started
@@ -189,6 +195,8 @@ services:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:5271661
     container_name: tracer-sidecar
     hostname: tracer-sidecar.example
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
     command:
       - "/opt/cardano-tracer/logs"
     environment:
@@ -235,6 +243,8 @@ services:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:5252cad0
     container_name: asteria-game
     hostname: asteria-game.example
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
     environment:
       INDEXER_SOCK: /tmp/idx.sock
       CARDANO_NODE_SOCKET_PATH: /state/node.socket
