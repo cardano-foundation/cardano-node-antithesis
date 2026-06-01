@@ -7,7 +7,7 @@ A mixed-version Cardano testnet for Antithesis fault-injection testing.
 This testnet exercises the node-to-node protocol across multiple cardano-node versions:
 
 - **4 block producers**: p1 (10.6.4), p2 (10.6.2), p3 (10.7.1), p4 (11.0.1) — forge blocks in a ring topology (p1↔p2↔p3↔p4)
-- **3 relay nodes**: relay1 (10.6.2), relay2 (10.7.1), relay3 (11.0.1) — non-producing nodes connected to all producers
+- **4 relay nodes**: relay1 (10.6.2), relay2 (10.7.1), relay3 (11.0.1), relay4 (10.6.4) — non-producing nodes connected to all producers
 
 ### Supporting services
 
@@ -179,6 +179,7 @@ p1 (10.6.4) ←→ p2 (10.6.2) ←→ p3 (10.7.1) ←→ p4 (11.0.1) ←→ p1
 relay1 (10.6.2) ----+---------------+---------------+
 relay2 (10.7.1) ----+---------------+---------------+
 relay3 (11.0.1) ----+---------------+---------------+
+relay4 (10.6.4) ----+---------------+---------------+
 ```
 
 Producers form a ring. Relays connect to all producers.
