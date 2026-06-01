@@ -130,6 +130,71 @@ services:
       - relay3-state:/state
       - tracer:/tracer
 
+  tx-generator:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:69bf815
+    container_name: tx-generator
+    hostname: tx-generator.example
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
+    command:
+      - --relay-socket
+      - /state/node.socket
+      - --control-socket
+      - /state/tx-generator-control.sock
+      - --state-dir
+      - /state/txgen
+      - --master-seed-file
+      - /state/txgen/master.seed
+      - --faucet-skey-file
+      - /utxo-keys/genesis.1.skey
+      - --network-magic
+      - "42"
+    volumes:
+      - relay1-state:/state
+      - utxo-keys:/utxo-keys:ro
+    restart: always
+    depends_on:
+      relay1:
+        condition: service_started
+      configurator:
+        condition: service_completed_successfully
+
+  adversary:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:5173fa8
+    container_name: adversary
+    hostname: adversary.example
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
+    volumes:
+      - tracer:/tracer:ro
+    depends_on:
+      tracer-sidecar:
+        condition: service_started
+      configurator:
+        condition: service_completed_successfully
+    restart: always
+
+  asteria-game:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:5252cad0
+    container_name: asteria-game
+    hostname: asteria-game.example
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
+    environment:
+      INDEXER_SOCK: /tmp/idx.sock
+      CARDANO_NODE_SOCKET_PATH: /state/node.socket
+      NETWORK_MAGIC: "42"
+    volumes:
+      - relay1-state:/state:ro
+      - utxo-keys:/utxo-keys:ro
+      - asteria-game-db:/idx-db
+      - asteria-deploy:/asteria-deploy
+    tmpfs:
+      - /tmp
+    depends_on:
+      relay1:
+        condition: service_started
+
   tracer-sidecar:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:5271661
     container_name: tracer-sidecar
@@ -158,6 +223,8 @@ volumes:
   relay2-state:
   relay3-state:
   utxo-keys:
+  asteria-game-db:
+  asteria-deploy:
 
 networks:
   default:
