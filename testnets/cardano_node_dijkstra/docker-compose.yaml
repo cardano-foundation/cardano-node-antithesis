@@ -1,0 +1,166 @@
+x-cardano-node: &cardano-node
+  image: ghcr.io/intersectmbo/cardano-node@sha256:007da778998d0bdb043fb834c62b9da1c95e33610f31f6f9cccab29a945e2b99
+  environment:
+    CARDANO_BLOCK_PRODUCER: true
+  command: >
+    run --topology /configs/configs/topology.json
+      --config /configs/configs/config.json
+      --database-path /state
+      --socket-path /state/node.socket
+      --tracer-socket-path-connect /tracer/tracer.socket
+      --shelley-operational-certificate /configs/keys/opcert.cert
+      --shelley-kes-key /configs/keys/kes.skey
+      --shelley-vrf-key /configs/keys/vrf.skey
+      --port 3001
+      --host-addr 0.0.0.0
+      +RTS -N -A16m -qg -qb -RTS
+  restart: always
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
+
+x-cardano-relay: &cardano-relay
+  image: ghcr.io/intersectmbo/cardano-node@sha256:007da778998d0bdb043fb834c62b9da1c95e33610f31f6f9cccab29a945e2b99
+  environment:
+    CARDANO_BLOCK_PRODUCER: false
+  command: >
+    run --topology /configs/configs/topology.json
+      --config /configs/configs/config.json
+      --database-path /state
+      --socket-path /state/node.socket
+      --tracer-socket-path-connect /tracer/tracer.socket
+      --port 3001
+      --host-addr 0.0.0.0
+      +RTS -N -A16m -qg -qb -RTS
+  restart: always
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+    tracer-sidecar:
+      condition: service_started
+
+services:
+  configurator:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator@sha256:6e6ba428838bf754ad286b62a151c63c683ef27fbdd5dd1bb5bab11ec9a6a34d
+    container_name: configurator
+    volumes:
+      - ./testnet.yaml:/testnet.yaml
+      - p1-configs:/configs/1
+      - p2-configs:/configs/2
+      - p3-configs:/configs/3
+      - p4-configs:/configs/4
+      - utxo-keys:/utxo-keys
+
+  tracer:
+    image: ghcr.io/intersectmbo/cardano-tracer@sha256:da628263a851b419c38d020d3a7dc3b65b20ee84e730faeb74babd6d96f28efe
+    hostname: tracer.example
+    container_name: tracer
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
+    volumes:
+      - tracer:/opt/cardano-tracer
+      - ./tracer-config.yaml:/tracer-config.yaml:ro
+    entrypoint: cardano-tracer
+    command:
+      - "--config"
+      - "/tracer-config.yaml"
+    restart: always
+
+  p1:
+    <<: *cardano-node
+    container_name: p1
+    hostname: p1.example
+    volumes:
+      - p1-configs:/configs:ro
+      - tracer:/tracer
+
+  p2:
+    <<: *cardano-node
+    container_name: p2
+    hostname: p2.example
+    volumes:
+      - p2-configs:/configs:ro
+      - tracer:/tracer
+
+  p3:
+    <<: *cardano-node
+    container_name: p3
+    hostname: p3.example
+    volumes:
+      - p3-configs:/configs:ro
+      - tracer:/tracer
+
+  p4:
+    <<: *cardano-node
+    container_name: p4
+    hostname: p4.example
+    volumes:
+      - p4-configs:/configs:ro
+      - tracer:/tracer
+
+  relay1:
+    <<: *cardano-relay
+    container_name: relay1
+    hostname: relay1.example
+    volumes:
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay1-state:/state
+      - tracer:/tracer
+
+  relay2:
+    <<: *cardano-relay
+    container_name: relay2
+    hostname: relay2.example
+    volumes:
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay2-state:/state
+      - tracer:/tracer
+
+  relay3:
+    <<: *cardano-relay
+    container_name: relay3
+    hostname: relay3.example
+    volumes:
+      - p1-configs:/configs:ro
+      - ./relay-topology.json:/configs/configs/topology.json:ro
+      - relay3-state:/state
+      - tracer:/tracer
+
+  tracer-sidecar:
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:5271661
+    container_name: tracer-sidecar
+    hostname: tracer-sidecar.example
+    labels:
+      com.antithesis.exclude_from_faults: "network,kill,pause,stop"
+    command:
+      - "/opt/cardano-tracer/logs"
+    environment:
+      POOLS: "4"
+      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+    volumes:
+      - tracer:/opt/cardano-tracer
+    restart: always
+    depends_on:
+      tracer:
+        condition: service_started
+
+volumes:
+  tracer:
+  p1-configs:
+  p2-configs:
+  p3-configs:
+  p4-configs:
+  relay1-state:
+  relay2-state:
+  relay3-state:
+  utxo-keys:
+
+networks:
+  default:
+    name: cardano-node-testnet
+    driver: bridge
+    internal: ${INTERNAL_NETWORK}
