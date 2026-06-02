@@ -9,7 +9,6 @@ its id for the vote driver.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
@@ -50,15 +49,16 @@ def main() -> int:
         sdk.sometimes(False, "info_action_created")
         return 0
 
-    ix = 0
-    try:
-        prop = g.lookup_proposal(cluster.g_query.get_gov_state(), txid)
-        if prop:
-            ix = int(prop["actionId"]["govActionIx"])
-    except Exception:  # noqa: BLE001
-        pass
+    # Publish the action ONLY after it is visible in gov-state, capturing
+    # its real index. The vote driver finds work solely through the logs,
+    # so a record must always point at a votable on-chain action.
+    ix = g.confirm_action(cluster, txid)
+    if ix is None:
+        print(f"action {txid} not visible in gov-state; not publishing", file=sys.stderr)
+        sdk.sometimes(False, "info_action_created")
+        return 0
 
-    (g.ACTIONS_DIR / f"{txid}.action.json").write_text(json.dumps({"txid": txid, "ix": ix}))
+    g.record_created(txid, ix)
     print(f"info action created: {txid}#{ix}", file=sys.stderr)
     sdk.sometimes(True, "info_action_created")
     return 0

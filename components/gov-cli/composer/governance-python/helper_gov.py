@@ -15,6 +15,7 @@ import contextlib
 import fcntl
 import os
 import pathlib
+import subprocess
 import time
 
 from cardano_clusterlib import clusterlib
@@ -31,16 +32,29 @@ NUM_POOLS = int(os.environ.get("NUM_POOLS", "2"))
 
 GD = GOV / "governance_data"
 STATE_DIR = GOV / "state"
-ACTIONS_DIR = STATE_DIR / "actions"
 SETUP_MARKER = STATE_DIR / "setup_done"
 FAUCET_LOCK = STATE_DIR / "faucet.lock"
+
+# Action coordination between the independent create and vote drivers.
+#
+# The gov-cli container is excluded from fault injection, so its
+# filesystem persists for the whole run — no need for locks or crash
+# recovery. Two append-only logs are the shared state:
+#   created.log   one "txid ix" line per action confirmed on-chain
+#   rejected.log  one "txid" line per action a vote was rejected on
+# The vote driver works the set difference (created MINUS rejected): an
+# action stays votable until a vote on it is rejected, at which point it
+# drops out for good. Append-only means concurrent driver instances
+# never corrupt the state and a record is never lost.
+CREATED_LOG = STATE_DIR / "created.log"
+REJECTED_LOG = STATE_DIR / "rejected.log"
 
 ANCHOR_URL = "https://example.com/governance.json"
 ANCHOR_TEXT = '{"body":{"title":"antithesis governance workload"}}'
 
 
 def ensure_dirs() -> None:
-    for d in (WORK, STATE_DIR, ACTIONS_DIR):
+    for d in (WORK, STATE_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 
@@ -165,20 +179,102 @@ def lookup_proposal(gov_state: dict, action_txid: str):
     return None
 
 
-def claim_pending_action():
-    """Atomically claim one un-voted action via a mkdir lock.
+# --- Two-log action coordination (mirrors helper_gov.sh) -------------
 
-    Returns (txid, ix, path) or None.
-    """
+
+def record_created(txid: str, ix: int) -> None:
+    """Publish a confirmed action (append-only)."""
     ensure_dirs()
-    for path in sorted(ACTIONS_DIR.glob("*.action.json")):
-        lock = path.with_suffix(".claim")
-        try:
-            lock.mkdir()
-        except FileExistsError:
-            continue
-        import json
+    with CREATED_LOG.open("a", encoding="utf-8") as fh:
+        fh.write(f"{txid} {ix}\n")
 
-        data = json.loads(path.read_text())
-        return data["txid"], int(data["ix"]), path
+
+def record_rejected(txid: str) -> None:
+    """Retire an action a vote was rejected on (append-only)."""
+    ensure_dirs()
+    with REJECTED_LOG.open("a", encoding="utf-8") as fh:
+        fh.write(f"{txid}\n")
+
+
+def _rejected_set() -> set:
+    if not REJECTED_LOG.exists():
+        return set()
+    out = set()
+    for line in REJECTED_LOG.read_text(encoding="utf-8").splitlines():
+        t = line.split()
+        if t:
+            out.add(t[0])
+    return out
+
+
+def pending_actions():
+    """Return [(txid, ix), ...] for created actions whose txid is not in
+    the rejected log (the set difference). Handles a missing/empty
+    rejected log correctly."""
+    if not CREATED_LOG.exists():
+        return []
+    rejected = _rejected_set()
+    out = []
+    for line in CREATED_LOG.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        txid = parts[0]
+        if txid in rejected:
+            continue
+        ix = int(parts[1]) if len(parts) > 1 else 0
+        out.append((txid, ix))
+    return out
+
+
+def action_onchain(cluster: clusterlib.ClusterLib, txid: str) -> bool:
+    """True while the proposal still exists in gov-state (not yet
+    expired/enacted/dropped)."""
+    try:
+        return lookup_proposal(cluster.g_query.get_gov_state(), txid) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def confirm_action(cluster: clusterlib.ClusterLib, txid: str, tries: int = 30):
+    """Poll gov-state until the proposal with this txid appears, then
+    return its real govActionIx. Returns None if it never shows up."""
+    for _ in range(tries):
+        try:
+            prop = lookup_proposal(cluster.g_query.get_gov_state(), txid)
+            if prop:
+                return int(prop["actionId"]["govActionIx"])
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(2)
     return None
+
+
+# --- Antithesis RNG (mirrors antithesis_rng / rng_mod in bash) -------
+
+
+def antithesis_rng() -> int:
+    """A random non-negative integer, steered by the Antithesis
+    hypervisor when `antithesis_random` is present, otherwise from
+    /dev/urandom. Every random choice the vote driver makes flows
+    through here so the test surface is handed to Antithesis."""
+    try:
+        out = subprocess.run(
+            ["antithesis_random"],
+            capture_output=True,
+            timeout=2,
+            check=False,
+        ).stdout.decode("ascii", "ignore")
+        digits = "".join(c for c in out if c.isdigit())
+        if digits:
+            return int(digits)
+    except Exception:  # noqa: BLE001
+        pass
+    return int.from_bytes(os.urandom(4), "big")
+
+
+def rng_mod(n: int) -> int:
+    """An index in [0, n) from antithesis_rng."""
+    if n <= 0:
+        return 0
+    return antithesis_rng() % n
