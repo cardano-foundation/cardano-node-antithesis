@@ -69,9 +69,10 @@ an action stays votable until a vote on it is rejected, then it drops
 out for good. Every choice the vote driver makes is handed to the
 **Antithesis RNG** (`antithesis_random`, falling back to `/dev/urandom`
 locally): which action to vote on, which voter casts the vote (a random
-DRep, SPO or CC member), and whether the vote is **yes or no**. So each
-invocation is one voter casting one random vote on one random live
-action, and the hypervisor explores the (action, voter, decision) space.
+DRep, SPO or CC member), and whether the vote is **yes, no or abstain**.
+So each invocation is one voter casting one random vote on one random
+live action, and the hypervisor explores the (action, voter, decision)
+space.
 
 The faucet spend is still serialized (a lock under `gov-data/state/`)
 since all txs draw from the single genesis-utxo, and the setup marker

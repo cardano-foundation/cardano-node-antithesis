@@ -66,8 +66,12 @@ done
 
 IFS='|' read -r kind vkey_flag vkey skey <<<"${voters[$(rng_mod "${#voters[@]}")]}"
 
-# RNG-select the decision.
-if [ "$(rng_mod 2)" -eq 0 ]; then choice="--yes"; decision="yes"; else choice="--no"; decision="no"; fi
+# RNG-select the decision: yes, no or abstain.
+case "$(rng_mod 3)" in
+    0) choice="--yes";     decision="yes" ;;
+    1) choice="--no";      decision="no" ;;
+    *) choice="--abstain"; decision="abstain" ;;
+esac
 
 tok="$(date +%s)_$$_${RANDOM}"
 gov_log "voting ${decision} as ${kind} on ${txid}#${ix}"
