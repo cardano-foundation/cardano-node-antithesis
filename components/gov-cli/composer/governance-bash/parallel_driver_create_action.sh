@@ -13,7 +13,7 @@ source "$(dirname "$0")/helper_sdk.sh"
 source "$(dirname "$0")/helper_gov.sh"
 
 sdk_reachable "create_action entered"
-mkdir -p "$WORK" "$STATE_DIR" "$ACTIONS_DIR"
+mkdir -p "$WORK" "$STATE_DIR"
 
 # Setup must have run; first_ runs before parallel drivers, but be safe.
 if [ ! -f "$SETUP_MARKER" ]; then
@@ -55,14 +55,25 @@ if [ -z "$txid" ]; then
     exit 0
 fi
 
-# Resolve the action index from gov-state (usually 0 for a lone proposal).
-ix="$(gov_state | jq -r --arg t "$txid" \
-    '.proposals[]? | select(.actionId.txId==$t) | .actionId.govActionIx' 2>/dev/null | head -1)"
-[ -n "$ix" ] || ix=0
+# Publish the action ONLY after it is visible in gov-state, capturing its
+# real index. The vote driver is an independent parallel command that
+# finds work solely through these files, so a file must always point at a
+# votable on-chain action.
+ix=""
+for _ in $(seq 1 30); do
+    ix="$(gov_state | jq -r --arg t "$txid" \
+        '.proposals[]? | select(.actionId.txId==$t) | .actionId.govActionIx' 2>/dev/null | head -1)"
+    [ -n "$ix" ] && break
+    sleep 2
+done
 
-jq -nc --arg t "$txid" --argjson i "$ix" '{txid:$t, ix:$i}' \
-    > "$ACTIONS_DIR/${txid}.action"
+if [ -z "$ix" ]; then
+    gov_log "action $txid not visible in gov-state; not publishing"
+    sdk_sometimes false "info_action_created"
+    exit 0
+fi
 
+record_created "$txid" "$ix"
 gov_log "info action created: ${txid}#${ix}"
 sdk_sometimes true "info_action_created"
 exit 0

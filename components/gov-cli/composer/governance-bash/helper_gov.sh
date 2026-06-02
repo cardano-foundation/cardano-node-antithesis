@@ -24,8 +24,7 @@ export CARDANO_NODE_SOCKET_PATH
 GD="$GOV/governance_data"               # cardonnay governance_data/
 FAUCET_SKEY="$GOV/faucet/genesis-utxo.skey"
 FAUCET_VKEY="$GOV/faucet/genesis-utxo.vkey"
-STATE_DIR="$GOV/state"                  # writable coordination area
-ACTIONS_DIR="$STATE_DIR/actions"        # one file per created action
+STATE_DIR="$GOV/state"                  # durable coordination area (gov-cli is fault-excluded)
 SETUP_MARKER="$STATE_DIR/setup_done"
 MAGIC=(--testnet-magic "$TESTNET_MAGIC")
 ANCHOR_URL="https://example.com/governance.json"
@@ -237,20 +236,74 @@ anchor_hash() {
     cli hash anchor-data --text "$text" 2>/dev/null
 }
 
-# pending_action — atomically claim one un-voted action via mkdir lock.
-# Echoes "txid ix file"; returns non-zero when none available. Lets
-# concurrent vote-driver instances avoid double-claiming.
-pending_action() {
-    local f lock txid ix
-    shopt -s nullglob
-    for f in "$ACTIONS_DIR"/*.action; do
-        lock="${f}.claim"
-        if mkdir "$lock" 2>/dev/null; then
-            txid="$(jq -r '.txid' "$f" 2>/dev/null)"
-            ix="$(jq -r '.ix' "$f" 2>/dev/null)"
-            echo "$txid $ix $f"
-            return 0
-        fi
-    done
-    return 1
+# Action coordination between the independent create and vote drivers.
+#
+# The gov-cli container is excluded from fault injection, so its
+# filesystem persists for the whole run — no need for locks or crash
+# recovery. Two append-only logs in the gov-data volume are the shared
+# state:
+#   created.log   one "txid ix" line per action confirmed on-chain
+#   rejected.log  one "txid" line per action a vote was rejected on
+# The vote driver works the set difference (created MINUS rejected): an
+# action stays votable until a vote on it is rejected (it expired, was
+# decided, or otherwise no longer accepts the vote), at which point it
+# drops out for good. Append-only means concurrent driver instances
+# never corrupt the state and a record is never lost.
+CREATED_LOG="$STATE_DIR/created.log"
+REJECTED_LOG="$STATE_DIR/rejected.log"
+
+# record_created <txid> <ix> — publish a confirmed action (append-only).
+record_created() {
+    mkdir -p "$STATE_DIR"
+    printf '%s %s\n' "$1" "$2" >>"$CREATED_LOG"
+}
+
+# record_rejected <txid> — retire an action a vote was rejected on.
+record_rejected() {
+    mkdir -p "$STATE_DIR"
+    printf '%s\n' "$1" >>"$REJECTED_LOG"
+}
+
+# action_onchain <txid> — true while the proposal still exists in
+# gov-state (not yet expired/enacted/dropped).
+action_onchain() {
+    gov_state | jq -e --arg t "$1" '.proposals[]? | select(.actionId.txId==$t)' \
+        >/dev/null 2>&1
+}
+
+# pending_actions — emit "txid ix" for each created action whose txid is
+# not present in the rejected log (the set difference). Rejected txids
+# are passed via a variable and built into a set in BEGIN, so an empty
+# rejected log is handled correctly (the NR==FNR idiom misbehaves when
+# its first file is empty).
+pending_actions() {
+    [ -s "$CREATED_LOG" ] || return 0
+    local rej
+    rej="$(awk '{print $1}' "$REJECTED_LOG" 2>/dev/null)"
+    awk -v rej="$rej" '
+        BEGIN { n = split(rej, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") seen[a[i]] = 1 }
+        !($1 in seen)
+    ' "$CREATED_LOG"
+}
+
+# antithesis_rng — a random non-negative integer (decimal digits only),
+# steered by the Antithesis hypervisor when `antithesis_random` is
+# present, otherwise from /dev/urandom. This is how the test surface is
+# handed to Antithesis: every random choice the vote driver makes (which
+# action, which voter, yes/no) flows through here.
+antithesis_rng() {
+    local r
+    r="$(timeout 2 antithesis_random 2>/dev/null | tr -cd '0-9')"
+    [ -n "$r" ] || r="$(od -An -tu4 -N4 /dev/urandom | tr -cd '0-9')"
+    printf '%s' "${r:-0}"
+}
+
+# rng_mod <n> — an index in [0, n) from antithesis_rng. The magnitude is
+# bounded to the last 9 digits so the modulo stays inside bash 64-bit
+# arithmetic regardless of how wide the RNG output is.
+rng_mod() {
+    local n="$1" r
+    [ "$n" -gt 0 ] 2>/dev/null || { printf '0'; return; }
+    r="$(antithesis_rng)"; r="${r: -9}"
+    printf '%s' "$(( 10#${r:-0} % n ))"
 }

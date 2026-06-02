@@ -24,7 +24,7 @@ source "$(dirname "$0")/helper_gov.sh"
 readonly DREP_DELEGATED=500000000000
 
 sdk_reachable "first_setup entered"
-mkdir -p "$WORK" "$STATE_DIR" "$ACTIONS_DIR"
+mkdir -p "$WORK" "$STATE_DIR"
 
 if [ -f "$SETUP_MARKER" ]; then
     gov_log "setup already done"
