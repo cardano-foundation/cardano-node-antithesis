@@ -119,38 +119,89 @@ _wait_spent() {
     return 1
 }
 
-# build_sign_submit <out_basename> <witness_count> <build_args_arr> <signing_args_arr>
-# Builds against the faucet (change back to faucet), signs with the
-# supplied signing-key args (faucet key always added), submits, and
-# echoes the txid. Serialized on the faucet lock. Returns non-zero on
-# any cardano-cli failure.
+# ensure_pparams — write current protocol parameters once (for fee calc
+# and deposit amounts). Returns non-zero if the query fails.
+ensure_pparams() {
+    [ -s "$WORK/pparams.json" ] && return 0
+    cli conway query protocol-parameters "${MAGIC[@]}" --out-file "$WORK/pparams.json" 2>/dev/null
+    [ -s "$WORK/pparams.json" ]
+}
+pp_get() { jq -r "$1 // 0" "$WORK/pparams.json" 2>/dev/null; }
+stake_deposit() { ensure_pparams && pp_get '.stakeAddressDeposit'; }
+drep_deposit()  { ensure_pparams && pp_get '.dRepDeposit'; }
+gov_deposit()   { ensure_pparams && pp_get '.govActionDeposit'; }
+
+current_slot() { cli query tip "${MAGIC[@]}" 2>/dev/null | jq -r '.slot // 0'; }
+
+# build_sign_submit <base> <txout_total> <deposit_total> <build_args_arr> <signing_args_arr>
+# build-raw flow: explicit faucet input, explicit deposits, a calculated
+# fee, and change back to the faucet. Unlike `transaction build`,
+# build-raw performs NO anchor download/validation and never contacts
+# the node, so proposals with unreachable anchor URLs work. `txout_total`
+# is the lovelace in the caller's own --tx-out entries; `deposit_total`
+# is the sum of cert/proposal deposits. Echoes the txid; serialized on
+# the faucet lock.
 build_sign_submit() {
-    local base="$1" witnesses="$2"
-    local -n _bargs="$3"
-    local -n _sargs="$4"
-    local addr txin body tx txid rc=0
+    local base="$1" txout_total="$2" deposit_total="$3"
+    local -n _bargs="$4"
+    local -n _sargs="$5"
+    local addr utxo txin in_amount ttl wcount fee change change0 draft body tx
     addr="$(faucet_addr)"
+    draft="$WORK/${base}.draft"
     body="$WORK/${base}.txbody"
     tx="$WORK/${base}.tx"
 
+    ensure_pparams || { gov_log "no pparams"; return 1; }
     faucet_lock || { gov_log "faucet lock timeout"; return 1; }
 
-    txin="$(faucet_txin)"
-    if [ -z "$txin" ]; then
-        gov_log "no faucet UTxO"
-        faucet_unlock
-        return 1
+    # Parse the cardano-cli text table, NOT --output-json: jq (1.6) stores
+    # numbers as doubles and silently corrupts lovelace amounts above 2^53
+    # (the faucet holds ~1.5e16), which breaks value conservation by 1.
+    # awk keeps the amount as the verbatim integer string ($3); the >m
+    # float compare is only used to pick the largest UTxO.
+    local sel
+    sel="$(cli query utxo --address "$addr" "${MAGIC[@]}" --output-text 2>/dev/null \
+        | awk 'NR>2 && $3+0>m {m=$3+0; tx=$1"#"$2; amt=$3} END{if (tx) print tx" "amt}')"
+    txin="${sel% *}"
+    in_amount="${sel##* }"
+    if [ -z "$txin" ] || [ -z "$in_amount" ]; then
+        gov_log "no faucet UTxO"; faucet_unlock; return 1
     fi
 
-    if ! cli conway transaction build \
+    ttl=$(( $(current_slot) + 2000 ))
+    wcount=$(( ${#_sargs[@]} / 2 + 1 ))   # signing-key files + faucet key
+
+    # Draft with fee 0 to size the tx, then calculate the real fee.
+    change0=$(( in_amount - txout_total - deposit_total ))
+    if ! cli conway transaction build-raw \
         --tx-in "$txin" \
-        --change-address "$addr" \
         "${_bargs[@]}" \
-        --witness-override "$witnesses" \
-        "${MAGIC[@]}" \
-        --out-file "$body"; then
-        faucet_unlock
-        return 1
+        --tx-out "${addr}+${change0}" \
+        --fee 0 \
+        --invalid-hereafter "$ttl" \
+        --out-file "$draft" >&2; then
+        faucet_unlock; return 1
+    fi
+
+    fee="$(cli conway transaction calculate-min-fee \
+        --tx-body-file "$draft" \
+        --protocol-params-file "$WORK/pparams.json" \
+        --witness-count "$wcount" 2>/dev/null | grep -oE '[0-9]+' | head -1)"
+    [ -n "$fee" ] || { gov_log "fee calc failed"; faucet_unlock; return 1; }
+
+    change=$(( in_amount - txout_total - deposit_total - fee ))
+    if [ "$change" -lt 0 ]; then
+        gov_log "insufficient faucet funds"; faucet_unlock; return 1
+    fi
+
+    if ! cli conway transaction build-raw \
+        --tx-in "$txin" \
+        "${_bargs[@]}" \
+        --tx-out "${addr}+${change}" \
+        --fee "$fee" \
+        --invalid-hereafter "$ttl" \
+        --out-file "$body" >&2; then
+        faucet_unlock; return 1
     fi
 
     if ! cli conway transaction sign \
@@ -158,28 +209,32 @@ build_sign_submit() {
         --signing-key-file "$FAUCET_SKEY" \
         "${MAGIC[@]}" \
         --tx-body-file "$body" \
-        --out-file "$tx"; then
-        faucet_unlock
-        return 1
+        --out-file "$tx" >&2; then
+        faucet_unlock; return 1
     fi
 
-    if ! cli conway transaction submit --tx-file "$tx" "${MAGIC[@]}"; then
-        faucet_unlock
-        return 1
+    if ! cli conway transaction submit --tx-file "$tx" "${MAGIC[@]}" >&2; then
+        faucet_unlock; return 1
     fi
 
     _wait_spent "$txin" || gov_log "spend confirm timed out for $txin"
     faucet_unlock
 
-    txid="$(cli conway transaction txid --tx-file "$tx" 2>/dev/null)"
-    echo "$txid"
-    return "$rc"
+    # `transaction txid` returns JSON {"txhash":"..."} in cli 11.0; older
+    # versions print the bare hex. Normalise to the bare hex.
+    local raw
+    raw="$(cli conway transaction txid --tx-file "$tx" 2>/dev/null)"
+    if [[ "$raw" == \{* ]]; then
+        jq -r '.txhash' <<<"$raw"
+    else
+        echo "$raw"
+    fi
 }
 
 # anchor_hash — deterministic anchor data hash for info actions/votes.
 anchor_hash() {
     local text='{"body":{"title":"antithesis governance workload"}}'
-    cli conway governance hash anchor-data --text "$text" 2>/dev/null
+    cli hash anchor-data --text "$text" 2>/dev/null
 }
 
 # pending_action — atomically claim one un-voted action via mkdir lock.

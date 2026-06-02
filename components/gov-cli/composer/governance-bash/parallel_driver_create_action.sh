@@ -27,13 +27,14 @@ fi
 
 tok="$(date +%s)_$$_${RANDOM}"
 action_file="$WORK/info_${tok}.action"
-deposit="$(gov_action_deposit)"
+deposit="$(gov_deposit)"
 ah="$(anchor_hash)"
 [ -n "$ah" ] || { sdk_unreachable "create_action_anchor_failed"; exit 0; }
 
 # Info action; deposit returned to a vote-stake credential.
+# `create-info` takes the network tag (--testnet), not --testnet-magic.
 if ! cli conway governance action create-info \
-    "${MAGIC[@]}" \
+    --testnet \
     --governance-action-deposit "$deposit" \
     --deposit-return-stake-verification-key-file "$GD/vote_stake_addr1_stake.vkey" \
     --anchor-url "$ANCHOR_URL" \
@@ -46,7 +47,7 @@ fi
 build_args=(--proposal-file "$action_file")
 signing_args=()
 txid="$(sdk_run_signal_safe "create_action_submit_signal" \
-    build_sign_submit "info_${tok}" 1 build_args signing_args)"
+    build_sign_submit "info_${tok}" 0 "$deposit" build_args signing_args)"
 
 if [ -z "$txid" ]; then
     gov_log "info action submit failed"

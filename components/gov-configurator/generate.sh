@@ -23,17 +23,49 @@ trap 'echo "generate.sh failed at line $LINENO" >&2' ERR
 
 NUM_POOLS="${NUM_POOLS:-2}"
 GEN_ROOT=/work/cdny
-SOCK="${GEN_ROOT}/state-cluster0/sockets/node.socket"
+
+# Generate once per volume lifetime. Every `docker compose up` starts
+# this one-shot service again; without this guard it would regenerate a
+# fresh genesis on each `up` and desync from already-running nodes.
+# `docker compose down -v` wipes the volume and the marker, forcing a
+# fresh genesis for the next run.
+MARKER=/gov-data/.generated
+if [ -f "$MARKER" ]; then
+    echo "gov-configurator: assets already generated; skipping"
+    exit 0
+fi
+# cardonnay derives STATE_CLUSTER as the directory containing the
+# socket, so the socket must sit directly in state-cluster0 (not a
+# sockets/ subdir) for STATE below to match.
+SOCK="${GEN_ROOT}/state-cluster0/node.socket"
 export CARDANO_NODE_SOCKET_PATH="$SOCK"
 
+# Clean slate so a container restart re-generates idempotently.
+rm -rf "$GEN_ROOT"
 mkdir -p "$GEN_ROOT" "$(dirname "$SOCK")"
 cd /tmp   # cardonnay refuses to run from inside the state dir
 
 # ---------------------------------------------------------------------
 # 1. Materialize the conway_fast scripts (generate-only = no nodes).
 #    -s minimum is 3; we override NUM_POOLS in the materialized script.
+#
+#    cardonnay's CLI calls os.getlogin() to build its default workdir,
+#    which throws in a container with no controlling terminal. Invoke
+#    it through a shim that patches getlogin; everything else uses the
+#    stable public CLI.
 # ---------------------------------------------------------------------
-cardonnay create -t conway_fast -g -k -i 0 -s 3 --work-dir "$GEN_ROOT"
+export GEN_ROOT
+GEN_ROOT="$GEN_ROOT" python3 - <<'PY'
+import os, sys
+os.getlogin = lambda: os.environ.get("USER") or "root"
+from cardonnay.main import main
+sys.argv = ["cardonnay", "create", "-t", "conway_fast",
+            "-g", "-i", "0", "-s", "3", "--work-dir", os.environ["GEN_ROOT"]]
+try:
+    main()
+except SystemExit as exc:
+    sys.exit(exc.code or 0)
+PY
 SCRIPT_DIR="${GEN_ROOT}/cluster0_conway_fast"
 START="${SCRIPT_DIR}/common-start-fast"
 [ -f "$START" ] || { echo "expected $START from cardonnay" >&2; exit 1; }
@@ -158,4 +190,5 @@ for ((i = 1; i <= NUM_POOLS; i++)); do
     cp "${STATE}/nodes/node-pool${i}/vrf.skey" "${POOL}/keys/vrf.skey"
 done
 
+touch "$MARKER"
 echo "gov-configurator: genesis + governance assets distributed"

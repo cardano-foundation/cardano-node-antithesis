@@ -38,7 +38,8 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages "cardonnay==${
 COPY generate.sh /generate.sh
 RUN chmod 0755 /generate.sh
 
-ENV NUM_POOLS=2 \
+ENV USER=root \
+    NUM_POOLS=2 \
     NUM_DREPS=5 \
     NUM_CC=5 \
     NETWORK_MAGIC=42 \

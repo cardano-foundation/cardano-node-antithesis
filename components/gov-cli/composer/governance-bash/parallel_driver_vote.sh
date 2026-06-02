@@ -85,7 +85,7 @@ if [ "${#build_args[@]}" -eq 0 ]; then
 fi
 
 vtxid="$(sdk_run_signal_safe "vote_submit_signal" \
-    build_sign_submit "vote_${tok}" "$witnesses" build_args signing_args)"
+    build_sign_submit "vote_${tok}" 0 0 build_args signing_args)"
 
 if [ -z "$vtxid" ]; then
     gov_log "vote submit failed"

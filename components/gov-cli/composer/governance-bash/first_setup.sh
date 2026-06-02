@@ -66,7 +66,12 @@ for ((i = 1; i <= NUM_CC; i++)); do
     witnesses=$((witnesses + 1))
 done
 
-txid="$(build_sign_submit "setup_register" "$witnesses" build_args signing_args)"
+# Deposits: each DRep pays a stake-key deposit + a DRep deposit; CC
+# hot-auth certs carry no deposit. Funding outputs are in build_args.
+sdep="$(stake_deposit)"; ddep="$(drep_deposit)"
+txout_total=$(( NUM_DREPS * DREP_DELEGATED ))
+deposit_total=$(( NUM_DREPS * (sdep + ddep) ))
+txid="$(build_sign_submit "setup_register" "$txout_total" "$deposit_total" build_args signing_args)"
 if [ -z "$txid" ]; then
     gov_log "registration tx failed"
     sdk_unreachable "setup_registration_failed"
@@ -87,7 +92,7 @@ cc_active="$(cli conway query committee-state --active "${MAGIC[@]}" 2>/dev/null
 sdk_sometimes "$([ "${cc_active:-0}" -ge 1 ] && echo true || echo false)" \
     "committee_active_after_setup"
 
-drep_seen="$(cli conway query drep-state "${MAGIC[@]}" 2>/dev/null | jq -r 'length // 0' 2>/dev/null)"
+drep_seen="$(cli conway query drep-state --all-dreps "${MAGIC[@]}" 2>/dev/null | jq -r 'length // 0' 2>/dev/null)"
 sdk_sometimes "$([ "${drep_seen:-0}" -ge 1 ] && echo true || echo false)" \
     "dreps_registered_after_setup"
 
