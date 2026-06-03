@@ -3,8 +3,10 @@
 
 One logical cardano-cli governance operation = one driver. Uses
 cardano-clusterlib's g_governance.action.create_info to build an info
-action (never enacts -> unbounded workload), submits it, and records
-its id for the vote driver.
+action (never enacts -> unbounded workload) and submits it. Stateless:
+nothing is published locally — the vote driver finds votable actions
+straight from gov-state, so a transient submit failure is harmless (a
+later tick creates another action).
 """
 
 from __future__ import annotations
@@ -45,21 +47,14 @@ def main() -> int:
     try:
         txid = g.build_sign_submit(cluster, f"info_{tok}", proposal_files=[info.action_file])
     except Exception as exc:  # noqa: BLE001
-        print(f"info action submit failed: {exc}", file=sys.stderr)
+        # Transient failure (faucet-lock timeout / stalled submit) —
+        # harmless, a later tick creates another action. No local state to
+        # update; the vote driver finds actions straight from gov-state.
+        print(f"info action submit failed transiently: {exc} (will retry)", file=sys.stderr)
         sdk.sometimes(False, "info_action_created")
         return 0
 
-    # Publish the action ONLY after it is visible in gov-state, capturing
-    # its real index. The vote driver finds work solely through the logs,
-    # so a record must always point at a votable on-chain action.
-    ix = g.confirm_action(cluster, txid)
-    if ix is None:
-        print(f"action {txid} not visible in gov-state; not publishing", file=sys.stderr)
-        sdk.sometimes(False, "info_action_created")
-        return 0
-
-    g.record_created(txid, ix)
-    print(f"info action created: {txid}#{ix}", file=sys.stderr)
+    print(f"info action created: {txid}", file=sys.stderr)
     sdk.sometimes(True, "info_action_created")
 
     # Perturbation coverage: this action was created while the chain was

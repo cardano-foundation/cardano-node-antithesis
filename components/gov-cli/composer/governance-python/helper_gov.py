@@ -35,20 +35,6 @@ STATE_DIR = GOV / "state"
 SETUP_MARKER = STATE_DIR / "setup_done"
 FAUCET_LOCK = STATE_DIR / "faucet.lock"
 
-# Action coordination between the independent create and vote drivers.
-#
-# The gov-cli container is excluded from fault injection, so its
-# filesystem persists for the whole run — no need for locks or crash
-# recovery. Two append-only logs are the shared state:
-#   created.log   one "txid ix" line per action confirmed on-chain
-#   rejected.log  one "txid" line per action a vote was rejected on
-# The vote driver works the set difference (created MINUS rejected): an
-# action stays votable until a vote on it is rejected, at which point it
-# drops out for good. Append-only means concurrent driver instances
-# never corrupt the state and a record is never lost.
-CREATED_LOG = STATE_DIR / "created.log"
-REJECTED_LOG = STATE_DIR / "rejected.log"
-
 # Perturbation-witness state. The anytime_chain_progress probe writes a
 # verdict here ("stalled <epoch>" / "producing <epoch>") each time it
 # samples block production; the create/vote drivers read it to assert
@@ -185,75 +171,31 @@ def lookup_proposal(gov_state: dict, action_txid: str):
     return None
 
 
-# --- Two-log action coordination (mirrors helper_gov.sh) -------------
+# --- Action selection: the chain IS the queue (mirrors helper_gov.sh) -
+#
+# Rather than maintaining a local created/rejected ledger (which a
+# transient fault could corrupt into permanently dropping a still-live
+# action), the vote driver reads the live set of governance actions
+# straight from the node via an N2C gov-state query. relay1 is
+# fault-excluded and a LocalStateQuery returns the last settled ledger
+# state, so this answers correctly even while block production is
+# stalled. An action leaves the set only when the LEDGER expires or
+# enacts it — there is no local "retire", so a transient submit/lock
+# failure is self-healing (the action reappears next tick).
 
 
-def record_created(txid: str, ix: int) -> None:
-    """Publish a confirmed action (append-only)."""
-    ensure_dirs()
-    with CREATED_LOG.open("a", encoding="utf-8") as fh:
-        fh.write(f"{txid} {ix}\n")
-
-
-def record_rejected(txid: str) -> None:
-    """Retire an action a vote was rejected on (append-only)."""
-    ensure_dirs()
-    with REJECTED_LOG.open("a", encoding="utf-8") as fh:
-        fh.write(f"{txid}\n")
-
-
-def _rejected_set() -> set:
-    if not REJECTED_LOG.exists():
-        return set()
-    out = set()
-    for line in REJECTED_LOG.read_text(encoding="utf-8").splitlines():
-        t = line.split()
-        if t:
-            out.add(t[0])
-    return out
-
-
-def pending_actions():
-    """Return [(txid, ix), ...] for created actions whose txid is not in
-    the rejected log (the set difference). Handles a missing/empty
-    rejected log correctly."""
-    if not CREATED_LOG.exists():
-        return []
-    rejected = _rejected_set()
-    out = []
-    for line in CREATED_LOG.read_text(encoding="utf-8").splitlines():
-        parts = line.split()
-        if not parts:
-            continue
-        txid = parts[0]
-        if txid in rejected:
-            continue
-        ix = int(parts[1]) if len(parts) > 1 else 0
-        out.append((txid, ix))
-    return out
-
-
-def action_onchain(cluster: clusterlib.ClusterLib, txid: str) -> bool:
-    """True while the proposal still exists in gov-state (not yet
-    expired/enacted/dropped)."""
+def live_info_actions(cluster: clusterlib.ClusterLib):
+    """Return the current InfoAction proposals (each a full gov-state
+    proposal). Empty list if none or if the node can't be reached."""
     try:
-        return lookup_proposal(cluster.g_query.get_gov_state(), txid) is not None
+        proposals = cluster.g_query.get_gov_state().get("proposals", []) or []
+        return [
+            p
+            for p in proposals
+            if p.get("proposalProcedure", {}).get("govAction", {}).get("tag") == "InfoAction"
+        ]
     except Exception:  # noqa: BLE001
-        return False
-
-
-def confirm_action(cluster: clusterlib.ClusterLib, txid: str, tries: int = 30):
-    """Poll gov-state until the proposal with this txid appears, then
-    return its real govActionIx. Returns None if it never shows up."""
-    for _ in range(tries):
-        try:
-            prop = lookup_proposal(cluster.g_query.get_gov_state(), txid)
-            if prop:
-                return int(prop["actionId"]["govActionIx"])
-        except Exception:  # noqa: BLE001
-            pass
-        time.sleep(2)
-    return None
+        return []
 
 
 # --- Antithesis RNG (mirrors antithesis_rng / rng_mod in bash) -------

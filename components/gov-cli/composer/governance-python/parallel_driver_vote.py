@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""parallel_driver_vote.py — cast one DRep/SPO/CC vote on one action.
+"""parallel_driver_vote.py — cast one DRep/SPO/CC vote on one live action.
 
-One logical cardano-cli governance operation = one driver. Picks an
-InfoAction from the create driver's published set (created.log MINUS
-rejected.log) and submits ONE vote from ONE random voter — a random
-DRep, stake pool (SPO) or constitutional committee (CC) member — with a
-random decision (yes / no / abstain), using cardano-clusterlib's
-g_governance.vote.create_{drep,spo,committee}. Every choice is steered
-by the Antithesis RNG so the hypervisor explores the (action, voter,
-decision) space. A vote that is rejected retires the action.
+Stateless: the votable set comes straight from the chain via an N2C
+gov-state query (relay1 is fault-excluded, so the query answers even
+under a block-production stall). There is NO local created/rejected
+ledger — an action leaves the set only when the LEDGER expires or enacts
+it, so a transient submit/lock failure is self-healing (the action is
+simply picked again next tick). Submits ONE vote from ONE random voter —
+a random DRep, stake pool (SPO) or constitutional committee (CC) member —
+with a random decision (yes / no / abstain), using cardano-clusterlib's
+g_governance.vote.create_{drep,spo,committee}. The Antithesis RNG steers
+every choice: which live action, which voter, and yes/no/abstain.
 """
 
 from __future__ import annotations
@@ -56,28 +58,21 @@ def main() -> int:
         sdk.unreachable("vote_node_not_ready")
         return 0
 
-    # Work the set difference (created MINUS rejected) and let Antithesis'
-    # RNG steer every choice: which action, which voter, and the decision.
-    pend = g.pending_actions()
-    if not pend:
-        print("no pending actions", file=sys.stderr)
+    # Pull the live InfoAction set from gov-state and RNG-select one. The
+    # set is stateless and self-healing: an action only leaves it when the
+    # ledger expires/enacts it, never on a transient local failure.
+    props = g.live_info_actions(cluster)
+    sdk.sometimes(len(props) >= 1, "actions_live", {"live": len(props)})
+    if not props:
+        print("no live actions in gov-state", file=sys.stderr)
         return 0
 
-    txid, ix = pend[g.rng_mod(len(pend))]
-    if not txid:
-        return 0
-
-    # Retire it if it is no longer on-chain (expired/decided); another
-    # invocation will pick a different one.
-    if not g.action_onchain(cluster, txid):
-        print(f"action {txid} no longer on-chain; retiring", file=sys.stderr)
-        g.record_rejected(txid)
-        sdk.sometimes(True, "stale_action_retired")
-        return 0
+    pick = props[g.rng_mod(len(props))]
+    txid = pick["actionId"]["txId"]
+    ix = pick["actionId"]["govActionIx"]
 
     voters = build_voters()
     if not voters:
-        sdk.sometimes(False, "votes_submitted")
         return 0
 
     kind, create_name, vkey_kw, vkey_file, skey_file = voters[g.rng_mod(len(voters))]
@@ -111,13 +106,12 @@ def main() -> int:
             signing_key_files=[skey_file],
         )
     except Exception as exc:  # noqa: BLE001
-        # Vote rejected (expired / already decided / invalid) — retire the
-        # action so the created-minus-rejected difference stops offering it.
-        # Reaching this proves the run lasted long enough for an action's
-        # full create -> vote -> expire lifecycle to close.
-        print(f"vote rejected for {txid}: {exc}; retiring", file=sys.stderr)
-        g.record_rejected(txid)
-        sdk.sometimes(True, "action_lifecycle_closed")
+        # Transient failure (faucet-lock timeout / stalled submit). The
+        # action is still in gov-state, so we do NOT retire it — a later
+        # tick simply picks it again. Self-healing by construction; just
+        # record coverage.
+        print(f"vote submit failed transiently for {txid}: {exc} (will retry)", file=sys.stderr)
+        sdk.sometimes(True, "vote_transient_failure", {"op": "vote", "voter": kind})
         return 0
     sdk.reachable("vote_submitted")
 

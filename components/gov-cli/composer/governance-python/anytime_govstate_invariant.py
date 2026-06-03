@@ -41,6 +41,22 @@ def main() -> int:
             sdk.always(authorized >= 2, "committee_quorum_maintained", {"authorized": authorized, "min": 2})
         except Exception:  # noqa: BLE001
             pass
+
+    # Lifecycle coverage (stateless, derived from gov-state): an action is
+    # in its final epoch of life when expiresAfter == the current epoch.
+    # Seeing this green proves the run lasted long enough for actions to
+    # reach the end of their govActionLifetime — the ledger owns the
+    # lifecycle, we just observe it.
+    try:
+        ep = cluster.g_query.get_epoch()
+        near = sum(
+            1
+            for p in (gov_state.get("proposals", []) or [])
+            if p.get("expiresAfter") == ep
+        )
+        sdk.sometimes(near >= 1, "action_near_expiry", {"near": near, "epoch": ep})
+    except Exception:  # noqa: BLE001
+        pass
     return 0
 
 
