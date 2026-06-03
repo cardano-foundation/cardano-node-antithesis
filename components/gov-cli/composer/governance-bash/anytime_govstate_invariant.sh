@@ -27,4 +27,18 @@ if jq -e 'has("proposals")' >/dev/null 2>&1 <<<"$gs"; then
 else
     sdk_always false "govstate_well_formed"
 fi
+
+# Invariant: once setup has authorized the committee, its quorum must
+# survive fault injection (CC auth is on-chain state, not a container, so
+# killing producers must never drop authorized members below minSize).
+if [ -f "$SETUP_MARKER" ]; then
+    auth="$(cli conway query committee-state --active "${MAGIC[@]}" 2>/dev/null \
+        | grep -c '"status": "Active"')"
+    if [ -n "$auth" ] && [ "$auth" -ge 0 ] 2>/dev/null; then
+        # committeeMinSize is 2 in the seeded Conway genesis.
+        sdk_always "$([ "$auth" -ge 2 ] && echo true || echo false)" \
+            "committee_quorum_maintained" \
+            "$(jq -nc --argjson a "$auth" '{authorized:$a, min:2}')"
+    fi
+fi
 exit 0

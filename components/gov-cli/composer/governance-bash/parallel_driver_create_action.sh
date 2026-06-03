@@ -76,4 +76,11 @@ fi
 record_created "$txid" "$ix"
 gov_log "info action created: ${txid}#${ix}"
 sdk_sometimes true "info_action_created"
+
+# Perturbation coverage: this action was created while the chain was
+# recently stalled by faults.
+if recent_stall 90; then
+    sdk_sometimes true "gov_op_under_perturbation" \
+        "$(jq -nc --arg op "create" '{op:$op}')"
+fi
 exit 0

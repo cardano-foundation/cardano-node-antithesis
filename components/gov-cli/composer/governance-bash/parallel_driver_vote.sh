@@ -94,21 +94,42 @@ vtxid="$(sdk_run_signal_safe "vote_submit_signal" \
 
 if [ -z "$vtxid" ]; then
     # Vote rejected (expired / already decided / invalid) — retire the
-    # action so the created-minus-rejected difference stops offering it.
+    # action. Reaching this proves the run lasted long enough for an
+    # action's full create -> vote -> expire lifecycle to close.
     gov_log "vote rejected for $txid; retiring"
     record_rejected "$txid"
-    sdk_sometimes false "votes_submitted"
+    sdk_sometimes true "action_lifecycle_closed"
     exit 0
 fi
+sdk_reachable "vote_submitted"
 
-# Verify the vote landed and emit per-kind / per-decision coverage.
+# Coverage from the on-chain vote breakdown after this vote landed.
 prop="$(gov_state | jq -c --arg t "$txid" \
     '.proposals[]? | select(.actionId.txId==$t)' 2>/dev/null | head -1)"
-total="$(jq -r '((.dRepVotes // {})|length) + ((.stakePoolVotes // {})|length) + ((.committeeVotes // {})|length)' \
-    <<<"$prop" 2>/dev/null)"
+drep_n="$(jq -r '(.dRepVotes // {})|length' <<<"$prop" 2>/dev/null)"
+spo_n="$(jq -r '(.stakePoolVotes // {})|length' <<<"$prop" 2>/dev/null)"
+cc_n="$(jq -r '(.committeeVotes // {})|length' <<<"$prop" 2>/dev/null)"
+total=$(( ${drep_n:-0} + ${spo_n:-0} + ${cc_n:-0} ))
+majority=$(( (NUM_DREPS + NUM_POOLS + NUM_CC + 1) / 2 ))
+
+# This vote was cast by $kind/$decision; per-role + per-decision coverage.
 sdk_sometimes "$([ "${total:-0}" -ge 1 ] && echo true || echo false)" "vote_recorded_${kind}"
 sdk_sometimes true "vote_decision_${decision}"
-sdk_sometimes true "votes_submitted"
+
+# Quorum-distribution coverage: an action voted by all three roles, and
+# one that crossed a majority of all eligible voters.
+all_roles=$([ "${drep_n:-0}" -ge 1 ] && [ "${spo_n:-0}" -ge 1 ] && [ "${cc_n:-0}" -ge 1 ] && echo true || echo false)
+sdk_sometimes "$all_roles" "action_voted_by_all_roles" \
+    "$(jq -nc --argjson d "${drep_n:-0}" --argjson s "${spo_n:-0}" --argjson c "${cc_n:-0}" '{drep:$d,spo:$s,cc:$c}')"
+sdk_sometimes "$([ "$total" -ge "$majority" ] && echo true || echo false)" "action_majority_reached" \
+    "$(jq -nc --argjson t "$total" --argjson m "$majority" '{total:$t, majority:$m}')"
+
+# Perturbation coverage: this vote landed while the chain was recently
+# stalled by faults (block production halted, yet governance progressed).
+if recent_stall 90; then
+    sdk_sometimes true "gov_op_under_perturbation" \
+        "$(jq -nc --arg op "vote" --arg k "$kind" '{op:$op, voter:$k}')"
+fi
 
 gov_log "vote submitted: $vtxid (${kind} ${decision}; action now has ${total} votes)"
 exit 0

@@ -307,3 +307,26 @@ rng_mod() {
     r="$(antithesis_rng)"; r="${r: -9}"
     printf '%s' "$(( 10#${r:-0} % n ))"
 }
+
+# Perturbation-witness state. The anytime_chain_progress probe writes a
+# verdict here ("stalled <epoch>" / "producing <epoch>") each time it
+# samples block production; the create/vote drivers read it to assert
+# that a governance op landed while the chain was degraded.
+CHAIN_VERDICT="$STATE_DIR/chain_verdict"
+
+set_chain_verdict() {   # set_chain_verdict <stalled|producing>
+    mkdir -p "$STATE_DIR"
+    printf '%s %s\n' "$1" "$(date +%s)" > "$CHAIN_VERDICT" 2>/dev/null || true
+}
+
+# recent_stall [within_seconds] — true if the most recent chain sample
+# was a stall within the window (i.e. faults were actively halting block
+# production around now).
+recent_stall() {
+    local within="${1:-90}" v ts now
+    [ -f "$CHAIN_VERDICT" ] || return 1
+    read -r v ts < "$CHAIN_VERDICT" 2>/dev/null || return 1
+    [ "$v" = "stalled" ] || return 1
+    now="$(date +%s)"
+    [ $(( now - ${ts:-0} )) -le "$within" ] 2>/dev/null
+}

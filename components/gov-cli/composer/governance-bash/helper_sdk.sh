@@ -84,3 +84,17 @@ sdk_run_signal_safe() {
         *) return "$rc" ;;
     esac
 }
+
+# sdk_setup_complete [details_json]
+#
+# Emit the Antithesis lifecycle "setup complete" signal: tells the
+# hypervisor the system is healthy and it may START injecting faults.
+# Place it where the cluster is confirmed up (e.g. once relay1's tip is
+# advancing), NOT inside a first_ command (those run after this signal).
+sdk_setup_complete() {
+    local dir; dir="$(_sdk_output_dir)"
+    mkdir -p "$dir"
+    jq -nc --argjson d "${1:-null}" \
+        '{antithesis_setup: {status: "complete", details: $d}}' \
+        >> "$dir/sdk.jsonl" 2>/dev/null || true
+}
