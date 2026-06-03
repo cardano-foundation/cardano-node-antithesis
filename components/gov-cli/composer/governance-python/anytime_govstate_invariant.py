@@ -24,6 +24,23 @@ def main() -> int:
         return 0
 
     sdk.always(isinstance(gov_state, dict) and "proposals" in gov_state, "govstate_well_formed")
+
+    # Invariant: once setup has authorized the committee, its quorum must
+    # survive fault injection (CC auth is on-chain state, not a container,
+    # so killing producers must never drop authorized members below
+    # minSize). Bash counts `committee-state --active`, i.e. members whose
+    # status is Active; mirror that against the full committee-state.
+    if g.SETUP_MARKER.exists():
+        try:
+            cs = cluster.g_query.get_committee_state()
+            members = (cs or {}).get("committee", {}) or {}
+            authorized = sum(
+                1 for m in members.values() if (m or {}).get("status") == "Active"
+            )
+            # committeeMinSize is 2 in the seeded Conway genesis.
+            sdk.always(authorized >= 2, "committee_quorum_maintained", {"authorized": authorized, "min": 2})
+        except Exception:  # noqa: BLE001
+            pass
     return 0
 
 

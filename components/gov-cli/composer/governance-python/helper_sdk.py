@@ -25,7 +25,13 @@ def _emit(obj: dict) -> None:
         pass
 
 
-def _assert(assert_id: str, display_type: str, assert_type: str, condition: bool) -> None:
+def _assert(
+    assert_id: str,
+    display_type: str,
+    assert_type: str,
+    condition: bool,
+    details: dict | None = None,
+) -> None:
     _emit(
         {
             "antithesis_assert": {
@@ -43,7 +49,7 @@ def _assert(assert_id: str, display_type: str, assert_type: str, condition: bool
                     "begin_line": 0,
                     "begin_column": 0,
                 },
-                "details": None,
+                "details": details,
             }
         }
     )
@@ -57,9 +63,15 @@ def unreachable(assert_id: str) -> None:
     _assert(assert_id, "AlwaysOrUnreachable", "always", False)
 
 
-def sometimes(condition: bool, assert_id: str) -> None:
-    _assert(assert_id, "Sometimes", "sometimes", condition)
+def sometimes(condition: bool, assert_id: str, details: dict | None = None) -> None:
+    _assert(assert_id, "Sometimes", "sometimes", condition, details)
 
 
-def always(condition: bool, assert_id: str) -> None:
-    _assert(assert_id, "Always", "always", condition)
+def always(condition: bool, assert_id: str, details: dict | None = None) -> None:
+    _assert(assert_id, "Always", "always", condition, details)
+
+
+def setup_complete(details: dict | None = None) -> None:
+    """Emit the Antithesis lifecycle "setup complete" signal: tells the
+    hypervisor the system is healthy and it may START injecting faults."""
+    _emit({"antithesis_setup": {"status": "complete", "details": details}})

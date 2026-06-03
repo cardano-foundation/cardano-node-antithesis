@@ -61,6 +61,11 @@ def main() -> int:
     g.record_created(txid, ix)
     print(f"info action created: {txid}#{ix}", file=sys.stderr)
     sdk.sometimes(True, "info_action_created")
+
+    # Perturbation coverage: this action was created while the chain was
+    # recently stalled by faults.
+    if g.recent_stall(90):
+        sdk.sometimes(True, "gov_op_under_perturbation", {"op": "create"})
     return 0
 
 

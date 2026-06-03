@@ -113,26 +113,44 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         # Vote rejected (expired / already decided / invalid) — retire the
         # action so the created-minus-rejected difference stops offering it.
+        # Reaching this proves the run lasted long enough for an action's
+        # full create -> vote -> expire lifecycle to close.
         print(f"vote rejected for {txid}: {exc}; retiring", file=sys.stderr)
         g.record_rejected(txid)
-        sdk.sometimes(False, "votes_submitted")
+        sdk.sometimes(True, "action_lifecycle_closed")
         return 0
+    sdk.reachable("vote_submitted")
 
-    # Verify the vote landed and emit per-kind / per-decision coverage.
-    total = 0
+    # Coverage from the on-chain vote breakdown after this vote landed.
+    drep_n = spo_n = cc_n = 0
     try:
         prop = g.lookup_proposal(cluster.g_query.get_gov_state(), txid) or {}
-        total = (
-            len(prop.get("dRepVotes") or {})
-            + len(prop.get("stakePoolVotes") or {})
-            + len(prop.get("committeeVotes") or {})
-        )
+        drep_n = len(prop.get("dRepVotes") or {})
+        spo_n = len(prop.get("stakePoolVotes") or {})
+        cc_n = len(prop.get("committeeVotes") or {})
     except Exception:  # noqa: BLE001
         pass
+    total = drep_n + spo_n + cc_n
+    majority = (g.NUM_DREPS + g.NUM_POOLS + g.NUM_CC + 1) // 2
 
+    # This vote was cast by $kind/$decision; per-role + per-decision coverage.
     sdk.sometimes(total >= 1, f"vote_recorded_{kind}")
     sdk.sometimes(True, f"vote_decision_{decision}")
-    sdk.sometimes(True, "votes_submitted")
+
+    # Quorum-distribution coverage: an action voted by all three roles, and
+    # one that crossed a majority of all eligible voters.
+    all_roles = drep_n >= 1 and spo_n >= 1 and cc_n >= 1
+    sdk.sometimes(
+        all_roles, "action_voted_by_all_roles", {"drep": drep_n, "spo": spo_n, "cc": cc_n}
+    )
+    sdk.sometimes(
+        total >= majority, "action_majority_reached", {"total": total, "majority": majority}
+    )
+
+    # Perturbation coverage: this vote landed while the chain was recently
+    # stalled by faults (block production halted, yet governance progressed).
+    if g.recent_stall(90):
+        sdk.sometimes(True, "gov_op_under_perturbation", {"op": "vote", "voter": kind})
 
     print(
         f"vote submitted ({kind} {decision}; action now has {total} votes)",

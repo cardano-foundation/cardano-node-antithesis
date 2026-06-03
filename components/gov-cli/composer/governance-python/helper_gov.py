@@ -49,6 +49,12 @@ FAUCET_LOCK = STATE_DIR / "faucet.lock"
 CREATED_LOG = STATE_DIR / "created.log"
 REJECTED_LOG = STATE_DIR / "rejected.log"
 
+# Perturbation-witness state. The anytime_chain_progress probe writes a
+# verdict here ("stalled <epoch>" / "producing <epoch>") each time it
+# samples block production; the create/vote drivers read it to assert
+# that a governance op landed while the chain was degraded.
+CHAIN_VERDICT = STATE_DIR / "chain_verdict"
+
 ANCHOR_URL = "https://example.com/governance.json"
 ANCHOR_TEXT = '{"body":{"title":"antithesis governance workload"}}'
 
@@ -278,3 +284,33 @@ def rng_mod(n: int) -> int:
     if n <= 0:
         return 0
     return antithesis_rng() % n
+
+
+# --- Perturbation witness (mirrors helper_gov.sh) --------------------
+
+
+def set_chain_verdict(kind: str) -> None:
+    """Publish the latest chain-progress verdict: "<kind> <epoch>"."""
+    ensure_dirs()
+    try:
+        CHAIN_VERDICT.write_text(f"{kind} {int(time.time())}\n", encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def recent_stall(within: int = 90) -> bool:
+    """True if the most recent chain sample was a stall within the window
+    (i.e. faults were actively halting block production around now)."""
+    if not CHAIN_VERDICT.exists():
+        return False
+    try:
+        parts = CHAIN_VERDICT.read_text(encoding="utf-8").split()
+    except Exception:  # noqa: BLE001
+        return False
+    if len(parts) < 2 or parts[0] != "stalled":
+        return False
+    try:
+        ts = int(parts[1])
+    except ValueError:
+        return False
+    return (int(time.time()) - ts) <= within
