@@ -50,31 +50,15 @@ txid="$(sdk_run_signal_safe "create_action_submit_signal" \
     build_sign_submit "info_${tok}" 0 "$deposit" build_args signing_args)"
 
 if [ -z "$txid" ]; then
-    gov_log "info action submit failed"
+    # Transient failure (faucet-lock timeout / stalled submit) — harmless,
+    # a later tick creates another action. No local state to update; the
+    # vote driver finds actions straight from gov-state.
+    gov_log "info action submit failed transiently (will retry)"
     sdk_sometimes false "info_action_created"
     exit 0
 fi
 
-# Publish the action ONLY after it is visible in gov-state, capturing its
-# real index. The vote driver is an independent parallel command that
-# finds work solely through these files, so a file must always point at a
-# votable on-chain action.
-ix=""
-for _ in $(seq 1 30); do
-    ix="$(gov_state | jq -r --arg t "$txid" \
-        '.proposals[]? | select(.actionId.txId==$t) | .actionId.govActionIx' 2>/dev/null | head -1)"
-    [ -n "$ix" ] && break
-    sleep 2
-done
-
-if [ -z "$ix" ]; then
-    gov_log "action $txid not visible in gov-state; not publishing"
-    sdk_sometimes false "info_action_created"
-    exit 0
-fi
-
-record_created "$txid" "$ix"
-gov_log "info action created: ${txid}#${ix}"
+gov_log "info action created: $txid"
 sdk_sometimes true "info_action_created"
 
 # Perturbation coverage: this action was created while the chain was

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# parallel_driver_vote.sh — cast DRep + SPO + CC votes on one action.
+# parallel_driver_vote.sh — cast one DRep/SPO/CC vote on one live action.
 #
-# One logical cardano-cli governance operation = one driver. This one
-# picks an InfoAction from the create driver's published set (created.log
-# MINUS rejected.log) and submits YES votes from every DRep, every stake
-# pool (SPO), and every constitutional committee member — mirroring
-# conway_common.cast_vote / governance_setup._cast_vote from
-# cardano-node-tests. A vote that is rejected retires the action.
+# Stateless: the votable set comes straight from the chain via an N2C
+# gov-state query (relay1 is fault-excluded, so the query answers even
+# under a block-production stall). There is NO local created/rejected
+# ledger — an action leaves the set only when the LEDGER expires or
+# enacts it, so a transient submit/lock failure is self-healing (the
+# action is simply picked again next tick). Antithesis' RNG steers every
+# choice: which live action, which voter, and yes/no/abstain.
 
 set -u
 # shellcheck disable=SC1091
@@ -25,28 +26,21 @@ if ! wait_for_node 30; then
     exit 0
 fi
 
-# Work the set difference (created MINUS rejected) and let Antithesis'
-# RNG steer every choice: which action, which voter, and yes/no. One
-# invocation casts ONE voter's single vote, so the hypervisor explores a
-# fine-grained space of (action, voter, decision) combinations.
-mapfile -t pend < <(pending_actions)
-if [ "${#pend[@]}" -eq 0 ]; then
-    gov_log "no pending actions"
+# Pull the live InfoAction set from gov-state and RNG-select one.
+props="$(live_info_actions)"
+n="$(jq 'length' <<<"$props" 2>/dev/null)"
+n="${n:-0}"
+sdk_sometimes "$([ "$n" -ge 1 ] && echo true || echo false)" "actions_live" \
+    "$(jq -nc --argjson n "$n" '{live:$n}')"
+if [ "$n" -eq 0 ] 2>/dev/null; then
+    gov_log "no live actions in gov-state"
     exit 0
 fi
 
-# RNG-select one action from the live set.
-read -r txid ix _ <<<"${pend[$(rng_mod "${#pend[@]}")]}"
-[ -n "$txid" ] || exit 0
-
-# Retire it if it is no longer on-chain (expired/decided); another
-# invocation will pick a different one.
-if ! action_onchain "$txid"; then
-    gov_log "action $txid no longer on-chain; retiring"
-    record_rejected "$txid"
-    sdk_sometimes true "stale_action_retired"
-    exit 0
-fi
+pick="$(jq -c ".[$(rng_mod "$n")]" <<<"$props")"
+txid="$(jq -r '.actionId.txId' <<<"$pick" 2>/dev/null)"
+ix="$(jq -r '.actionId.govActionIx' <<<"$pick" 2>/dev/null)"
+[ -n "$txid" ] && [ "$txid" != "null" ] || exit 0
 
 # Build the voter roster (every DRep, SPO and CC member), then RNG-select
 # who votes this time. Each entry: kind|vkey-flag|vkey-file|skey-file.
@@ -62,7 +56,7 @@ for ((i = 1; i <= NUM_CC; i++)); do
     hv="$GD/cc_member${i}_committee_hot.vkey"
     [ -e "$hv" ] && voters+=("cc|--cc-hot-verification-key-file|$hv|$GD/cc_member${i}_committee_hot.skey")
 done
-[ "${#voters[@]}" -gt 0 ] || { sdk_sometimes false "votes_submitted"; exit 0; }
+[ "${#voters[@]}" -gt 0 ] || exit 0
 
 IFS='|' read -r kind vkey_flag vkey skey <<<"${voters[$(rng_mod "${#voters[@]}")]}"
 
@@ -82,7 +76,7 @@ if ! cli conway governance vote create "$choice" \
     --governance-action-index "$ix" \
     "$vkey_flag" "$vkey" \
     --out-file "$vf"; then
-    sdk_sometimes false "votes_submitted"
+    sdk_unreachable "vote_create_failed"
     exit 0
 fi
 
@@ -93,12 +87,12 @@ vtxid="$(sdk_run_signal_safe "vote_submit_signal" \
     build_sign_submit "vote_${tok}" 0 0 build_args signing_args)"
 
 if [ -z "$vtxid" ]; then
-    # Vote rejected (expired / already decided / invalid) — retire the
-    # action. Reaching this proves the run lasted long enough for an
-    # action's full create -> vote -> expire lifecycle to close.
-    gov_log "vote rejected for $txid; retiring"
-    record_rejected "$txid"
-    sdk_sometimes true "action_lifecycle_closed"
+    # Transient failure (faucet-lock timeout / stalled submit). The action
+    # is still in gov-state, so we do NOT retire it — a later tick simply
+    # picks it again. Self-healing by construction; just record coverage.
+    gov_log "vote submit failed transiently for $txid (will retry)"
+    sdk_sometimes true "vote_transient_failure" \
+        "$(jq -nc --arg k "$kind" '{op:"vote", voter:$k}')"
     exit 0
 fi
 sdk_reachable "vote_submitted"

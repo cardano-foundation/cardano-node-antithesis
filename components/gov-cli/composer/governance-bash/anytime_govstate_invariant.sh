@@ -28,6 +28,19 @@ else
     sdk_always false "govstate_well_formed"
 fi
 
+# Lifecycle coverage (stateless, derived from gov-state): an action is in
+# its final epoch of life when expiresAfter == the current epoch. Seeing
+# this green proves the run lasted long enough for actions to reach the
+# end of their govActionLifetime — the ledger owns the lifecycle, we just
+# observe it.
+ep="$(current_epoch)"
+if [ -n "$ep" ]; then
+    near="$(jq -r --argjson e "$ep" \
+        '[.proposals[]? | select(.expiresAfter == $e)] | length' <<<"$gs" 2>/dev/null)"
+    sdk_sometimes "$([ "${near:-0}" -ge 1 ] && echo true || echo false)" "action_near_expiry" \
+        "$(jq -nc --argjson n "${near:-0}" --argjson e "$ep" '{near:$n, epoch:$e}')"
+fi
+
 # Invariant: once setup has authorized the committee, its quorum must
 # survive fault injection (CC auth is on-chain state, not a container, so
 # killing producers must never drop authorized members below minSize).

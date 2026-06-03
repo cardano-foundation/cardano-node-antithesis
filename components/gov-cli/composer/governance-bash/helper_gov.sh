@@ -236,54 +236,25 @@ anchor_hash() {
     cli hash anchor-data --text "$text" 2>/dev/null
 }
 
-# Action coordination between the independent create and vote drivers.
+# Action selection: the chain IS the queue.
 #
-# The gov-cli container is excluded from fault injection, so its
-# filesystem persists for the whole run — no need for locks or crash
-# recovery. Two append-only logs in the gov-data volume are the shared
-# state:
-#   created.log   one "txid ix" line per action confirmed on-chain
-#   rejected.log  one "txid" line per action a vote was rejected on
-# The vote driver works the set difference (created MINUS rejected): an
-# action stays votable until a vote on it is rejected (it expired, was
-# decided, or otherwise no longer accepts the vote), at which point it
-# drops out for good. Append-only means concurrent driver instances
-# never corrupt the state and a record is never lost.
-CREATED_LOG="$STATE_DIR/created.log"
-REJECTED_LOG="$STATE_DIR/rejected.log"
+# Rather than maintaining a local created/rejected ledger (which a
+# transient fault could corrupt into permanently dropping a still-live
+# action), the vote driver reads the live set of governance actions
+# straight from the node via an N2C gov-state query. relay1 is
+# fault-excluded and a LocalStateQuery returns the last settled ledger
+# state, so this answers correctly even while block production is
+# stalled. An action leaves the set only when the LEDGER expires or
+# enacts it — there is no local "retire", so a transient submit/lock
+# failure is self-healing (the action reappears next tick).
 
-# record_created <txid> <ix> — publish a confirmed action (append-only).
-record_created() {
-    mkdir -p "$STATE_DIR"
-    printf '%s %s\n' "$1" "$2" >>"$CREATED_LOG"
-}
-
-# record_rejected <txid> — retire an action a vote was rejected on.
-record_rejected() {
-    mkdir -p "$STATE_DIR"
-    printf '%s\n' "$1" >>"$REJECTED_LOG"
-}
-
-# action_onchain <txid> — true while the proposal still exists in
-# gov-state (not yet expired/enacted/dropped).
-action_onchain() {
-    gov_state | jq -e --arg t "$1" '.proposals[]? | select(.actionId.txId==$t)' \
-        >/dev/null 2>&1
-}
-
-# pending_actions — emit "txid ix" for each created action whose txid is
-# not present in the rejected log (the set difference). Rejected txids
-# are passed via a variable and built into a set in BEGIN, so an empty
-# rejected log is handled correctly (the NR==FNR idiom misbehaves when
-# its first file is empty).
-pending_actions() {
-    [ -s "$CREATED_LOG" ] || return 0
-    local rej
-    rej="$(awk '{print $1}' "$REJECTED_LOG" 2>/dev/null)"
-    awk -v rej="$rej" '
-        BEGIN { n = split(rej, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") seen[a[i]] = 1 }
-        !($1 in seen)
-    ' "$CREATED_LOG"
+# live_info_actions — emit the current InfoAction proposals as a JSON
+# array (each element is a full gov-state proposal). Empty array if none
+# or if the node can't be reached.
+live_info_actions() {
+    gov_state | jq -c \
+        '[.proposals[]? | select(.proposalProcedure.govAction.tag == "InfoAction")]' \
+        2>/dev/null || printf '[]'
 }
 
 # antithesis_rng — a random non-negative integer (decimal digits only),

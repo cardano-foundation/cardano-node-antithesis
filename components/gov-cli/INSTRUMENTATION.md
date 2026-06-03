@@ -81,15 +81,17 @@ the create/vote drivers read.
 ### Quorum / distribution coverage — `vote`
 | Assertion | Meaning when green |
 |---|---|
+| `actions_live` | gov-state held at least one live InfoAction to vote on (details: count) |
 | `action_voted_by_all_roles` | one action got DRep **and** SPO **and** CC votes (details: per-role counts) |
 | `action_majority_reached` | an action crossed a majority of all eligible voters (details: total, majority) |
 | `vote_decision_{yes,no,abstain}` | each decision was cast at least once |
 | `vote_recorded_{drep,spo,cc}` | each voter role recorded a vote |
+| `vote_transient_failure` | a vote tx failed (faucet-lock/stalled submit) but the action stays live and is retried — fault-induced, not a lifecycle event |
 
-### Lifecycle completeness — `vote`
+### Lifecycle — `anytime_govstate_invariant.sh` (stateless, from gov-state)
 | Assertion | Meaning when green |
 |---|---|
-| `action_lifecycle_closed` | a vote was rejected (action expired/decided) — the run lasted long enough for a full create → vote → expire cycle |
+| `action_near_expiry` | an action reached its final epoch (`expiresAfter == currentEpoch`) — the run lasted long enough for actions to reach end-of-life; the ledger owns the lifecycle, we just observe it |
 
 ### Invariants — `anytime_govstate_invariant.sh`
 | Assertion | Meaning |
@@ -118,7 +120,7 @@ that should be green for "enough perturbation":
 2. `gov_op_under_perturbation` — governance progressed despite a stall.
 3. `action_voted_by_all_roles`, `action_majority_reached` — full quorum
    reached.
-4. `action_lifecycle_closed` — the create→vote→expire cycle closed.
+4. `action_near_expiry` — actions reached end-of-life (run long enough).
 5. `vote_decision_*` (all three) — decision space exercised.
 
 Any of these red is a concrete coverage gap to close (longer duration,
