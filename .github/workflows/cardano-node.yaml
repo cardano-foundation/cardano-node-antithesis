@@ -44,12 +44,14 @@ jobs:
 
     timeout-minutes: 600
 
-    # required permissions to be able to push to registry
+    # required permissions to be able to push to registry, plus
+    # issues:write so a failed scheduled run can open/append an alert.
     permissions:
       packages: write
       contents: read
       attestations: write
       id-token: write
+      issues: write
 
 
     steps:
@@ -66,25 +68,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-    - id: moog
-      name: Get latest moog release tag
-      uses: pozetroninc/github-action-get-latest-release@master
-      with:
-        repository: cardano-foundation/moog
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Download moog from latest release
-      uses: robinraju/release-downloader@v1.10
-      with:
-        repository: cardano-foundation/moog
-        tag: ${{ steps.moog.outputs.release }}
-        fileName: "moog-*-linux64.tar.gz"
-        out-file-path: "."
-        extract: true
-
     - name: Install moog
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        echo "Release: ${{ steps.moog.outputs.release }}"
+        set -euo pipefail
+        # Latest moog release. The portable Linux requester binary is the
+        # statically-linked musl tarball (the old `*-linux64.tar.gz`
+        # asset was dropped at the 0.5.x packaging change).
+        TAG=$(gh release view -R cardano-foundation/moog --json tagName -q .tagName)
+        echo "moog release: $TAG"
+        gh release download "$TAG" -R cardano-foundation/moog \
+          -p 'moog-*-x86_64-linux-musl.tar.gz' --clobber
+        TARBALL=$(ls moog-*-x86_64-linux-musl.tar.gz | grep -vE 'moog-(agent|oracle)-' | head -1)
+        echo "using $TARBALL"
+        tar xzf "$TARBALL"
         sudo install -m 0755 moog /usr/local/bin/moog
         moog --version
 
@@ -135,3 +133,23 @@ jobs:
 
     - name: Wait for results
       run: timeout $(((DURATION + 1) * 3600)) ./scripts/wait-for-test.sh "${{ steps.request.outputs.id }}"
+
+    # A scheduled run can fail silently for days (e.g. an upstream release
+    # renames an asset). On a scheduled failure, open — or append to — a
+    # single tracking issue so the breakage is visible.
+    - name: Alert on scheduled failure
+      if: ${{ failure() && github.event_name == 'schedule' }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        TITLE="Nightly Antithesis run is failing"
+        URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        NUM=$(gh issue list -R "$GITHUB_REPOSITORY" --state open \
+          --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+        if [ -n "$NUM" ]; then
+          gh issue comment "$NUM" -R "$GITHUB_REPOSITORY" -b "Still failing: $URL"
+        else
+          gh issue create -R "$GITHUB_REPOSITORY" -t "$TITLE" \
+            -b "The scheduled \`cardano-node.yaml\` workflow failed. Latest run: $URL"
+        fi
