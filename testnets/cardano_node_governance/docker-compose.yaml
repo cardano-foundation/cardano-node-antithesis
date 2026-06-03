@@ -117,7 +117,7 @@ services:
   # Sleeping cardano-cli container holding the governance composer
   # drivers. Build with DRIVER_LANG=bash (default) or python.
   gov-cli:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/gov-cli@sha256:9c4ca3f3ea759f95362cf800058d9f44f3e46a61871ef1edc174e3a481a9c481
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/gov-cli@sha256:f58b2947e1ab113d39afdadd8b95c5275f9cbc2a747db0d3d37c04d6910ac7ac
     container_name: gov-cli
     hostname: gov-cli.example
     labels:
