@@ -160,7 +160,7 @@ services:
         condition: service_completed_successfully
 
   adversary:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:5173fa8
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/adversary:06c56bd
     container_name: adversary
     hostname: adversary.example
     labels:
