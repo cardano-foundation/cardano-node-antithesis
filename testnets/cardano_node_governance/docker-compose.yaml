@@ -40,7 +40,7 @@ x-cardano-node: &cardano-node
 services:
   # One-shot: cardonnay genesis + governance assets -> volumes.
   gov-configurator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/gov-configurator@sha256:f788a00130d1f5969eb7c3d1baf96fe63ac947a1dbb1781c4c61164359f97f99
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/gov-configurator@sha256:6ee2397605939494bd1ec0de23156d1e254eaddbc29524f81f18d97a9ffb8d36
     container_name: gov-configurator
     environment:
       NUM_POOLS: "2"

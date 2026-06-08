@@ -172,6 +172,14 @@ for ((i = 1; i <= NUM_POOLS; i++)); do
     # Node config: repoint genesis files to the in-container names, drop
     # genesis hashes (recomputed at boot), enable the trace forwarder so
     # --tracer-socket-path-connect works against the cardano-tracer.
+    # cardonnay's config leaves TraceOptions empty, so the new
+    # UseTraceDispatcher tracer emits everything at Info severity — a
+    # firehose (~43M events) that Antithesis cannot materialize (trips
+    # the "very high output" property and starves the sidecar's
+    # log-presence assertions). Apply the master testnet's per-namespace
+    # severity discipline (Silence/throttle the high-frequency
+    # namespaces, keep forge/fork/peer events visible), plus silence
+    # ChainDB.ImmDbEvent chunk-validation replay spam.
     jq '
         .ByronGenesisFile   = "byron-genesis.json"
       | .ShelleyGenesisFile = "shelley-genesis.json"
@@ -180,6 +188,35 @@ for ((i = 1; i <= NUM_POOLS; i++)); do
       | del(.ByronGenesisHash, .ShelleyGenesisHash, .AlonzoGenesisHash, .ConwayGenesisHash)
       | .UseTraceDispatcher = true
       | .TurnOnLogging = true
+      | .TraceOptions = {
+          "": {"backends": ["EKGBackend", "Forwarder"], "detail": "DNormal", "severity": "Notice"},
+          "BlockFetch.Client.CompletedBlockFetch": {"maxFrequency": 2},
+          "BlockFetch.Decision": {"severity": "Silence"},
+          "ChainDB": {"severity": "Info"},
+          "ChainDB.AddBlockEvent.AddBlockValidation": {"severity": "Silence"},
+          "ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate": {"maxFrequency": 2},
+          "ChainDB.AddBlockEvent.AddedBlockToQueue": {"maxFrequency": 2},
+          "ChainDB.AddBlockEvent.AddedBlockToVolatileDB": {"maxFrequency": 2},
+          "ChainDB.CopyToImmutableDBEvent.CopiedBlockToImmutableDB": {"maxFrequency": 2},
+          "ChainDB.ImmDbEvent": {"severity": "Silence"},
+          "ChainSync.Client": {"severity": "Warning"},
+          "Forge.Loop": {"severity": "Info"},
+          "Forge.StateInfo": {"severity": "Info"},
+          "Mempool": {"severity": "Silence"},
+          "Net.ConnectionManager.Remote": {"severity": "Info"},
+          "Net.ConnectionManager.Remote.ConnectionManagerCounters": {"severity": "Silence"},
+          "Net.ErrorPolicy": {"severity": "Info"},
+          "Net.ErrorPolicy.Local": {"severity": "Info"},
+          "Net.InboundGovernor": {"severity": "Warning"},
+          "Net.InboundGovernor.Remote": {"severity": "Info"},
+          "Net.Mux.Remote": {"severity": "Info"},
+          "Net.PeerSelection": {"severity": "Silence"},
+          "Net.PeerSelection.Actions": {"severity": "Info"},
+          "Net.Subscription.DNS": {"severity": "Info"},
+          "Net.Subscription.IP": {"severity": "Info"},
+          "Resources": {"severity": "Silence"},
+          "Startup.DiffusionInit": {"severity": "Info"}
+        }
     ' "${STATE}/config-pool${i}.json" > "${POOL}/configs/config.json"
 
     make_topology "$i" > "${POOL}/configs/topology.json"
