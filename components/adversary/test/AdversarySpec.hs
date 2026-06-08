@@ -10,8 +10,7 @@ import Adversary
     , readChainPoint
     , showChainPoint
     )
-import Adversary.Application (Limit (..))
-import Data.Aeson qualified as Aeson
+import Cardano.Node.Client.Adversary.Application (Limit (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromJust, fromMaybe)
 import System.Random (mkStdGen)
@@ -48,27 +47,31 @@ spec = do
         $ readChainPoint "origin"
         `shouldBe` Just originPoint
 
-    it "Point aeson instances roundtrip" $ do
+    it "showChainPoint roundtrips through readChainPoint" $ do
         let str =
                 "74b9b4c63f1af41cd51d74d950cc323a9c159eb76fe52cbd8272dde041c4bdbe@40"
         let p =
                 fromMaybe (error "failed reading point") $ readChainPoint str
-        Aeson.decode (Aeson.encode p) `shouldBe` Just p
+        readChainPoint (showChainPoint p) `shouldBe` Just p
 
-    it "showChainPoint roundtrips through readChainPoint" $
-        readChainPoint (showChainPoint originPoint) `shouldBe` Just originPoint
+    it "showChainPoint roundtrips origin through readChainPoint"
+        $ readChainPoint (showChainPoint originPoint)
+        `shouldBe` Just originPoint
 
-    prop "pickOne picks an element of the list" $ \(Positive entropy)
-                                                   (ChainPointSamples samples) ->
-        let g = mkStdGen entropy
-        in  NE.toList samples `shouldContain` [pickOne g samples]
+    prop "pickOne picks an element of the list"
+        $ \(Positive entropy)
+           (ChainPointSamples samples) ->
+                let g = mkStdGen entropy
+                in  NE.toList samples `shouldContain` [pickOne g samples]
 
-    prop "different seeds yield different picks" $ \ent ent'
-                                                    (ChainPointSamples samples) ->
-        let p = pickOne (mkStdGen ent) samples
-            p' = pickOne (mkStdGen ent') samples
-        in  checkCoverage $
-                cover 0.5 (p /= p') "different picks" (property True)
+    prop "different seeds yield different picks"
+        $ \ent
+           ent'
+           (ChainPointSamples samples) ->
+                let p = pickOne (mkStdGen ent) samples
+                    p' = pickOne (mkStdGen ent') samples
+                in  checkCoverage
+                        $ cover 0.5 (p /= p') "different picks" (property True)
 
 instance Arbitrary ChainPointSamples where
     arbitrary =

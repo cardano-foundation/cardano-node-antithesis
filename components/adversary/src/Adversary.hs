@@ -1,11 +1,9 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
-
 -- |
 -- Module: Adversary
 --
 -- Chain-point parsing and random-pick helpers used by the
 -- @cardano-adversary@ executable. The chain-sync attack itself
--- lives in 'Adversary.Application'.
+-- lives in 'Cardano.Node.Client.Adversary.Application'.
 module Adversary
     ( -- * Chain points
       Point
@@ -20,10 +18,8 @@ module Adversary
     )
 where
 
-import Adversary.ChainSync.Codec (Point)
-import Adversary.ChainSync.Connection (HeaderHash)
-import Data.Aeson (FromJSON, ToJSON, withText)
-import Data.Aeson qualified as Aeson
+import Cardano.Node.Client.Adversary.ChainSync.Codec (Point)
+import Cardano.Node.Client.Adversary.ChainSync.Connection (HeaderHash)
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Short qualified as SBS
 import Data.List.NonEmpty (NonEmpty)
@@ -41,16 +37,6 @@ import Text.Read (readMaybe)
 
 originPoint :: Point
 originPoint = Network.Point Origin
-
-instance ToJSON Point where
-    toJSON = Aeson.toJSON . showChainPoint
-
-instance FromJSON Point where
-    parseJSON = withText "point" $ \t ->
-        maybe
-            (fail $ "not a point: " <> T.unpack t)
-            pure
-            (readChainPoint $ T.unpack t)
 
 newtype ChainPointSamples = ChainPointSamples (NonEmpty Point)
     deriving (Eq, Show)

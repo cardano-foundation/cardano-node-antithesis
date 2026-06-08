@@ -23,21 +23,17 @@ import Adversary
     , pickOne
     , showChainPoint
     )
-import Adversary.Application
+import Cardano.Node.Client.Adversary.Application
     ( Limit (..)
     , adversaryApplication
     )
 import Adversary.SDK qualified as SDK
 import Control.Exception (SomeException, try)
 import Data.Aeson (Value (..), object, (.=))
-import Data.Text qualified as T
-import Data.Time.Clock (diffUTCTime, getCurrentTime)
-import Ouroboros.Network.Block (SlotNo (..))
-import Ouroboros.Network.Block qualified as Network
-import Ouroboros.Network.Point (WithOrigin (..))
-import Ouroboros.Network.Point qualified as Point
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
+import Data.Text qualified as T
+import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import Data.Word (Word32, Word64)
 import Network.Socket (PortNumber)
 import Numeric (readHex)
@@ -59,7 +55,11 @@ import Options.Applicative
     , value
     )
 import Options.Applicative qualified as Opt
+import Ouroboros.Network.Block (SlotNo (..))
+import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic (..))
+import Ouroboros.Network.Point (WithOrigin (..))
+import Ouroboros.Network.Point qualified as Point
 import System.IO (hPutStrLn, stderr)
 import System.Random (mkStdGen, split)
 
@@ -151,8 +151,8 @@ main = do
     case res of
         Right () -> pure ()
         Left e -> do
-            hPutStrLn stderr $
-                "cardano-adversary: transient failure: " <> show e
+            hPutStrLn stderr
+                $ "cardano-adversary: transient failure: " <> show e
             SDK.sometimes
                 False
                 "adversary_chain_sync_completed"
@@ -176,8 +176,8 @@ loadAndRun args = do
     raw <- readFile (argChainPointsFile args)
     case parseChainPointSamples raw of
         Nothing -> do
-            hPutStrLn stderr $
-                "cardano-adversary: malformed chain-points file: "
+            hPutStrLn stderr
+                $ "cardano-adversary: malformed chain-points file: "
                     <> argChainPointsFile args
             -- Treat as transient: tracer-sidecar may be mid-write.
             -- Exit success; the next tick gets a fresh read.
@@ -207,11 +207,15 @@ runOnce args points = do
                 , "point" .= T.pack (showChainPoint point)
                 , "limit" .= argLimit args
                 ]
-    hPutStrLn stderr $
-        "cardano-adversary: target=" <> host
-            <> " point=" <> showChainPoint point
-            <> " limit=" <> show (argLimit args)
-            <> " seed=" <> show (argSeed args)
+    hPutStrLn stderr
+        $ "cardano-adversary: target="
+            <> host
+            <> " point="
+            <> showChainPoint point
+            <> " limit="
+            <> show (argLimit args)
+            <> " seed="
+            <> show (argSeed args)
     -- Layer 1 (perturbation #123): prove the binary entered the attack
     -- path. Reachable hits per (start, target_host) tuple — segmented
     -- in the Antithesis report so a host that never gets attacked is
@@ -245,19 +249,22 @@ runOnce args points = do
             -- as Sometimes-false for distribution stats — if
             -- Sometimes-true never hits, the adversary is being
             -- killed every time, which is itself signal.
-            hPutStrLn stderr $
-                "cardano-adversary: session ended early: " <> show e
+            hPutStrLn stderr
+                $ "cardano-adversary: session ended early: " <> show e
             -- Stress-coverage line. Logs Explorer (source=adversary.example)
             -- indexes container stdout/stderr; grepping these lines after
             -- a run gives per-host attack rate, per-attack timing, and
             -- a slot-delta proxy for headers actually transferred.
-            hPutStrLn stderr $
-                "cardano-adversary: stats"
-                    <> " target=" <> host
-                    <> " start_slot=" <> show startSlot
+            hPutStrLn stderr
+                $ "cardano-adversary: stats"
+                    <> " target="
+                    <> host
+                    <> " start_slot="
+                    <> show startSlot
                     <> " end_slot=-1"
                     <> " slot_delta=-1"
-                    <> " elapsed_ms=" <> show elapsedMs
+                    <> " elapsed_ms="
+                    <> show elapsedMs
                     <> " outcome=early"
             SDK.sometimes
                 False
@@ -270,19 +277,24 @@ runOnce args points = do
                     ]
                 )
         Right tip -> do
-            hPutStrLn stderr $
-                "cardano-adversary: completed; reached " <> show tip
+            hPutStrLn stderr
+                $ "cardano-adversary: completed; reached " <> show tip
             let endSlot = slotOf tip
                 slotDelta :: Integer
                 slotDelta =
                     fromIntegral endSlot - fromIntegral startSlot
-            hPutStrLn stderr $
-                "cardano-adversary: stats"
-                    <> " target=" <> host
-                    <> " start_slot=" <> show startSlot
-                    <> " end_slot=" <> show endSlot
-                    <> " slot_delta=" <> show slotDelta
-                    <> " elapsed_ms=" <> show elapsedMs
+            hPutStrLn stderr
+                $ "cardano-adversary: stats"
+                    <> " target="
+                    <> host
+                    <> " start_slot="
+                    <> show startSlot
+                    <> " end_slot="
+                    <> show endSlot
+                    <> " slot_delta="
+                    <> show slotDelta
+                    <> " elapsed_ms="
+                    <> show elapsedMs
                     <> " outcome=ok"
             SDK.sometimes
                 True
@@ -310,22 +322,25 @@ runOnce args points = do
                         , "slot_delta" .= slotDelta
                         ]
             if slotDelta >= 50
-                then SDK.sometimes
-                    True
-                    "adversary_full_sync_completed"
-                    bucketDetails
+                then
+                    SDK.sometimes
+                        True
+                        "adversary_full_sync_completed"
+                        bucketDetails
                 else pure ()
             if elapsedMs < 50
-                then SDK.sometimes
-                    True
-                    "adversary_short_attack_observed"
-                    bucketDetails
+                then
+                    SDK.sometimes
+                        True
+                        "adversary_short_attack_observed"
+                        bucketDetails
                 else pure ()
             if elapsedMs >= 500
-                then SDK.sometimes
-                    True
-                    "adversary_long_attack_observed"
-                    bucketDetails
+                then
+                    SDK.sometimes
+                        True
+                        "adversary_long_attack_observed"
+                        bucketDetails
                 else pure ()
 
 -- | Slot number of a chain point, with Origin treated as 0. Used for
