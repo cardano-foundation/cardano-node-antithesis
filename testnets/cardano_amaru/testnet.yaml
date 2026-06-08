@@ -19,7 +19,13 @@ protocolConsts:
 # production-like 86400-slot epoch would make the local/CI proof wait
 # roughly 48 hours. Keep this scoped to cardano_amaru; do not copy it
 # back to cardano_node_master.
-epochLength: 120
+#
+# epochLength MUST stay larger than the stability and randomness windows
+# (3k/f = 150 and 4k/f = 200 slots for k=10, f=0.2); otherwise the stake
+# snapshot never stabilizes within the epoch and the rewards pipeline
+# cannot run (the relay then dies with RewardsSummaryNotReady at the first
+# boundary). 256 clears both windows while keeping epochs ~4 min.
+epochLength: 256
 securityParam: 10
 activeSlotsCoeff: 0.2
 maxLovelaceSupply: 45000000000000000
