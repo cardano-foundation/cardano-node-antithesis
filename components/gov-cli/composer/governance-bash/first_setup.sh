@@ -83,7 +83,8 @@ sdk_sometimes true "governance_registration_submitted"
 # DRep stake delegation becomes effective at the next epoch boundary.
 start_epoch="$(current_epoch)"
 if [ -n "$start_epoch" ]; then
-    wait_for_epoch "$((start_epoch + 1))" 600 || gov_log "epoch wait timed out (continuing)"
+    # Epochs are ~16.7 min (epochLength 5000 × 0.2s), so allow > 1 epoch.
+    wait_for_epoch "$((start_epoch + 1))" 1800 || gov_log "epoch wait timed out (continuing)"
 fi
 
 # Confirm the committee came up Active and a DRep is visible.

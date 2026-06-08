@@ -21,7 +21,17 @@
 set -Eeuo pipefail
 trap 'echo "generate.sh failed at line $LINENO" >&2' ERR
 
-NUM_POOLS="${NUM_POOLS:-2}"
+NUM_POOLS="${NUM_POOLS:-3}"
+# securityParam (k) and epochLength (slots). cardonnay's conway_fast
+# defaults to k=10 / epochLength=1000 (k = 10·k/f with f=0.1), which is
+# far too small for an Antithesis testnet: under network-partition faults
+# a producer minority builds >k blocks during a multi-minute split, so
+# the chain reorgs deeper than k. Raise k (3 producers give a 2-vs-1
+# majority so only the minority reorgs; k must cover its block production
+# over the longest split) and keep cardonnay's epochLength = 10·k/f
+# ratio for nonce stability.
+SECURITY_PARAM="${SECURITY_PARAM:-50}"
+EPOCH_LENGTH="${EPOCH_LENGTH:-5000}"
 GEN_ROOT=/work/cdny
 
 # Generate once per volume lifetime. Every `docker compose up` starts
@@ -69,6 +79,18 @@ PY
 SCRIPT_DIR="${GEN_ROOT}/cluster0_conway_fast"
 START="${SCRIPT_DIR}/common-start-fast"
 [ -f "$START" ] || { echo "expected $START from cardonnay" >&2; exit 1; }
+
+# Raise securityParam (k) + epochLength in the shelley genesis spec that
+# create_genesis reads (also feeds the byron --k). See the SECURITY_PARAM
+# note above. Keep epochLength = 10·k/f so the nonce-stability window
+# (3k/f) fits inside an epoch.
+SPEC="${SCRIPT_DIR}/genesis.spec.json"
+if [ -f "$SPEC" ]; then
+    jq --argjson k "$SECURITY_PARAM" --argjson el "$EPOCH_LENGTH" \
+        '.securityParam = $k | .epochLength = $el' "$SPEC" > "${SPEC}.tmp" \
+        && mv "${SPEC}.tmp" "$SPEC"
+    echo "genesis spec: securityParam=${SECURITY_PARAM} epochLength=${EPOCH_LENGTH}"
+fi
 
 # ---------------------------------------------------------------------
 # 2. Patch the materialized start script:

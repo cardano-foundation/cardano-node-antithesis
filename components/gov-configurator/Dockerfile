@@ -39,10 +39,12 @@ COPY generate.sh /generate.sh
 RUN chmod 0755 /generate.sh
 
 ENV USER=root \
-    NUM_POOLS=2 \
+    NUM_POOLS=3 \
     NUM_DREPS=5 \
     NUM_CC=5 \
     NETWORK_MAGIC=42 \
-    PROTOCOL_VERSION=10
+    PROTOCOL_VERSION=10 \
+    SECURITY_PARAM=50 \
+    EPOCH_LENGTH=5000
 
 ENTRYPOINT ["/generate.sh"]
