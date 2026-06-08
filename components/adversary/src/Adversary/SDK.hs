@@ -21,10 +21,10 @@
 -- attacker. The adversary is allowed to be killed mid-run by fault
 -- injection; an @always@ that flips false on chaos would create
 -- false positives.
-module Adversary.SDK (
-    reachable,
-    sometimes,
-) where
+module Adversary.SDK
+    ( reachable
+    , sometimes
+    ) where
 
 import Control.Exception (try)
 import Data.Aeson (Value, encode, object, (.=))
@@ -33,16 +33,20 @@ import Data.Text (Text)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.FilePath ((</>))
-import System.IO (BufferMode (..), IOMode (..), hSetBuffering, withFile)
-import System.IO.Error (IOError)
+import System.IO
+    ( BufferMode (..)
+    , IOMode (..)
+    , hSetBuffering
+    , withFile
+    )
 
 -- | @reachable id details@ — emit a Reachable assertion. Hits exactly
 -- once per call site per invocation; useful to prove a code path was
 -- entered. @details@ may be 'Data.Aeson.Null' if no payload is needed.
 reachable :: Text -> Value -> IO ()
 reachable assertId details =
-    emit $
-        mkEvent
+    emit
+        $ mkEvent
             "reachability"
             "Reachable"
             True
@@ -55,8 +59,8 @@ reachable assertId details =
 -- 'always' nor 'unreachable' fits.
 sometimes :: Bool -> Text -> Value -> IO ()
 sometimes condition assertId details =
-    emit $
-        mkEvent
+    emit
+        $ mkEvent
             "sometimes"
             "Sometimes"
             condition
