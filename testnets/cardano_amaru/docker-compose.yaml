@@ -144,8 +144,7 @@ services:
 
         bundle_complete() {
           test -d "$${final}/ledger.testnet_42.db/live" \
-            && test -d "$${final}/chain.testnet_42.db" \
-            && test -f "$${final}/nonces.json"
+            && test -d "$${final}/chain.testnet_42.db"
         }
 
         refresh_snapshot() {
@@ -233,8 +232,7 @@ services:
         set -eu
         if [ ! -d /srv/amaru/ledger.testnet_42.db ] || [ ! -d /srv/amaru/chain.testnet_42.db ]; then
           until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
-             && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
-             && [ -f /bundle/testnet_42/nonces.json ]; do
+             && [ -d /bundle/testnet_42/chain.testnet_42.db ]; do
             sleep 10
           done
           find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
@@ -268,8 +266,7 @@ services:
         set -eu
         if [ ! -d /srv/amaru/ledger.testnet_42.db ] || [ ! -d /srv/amaru/chain.testnet_42.db ]; then
           until [ -d /bundle/testnet_42/ledger.testnet_42.db ] \
-             && [ -d /bundle/testnet_42/chain.testnet_42.db ] \
-             && [ -f /bundle/testnet_42/nonces.json ]; do
+             && [ -d /bundle/testnet_42/chain.testnet_42.db ]; do
             sleep 10
           done
           find /srv/amaru -mindepth 1 -maxdepth 1 -exec rm -rf {} +
