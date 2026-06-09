@@ -1,5 +1,5 @@
 {
-  "stability_window": 150,
+  "stability_window": 75,
   "eras": [
     {
       "start": {
@@ -9,7 +9,7 @@
       },
       "end": null,
       "params": {
-        "epoch_size_slots": 256,
+        "epoch_size_slots": 120,
         "slot_length": 1000,
         "era_name": "Conway"
       }

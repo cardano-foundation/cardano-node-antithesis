@@ -11,22 +11,23 @@ testnetDomain: example
 
 --- # Optional Byron Genesis Overide
 protocolConsts:
-  k: 10
+  k: 5
 
 --- # Optional Shelley Genesis Overide
-# Fast-bootstrap profile for the Amaru relay proof. The producer waits
-# until two complete Conway epochs are behind the immutable tip, so the
-# production-like 86400-slot epoch would make the local/CI proof wait
-# roughly 48 hours. Keep this scoped to cardano_amaru; do not copy it
-# back to cardano_node_master.
-#
-# epochLength MUST stay larger than the stability and randomness windows
-# (3k/f = 150 and 4k/f = 200 slots for k=10, f=0.2); otherwise the stake
-# snapshot never stabilizes within the epoch and the rewards pipeline
-# cannot run (the relay then dies with RewardsSummaryNotReady at the first
-# boundary). 256 clears both windows while keeping epochs ~4 min.
-epochLength: 256
-securityParam: 10
+# Fast-bootstrap profile for the Amaru relay proof. The producer waits until
+# two complete Conway epochs are behind the immutable tip before it can build
+# the bundle, so this profile must keep that wait short. Two coupled constraints:
+#  1. Rewards: epochLength MUST exceed the stability and randomness windows
+#     (3k/f and 4k/f); else the stake snapshot never stabilizes in-epoch and the
+#     relay dies with RewardsSummaryNotReady at the first boundary.
+#  2. Bootstrap: "2 epochs behind the immutable tip" must complete within the
+#     Antithesis setup-time budget (~vtime 414). epochLength=256 needed ~slot 900
+#     (~15 min) and timed out before Amaru ever started (every run incomplete).
+# k=5, f=0.2 => windows 75 and 100, both < epochLength=120, AND the bootstrap
+# reaches 2-epochs-behind-immutable by ~slot 315 (~5 min). Keep scoped to
+# cardano_amaru; do not copy back to cardano_node_master.
+epochLength: 120
+securityParam: 5
 activeSlotsCoeff: 0.2
 maxLovelaceSupply: 45000000000000000
 protocolParams:
