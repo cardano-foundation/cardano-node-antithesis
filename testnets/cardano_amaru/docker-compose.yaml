@@ -247,6 +247,8 @@ services:
     depends_on:
       bootstrap-producer:
         condition: service_completed_successfully
+      relay1:
+        condition: service_started
     command:
       - -c
       - |
@@ -267,7 +269,7 @@ services:
           --chain-dir /srv/amaru/chain.testnet_42.db \
           --era-history-file /amaru-runtime/era-history.json \
           --global-parameters-file /amaru-runtime/global-parameters.json \
-          --peer-address p1.example:3001
+          --peer-address relay1.example:3001
     volumes:
       - amaru-bundle:/bundle:ro
       - ./amaru-runtime:/amaru-runtime:ro
@@ -281,6 +283,8 @@ services:
     depends_on:
       bootstrap-producer:
         condition: service_completed_successfully
+      relay2:
+        condition: service_started
     command:
       - -c
       - |
@@ -301,7 +305,7 @@ services:
           --chain-dir /srv/amaru/chain.testnet_42.db \
           --era-history-file /amaru-runtime/era-history.json \
           --global-parameters-file /amaru-runtime/global-parameters.json \
-          --peer-address p2.example:3001
+          --peer-address relay2.example:3001
     volumes:
       - amaru-bundle:/bundle:ro
       - ./amaru-runtime:/amaru-runtime:ro
