@@ -217,7 +217,10 @@ services:
     depends_on:
       p1:
         condition: service_started
-    restart: "no"
+    # Single-shot, but retry on non-zero exit so an Antithesis fault that kills
+    # the producer mid-bootstrap doesn't permanently block the relay's
+    # service_completed_successfully gate. Exits 0 once the bundle is built.
+    restart: on-failure
 
   amaru-relay-1:
     <<: *amaru
