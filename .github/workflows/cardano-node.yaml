@@ -78,7 +78,7 @@ jobs:
       with:
         repository: cardano-foundation/moog
         tag: ${{ steps.moog.outputs.release }}
-        fileName: "moog-*-linux64.tar.gz"
+        fileName: "moog-[0-9]*-x86_64-linux-musl.tar.gz"
         out-file-path: "."
         extract: true
 
