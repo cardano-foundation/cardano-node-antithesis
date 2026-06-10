@@ -16,12 +16,23 @@
 POOLS="${POOLS:-3}"
 PORT="${PORT:-3001}"
 TIP_DETAIL_LIMIT="${TIP_DETAIL_LIMIT:-600}"
+# Followers (e.g. amaru relays) that must also agree on the producer tip.
+# Space-separated node names; empty by default so producer-only testnets
+# (cardano_node_master) are unaffected.
+AMARU_RELAYS="${AMARU_RELAYS:-}"
+# Number of nodes expected to agree = producers + followers. build_tip_nodes
+# recomputes this from TIP_NODES; the default keeps it sane before the first probe.
+EXPECTED_TIPS="${EXPECTED_TIPS:-$POOLS}"
 
 build_tip_nodes() {
     TIP_NODES=()
     for i in $(seq 1 "$POOLS"); do
         TIP_NODES+=("p${i}")
     done
+    for relay in $AMARU_RELAYS; do
+        TIP_NODES+=("$relay")
+    done
+    EXPECTED_TIPS=${#TIP_NODES[@]}
 }
 
 probe_result_json() {
@@ -140,7 +151,7 @@ all_failures_have_reason() {
 }
 
 classify_tip_probe_result() {
-    if [ "$TIP_COUNT" = "$POOLS" ] && [ "$TIP_DISTINCT" = "1" ]; then
+    if [ "$TIP_COUNT" = "$EXPECTED_TIPS" ] && [ "$TIP_DISTINCT" = "1" ]; then
         TIP_FAILURE_KIND="tips_agree"
     elif [ "$TIP_COUNT" = "0" ]; then
         if all_failures_have_reason "tip_protocol_deserialise_failure"; then
@@ -154,7 +165,7 @@ classify_tip_probe_result() {
         else
             TIP_FAILURE_KIND="no_producer_tips_returned"
         fi
-    elif [ "$TIP_COUNT" != "$POOLS" ]; then
+    elif [ "$TIP_COUNT" != "$EXPECTED_TIPS" ]; then
         if all_failures_have_reason "tip_protocol_deserialise_failure"; then
             TIP_FAILURE_KIND="some_tip_protocol_failures"
         elif all_failures_have_reason "name_resolution_failed"; then

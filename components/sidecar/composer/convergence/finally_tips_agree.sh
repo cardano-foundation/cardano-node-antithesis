@@ -36,7 +36,7 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     if [ "$TIP_COUNT" != "0" ]; then
         SAW_TIP_RESPONSE=true
     fi
-    if [ "$TIP_COUNT" = "$POOLS" ] && [ "$TIP_DISTINCT" = "1" ]; then
+    if [ "$TIP_COUNT" = "$EXPECTED_TIPS" ] && [ "$TIP_DISTINCT" = "1" ]; then
         echo "tips agree: $TIP_SUCCESSES"
         sdk_always true "all producer tips reachable at final check" \
             "$(jq -nc --argjson tips "$TIP_SUCCESSES" '{tips:$tips}')"
@@ -53,7 +53,7 @@ if [ "$SAW_TIP_RESPONSE" = "false" ] && [ "$TIP_FAILURE_KIND" = "no_tip_protocol
 fi
 
 echo "divergent/incomplete at end-of-workload: kind=$TIP_FAILURE_KIND reasons=$TIP_FAILURE_REASONS count=$TIP_COUNT distinct=$TIP_DISTINCT details=$TIP_DETAILS"
-if [ "$TIP_COUNT" != "$POOLS" ]; then
+if [ "$TIP_COUNT" != "$EXPECTED_TIPS" ]; then
     sdk_always false "all producer tips reachable at final check" \
         "$(jq -nc --arg kind "$TIP_FAILURE_KIND" \
                   --argjson tips "$TIP_DETAILS" \

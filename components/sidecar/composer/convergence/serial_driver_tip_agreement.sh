@@ -27,7 +27,7 @@ sdk_reachable "serial_driver_tip_agreement entered"
 
 for i in $(seq 1 "$SAMPLES"); do
     probe_all_tips
-    if [ "$TIP_COUNT" != "$POOLS" ]; then
+    if [ "$TIP_COUNT" != "$EXPECTED_TIPS" ]; then
         sdk_sometimes true "tips unreachable during fault injection" \
             "$(jq -nc --argjson tips "$TIP_DETAILS" \
                       --argjson sample "$i" \

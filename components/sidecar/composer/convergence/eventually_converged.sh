@@ -41,7 +41,7 @@ TIP_FAILURE_REASONS="[]"
 TIP_FAILURE_KIND="not_checked"
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     probe_all_tips
-    if [ "$TIP_COUNT" = "$POOLS" ] && [ "$TIP_DISTINCT" = "1" ]; then
+    if [ "$TIP_COUNT" = "$EXPECTED_TIPS" ] && [ "$TIP_DISTINCT" = "1" ]; then
         echo "converged on attempt $attempt: $TIP_SUCCESSES"
         sdk_sometimes true "eventually_converged succeeded" \
             "$(jq -nc --argjson tips "$TIP_SUCCESSES" --argjson attempt "$attempt" \

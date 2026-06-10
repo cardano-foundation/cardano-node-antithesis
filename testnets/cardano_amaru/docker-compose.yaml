@@ -269,6 +269,7 @@ services:
           --chain-dir /srv/amaru/chain.testnet_42.db \
           --era-history-file /amaru-runtime/era-history.json \
           --global-parameters-file /amaru-runtime/global-parameters.json \
+          --listen-address 0.0.0.0:3001 \
           --peer-address relay1.example:3001
     volumes:
       - amaru-bundle:/bundle:ro
@@ -305,6 +306,7 @@ services:
           --chain-dir /srv/amaru/chain.testnet_42.db \
           --era-history-file /amaru-runtime/era-history.json \
           --global-parameters-file /amaru-runtime/global-parameters.json \
+          --listen-address 0.0.0.0:3001 \
           --peer-address relay2.example:3001
     volumes:
       - amaru-bundle:/bundle:ro
