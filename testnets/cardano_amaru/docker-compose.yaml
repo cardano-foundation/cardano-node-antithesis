@@ -315,7 +315,7 @@ services:
       - a2-state:/srv/amaru
 
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:fb26cec
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:784c74c
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
