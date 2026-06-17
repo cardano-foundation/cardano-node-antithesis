@@ -76,6 +76,9 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
 import System.Environment (lookupEnv)
 import System.IO (IOMode (AppendMode), withFile)
+import Text.Read
+    ( readMaybe
+    )
 
 -- spec ------------------------------------------------------------------------
 
@@ -110,9 +113,11 @@ mkSpec nPools = do
     observe forwardAddedToCurrentChain
     observe recordAllChainPoints
 
-    -- Cluster-wide fork-depth probe (#119).
-    forkTreeProbe defaultK defaultDepthCap
-
+    -- Producer fork-depth probe (#119).  Relays may lag or disappear under
+    -- fault injection; they must not turn catch-up lag into a Praos fork
+    -- depth violation.
+    forkTreeProbe nPools defaultK defaultDepthCap
+  where
     -- Issue #123, Layer 2 was here — a "did the adversary appear in
     -- some producer's InboundGovernor stream" probe via substring
     -- match on @adversary.example@. Verified empirically that
@@ -120,7 +125,7 @@ mkSpec nPools = do
     -- peer IP (192.168.x.y) not hostname, so the substring check
     -- never fires. Re-implementing this needs the tracer-side
     -- hostname↔IP mapping, which is non-trivial. Removed for now.
-  where
+
     recordAllChainPoints :: State -> LogMessage -> [Output]
     recordAllChainPoints
         _s
@@ -305,12 +310,12 @@ sometimesOptional name f =
 --   3. @AlwaysOrUnreachable: cluster fork depth < k@ — fires
 --      once 'forkExceededK' becomes 'True'.  An unrecoverable
 --      divergence by Praos's definition.
-forkTreeProbe :: Int -> Int -> Spec
-forkTreeProbe k depthCap = do
+forkTreeProbe :: Int -> Int -> Int -> Spec
+forkTreeProbe nPools k depthCap = do
     Spec
         $ tell
             [ Rule
-                { _ruleProcess = updateForkTree k depthCap
+                { _ruleProcess = updateForkTree nPools k depthCap
                 , ruleDeclaration = Nothing
                 , ruleInit = id
                 }
@@ -356,18 +361,22 @@ parseTip
 -- update derived flags.  No SDK output here — the
 -- 'sometimes' / 'alwaysOrUnreachable' rules above turn the
 -- flags into observable assertions.
-updateForkTree :: Int -> Int -> State -> LogMessage -> (State, [Output])
-updateForkTree k depthCap s LogMessage{host, details} =
-    case details of
-        AddedToCurrentChain{newTipSelectView, newtip} ->
-            let newTip = parseTip newTipSelectView newtip
-                forkTree' = recordExtension host newTip (forkTree s)
-            in  (refresh s{forkTree = forkTree'}, [])
-        SwitchedToAFork{newTipSelectView, newtip} ->
-            let newTip = parseTip newTipSelectView newtip
-                forkTree' = setTip host newTip (forkTree s)
-            in  (refresh s{forkTree = forkTree'}, [])
-        _ -> (s, [])
+updateForkTree
+    :: Int -> Int -> Int -> State -> LogMessage -> (State, [Output])
+updateForkTree nPools k depthCap s LogMessage{host, details} =
+    case producerHost nPools host of
+        Nothing -> (s, [])
+        Just producer ->
+            case details of
+                AddedToCurrentChain{newTipSelectView, newtip} ->
+                    let newTip = parseTip newTipSelectView newtip
+                        forkTree' = recordExtension producer newTip (forkTree s)
+                    in  (refresh s{forkTree = forkTree'}, [])
+                SwitchedToAFork{newTipSelectView, newtip} ->
+                    let newTip = parseTip newTipSelectView newtip
+                        forkTree' = setTip producer newTip (forkTree s)
+                    in  (refresh s{forkTree = forkTree'}, [])
+                _ -> (s, [])
   where
     refresh st = case clusterForkDepth depthCap (forkTree st) of
         Nothing -> st
@@ -378,6 +387,14 @@ updateForkTree k depthCap s LogMessage{host, details} =
                 , maxForkDepth = max d (maxForkDepth st)
                 }
 
+producerHost :: Int -> Text -> Maybe Text
+producerHost nPools host =
+    case T.stripPrefix "p" bareHost >>= readMaybe . T.unpack of
+        Just i
+            | i >= 1 && i <= nPools -> Just bareHost
+        _ -> Nothing
+  where
+    bareHost = fromMaybe host (T.stripSuffix ".example" host)
 
 declarations :: Spec -> [Output]
 declarations (Spec s) = mapMaybe (fmap AntithesisSdk . ruleDeclaration) $ execWriter s
