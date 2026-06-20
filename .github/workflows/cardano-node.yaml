@@ -73,10 +73,17 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         set -euo pipefail
-        # Latest moog release. The portable Linux requester binary is the
-        # statically-linked musl tarball (the old `*-linux64.tar.gz`
-        # asset was dropped at the 0.5.x packaging change).
-        TAG=$(gh release view -R cardano-foundation/moog --json tagName -q .tagName)
+        # Pinned moog release. The production MPFS/agent/oracle stack runs the
+        # v0.5.x line, so the requester CLI must match it. Do NOT track the
+        # "latest" release: moog v2.0.0 (the moog-v2 MPFS cutover, 2026-06-13)
+        # is incompatible with the deployed v0.5.x MPFS — its `facts test-runs`
+        # returns an error envelope instead of the array this workflow's jq
+        # expects, which silently broke every scheduled launch. Bump this tag
+        # only once the whole stack migrates to v2.
+        # The portable Linux requester binary is the statically-linked musl
+        # tarball (the old `*-linux64.tar.gz` asset was dropped at the 0.5.x
+        # packaging change).
+        TAG=v0.5.1.5
         echo "moog release: $TAG"
         gh release download "$TAG" -R cardano-foundation/moog \
           -p 'moog-*-x86_64-linux-musl.tar.gz' --clobber
