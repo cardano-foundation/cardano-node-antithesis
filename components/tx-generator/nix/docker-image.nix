@@ -51,8 +51,8 @@ let
   eventually-population-grew = pkgs.writeShellScriptBin "eventually_population_grew" ''
     exec ${antithesis-drivers}/opt/antithesis/test/v1/tx-generator/eventually_population_grew.sh "$@"
   '';
-  finally-pressure-summary = pkgs.writeShellScriptBin "finally_pressure_summary" ''
-    exec ${antithesis-drivers}/opt/antithesis/test/v1/tx-generator/finally_pressure_summary.sh "$@"
+  eventually-pressure-summary = pkgs.writeShellScriptBin "eventually_pressure_summary" ''
+    exec ${antithesis-drivers}/opt/antithesis/test/v1/tx-generator/eventually_pressure_summary.sh "$@"
   '';
 
   usrBinEnv = pkgs.runCommand "usr-bin-env" { } ''
@@ -90,7 +90,7 @@ in pkgs.dockerTools.buildImage {
       parallel-driver-transact
       parallel-driver-refill
       eventually-population-grew
-      finally-pressure-summary
+      eventually-pressure-summary
       entrypoint
       tx-generator-bin
     ];
