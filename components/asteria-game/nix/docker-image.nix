@@ -51,6 +51,7 @@ pkgs.dockerTools.buildImage {
       pkgs.jq
       pkgs.netcat-openbsd
       pkgs.socat
+      pkgs.util-linux # provides flock, used by helper_sdk_common.sh
       utxo-indexer
       antithesis-drivers
       usrBinEnv
