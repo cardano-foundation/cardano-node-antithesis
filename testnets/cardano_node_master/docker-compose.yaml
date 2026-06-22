@@ -139,12 +139,14 @@ services:
   # Tx-generator workload — promoted from cardano_node_tx_generator
   # after a 0-findings 1h Antithesis validation run on commit
   # 4687a09. The daemon connects to relay1 via N2C and the
-  # composer fires short `transact`, `refill`, `eventually`, and
-  # `finally` control-socket probes. Tag 69bf815 contains the
-  # bounded socket-probe wrapper that cleared the four previous
-  # "Commands finish with zero exit code" findings.
+  # composer fires short `transact`, `refill`, and `eventually`
+  # control-socket probes. Tag d864ccf moves the end-of-run summary
+  # probe from `finally_` to `eventually_` (#171) — `finally_` commands
+  # stopped running to completion at cfg=56; the bounded socket-probe
+  # wrapper that cleared the earlier "zero exit code" findings is
+  # retained.
   tx-generator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:69bf815
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:d864ccf
     container_name: tx-generator
     hostname: tx-generator.example
     labels:
@@ -226,7 +228,10 @@ services:
   # chain via N2C, exposes ready/utxos_at/await on /tmp/idx.sock;
   # composer scripts at /opt/antithesis/test/v1/asteria-game/ drive
   # bootstrap (one-shot serial driver), the player loop, and the
-  # admin-singleton / consistency invariant snapshots. The player
+  # admin-singleton / consistency invariant snapshots. Tag d864ccf
+  # moves the end-of-run liveness + consistency snapshots from
+  # `finally_` to `eventually_` (#171), which run to completion at
+  # cfg=56 where `finally_` no longer does. The player
   # parallel_driver_ is the workload generator: builds + signs +
   # submits spawnShip txs against relay1 every tick, providing
   # sustained tx pressure under fault injection.
@@ -240,7 +245,7 @@ services:
   # per-deploy seed TxIn so player + invariant binaries see the
   # same applied validators.
   asteria-game:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:5252cad0
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:d864ccf
     container_name: asteria-game
     hostname: asteria-game.example
     labels:
