@@ -84,6 +84,7 @@ in pkgs.dockerTools.buildImage {
       pkgs.gnugrep
       pkgs.netcat-openbsd
       pkgs.unixtools.xxd
+      pkgs.util-linux # provides flock, used by helper_sdk_common.sh
       usrBinEnv
       sleepForever
       antithesis-drivers
