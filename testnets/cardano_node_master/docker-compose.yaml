@@ -146,7 +146,7 @@ services:
   # wrapper that cleared the earlier "zero exit code" findings is
   # retained.
   tx-generator:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:d864ccf
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:bf48615
     container_name: tx-generator
     hostname: tx-generator.example
     labels:
@@ -245,7 +245,7 @@ services:
   # per-deploy seed TxIn so player + invariant binaries see the
   # same applied validators.
   asteria-game:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:d864ccf
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:bf48615
     container_name: asteria-game
     hostname: asteria-game.example
     labels:
