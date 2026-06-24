@@ -4,10 +4,10 @@ A mixed-version Cardano testnet for Antithesis fault-injection testing.
 
 ## Overview
 
-This testnet exercises the node-to-node protocol across multiple cardano-node versions:
+This testnet exercises the node-to-node protocol across multiple node versions and implementations:
 
-- **4 block producers**: p1 (10.5.3), p2 (10.6.2), p3 (10.7.1), p4 (11.0.1) — forge blocks in a ring topology (p1↔p2↔p3↔p4)
-- **3 relay nodes**: relay1 (10.6.2), relay2 (10.7.1), relay3 (11.0.1) — non-producing nodes connected to all producers
+- **5 block producers**: p1 (cardano-node 10.5.3), p2 (cardano-node 10.6.2), p3 (cardano-node 10.7.1), p4 (cardano-node 11.0.1), p5 (Dingo 0.56.0, `0.56.0-antithesis` image) - forge blocks in a ring topology (p1 <-> p2 <-> p3 <-> p4 <-> p5)
+- **4 relay nodes**: relay1 (cardano-node 10.6.2), relay2 (cardano-node 10.7.1), relay3 (cardano-node 11.0.1), relay4 (Dingo 0.56.0, `0.56.0-antithesis` image) - non-producing nodes connected to all producers
 
 ### Supporting services
 
@@ -24,7 +24,7 @@ This testnet exercises the node-to-node protocol across multiple cardano-node ve
 ## Why asteria-game is here
 
 Antithesis can only find bugs that the system **actually exercises** in
-the simulation. A cluster running idle — three producers minting empty
+the simulation. A cluster running idle — five producers minting empty
 blocks — explores almost nothing of the node's tx-handling code:
 mempool admission, script evaluation, ledger validation under
 contention, fork resolution while inputs are being consumed. Faults
@@ -71,8 +71,9 @@ What this gives Antithesis to score:
   exercises ref-input handling, datum decoding, redeemer validation,
   exec-budget accounting.
 - **Multi-version interop**. Producers p1/p2/p3/p4 run four different
-  cardano-node versions; the same Plutus tx must validate identically
-  across versions or the cluster forks.
+  cardano-node versions, while p5 runs Dingo 0.56.0 from the
+  `0.56.0-antithesis` image; the same Plutus tx must validate
+  identically across implementations and versions or the cluster forks.
 - **Invariants that survive faults**. `asteria_admin_singleton`
   (sdkAlways) and `asteria_state_consistent` (sdkSometimes) provide
   oracle properties Antithesis can falsify if a fault produces a
@@ -174,14 +175,20 @@ Measured pressure in that run:
 ## Network topology
 
 ```
-p1 (10.5.3) ←→ p2 (10.6.2) ←→ p3 (10.7.1) ←→ p4 (11.0.1) ←→ p1
-   ↑                ↑               ↑               ↑
-relay1 (10.6.2) ----+---------------+---------------+
-relay2 (10.7.1) ----+---------------+---------------+
-relay3 (11.0.1) ----+---------------+---------------+
+p1 (cardano-node 10.5.3) <-> p2 (cardano-node 10.6.2) <-> p3 (cardano-node 10.7.1)
+^                                                                            |
+|                                                                            v
+p5 (Dingo 0.56.0, 0.56.0-antithesis) <-> p4 (cardano-node 11.0.1) <----------+
+
+relay1 (cardano-node 10.6.2) ----+---- connected to all producers
+relay2 (cardano-node 10.7.1) ----+
+relay3 (cardano-node 11.0.1) ----+
+relay4 (Dingo 0.56.0, 0.56.0-antithesis) -----------+
 ```
 
 Producers form a ring. Relays connect to all producers.
+Tracer-derived per-producer log assertions currently cover the four
+cardano-node producers; Dingo does not forward logs to cardano-tracer.
 
 ## Configuration
 

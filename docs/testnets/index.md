@@ -41,4 +41,4 @@ The `justfile` wraps `docker compose` commands. All images must be available loc
 
 ## Available testnets
 
-- [cardano_node_master](cardano-node-master.md): Mixed-version testnet with producers, relays, tracer observability, Asteria Plutus workload pressure, and tx-generator ADA-transfer pressure
+- [cardano_node_master](cardano-node-master.md): Mixed-version testnet with 5 block producers and 4 relays, including Dingo 0.56.0 from the `0.56.0-antithesis` image, plus tracer observability, Asteria Plutus workload pressure, and tx-generator ADA-transfer pressure
