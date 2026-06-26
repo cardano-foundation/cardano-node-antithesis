@@ -6,8 +6,8 @@ A mixed-version Cardano testnet for Antithesis fault-injection testing.
 
 This testnet exercises the node-to-node protocol across multiple node versions and implementations:
 
-- **5 block producers**: p1 (cardano-node 10.5.3), p2 (cardano-node 10.6.2), p3 (cardano-node 10.7.1), p4 (cardano-node 11.0.1), p5 (Dingo 0.56.0, `0.56.0-antithesis` image) - forge blocks in a ring topology (p1 <-> p2 <-> p3 <-> p4 <-> p5)
-- **4 relay nodes**: relay1 (cardano-node 10.6.2), relay2 (cardano-node 10.7.1), relay3 (cardano-node 11.0.1), relay4 (Dingo 0.56.0, `0.56.0-antithesis` image) - non-producing nodes connected to all producers
+- **5 block producers**: p1 (cardano-node 10.5.3), p2 (cardano-node 10.6.2), p3 (cardano-node 10.7.1), p4 (cardano-node 11.0.1), p5 (Dingo 0.58.0) - forge blocks in a ring topology (p1 <-> p2 <-> p3 <-> p4 <-> p5)
+- **4 relay nodes**: relay1 (cardano-node 10.6.2), relay2 (cardano-node 10.7.1), relay3 (cardano-node 11.0.1), relay4 (Dingo 0.58.0) - non-producing nodes connected to all producers
 
 ### Supporting services
 
@@ -71,9 +71,9 @@ What this gives Antithesis to score:
   exercises ref-input handling, datum decoding, redeemer validation,
   exec-budget accounting.
 - **Multi-version interop**. Producers p1/p2/p3/p4 run four different
-  cardano-node versions, while p5 runs Dingo 0.56.0 from the
-  `0.56.0-antithesis` image; the same Plutus tx must validate
-  identically across implementations and versions or the cluster forks.
+  cardano-node versions, while p5 runs Dingo 0.58.0; the same Plutus tx
+  must validate identically across implementations and versions or the
+  cluster forks.
 - **Invariants that survive faults**. `asteria_admin_singleton`
   (sdkAlways) and `asteria_state_consistent` (sdkSometimes) provide
   oracle properties Antithesis can falsify if a fault produces a
@@ -128,10 +128,13 @@ Why this belongs in the production-baseline testnet:
 
 ### Promotion evidence
 
-The image promoted here is `tx-generator:69bf815`, referenced from
-downstream commit `4687a09`. It was validated on a sibling
-`cardano_node_tx_generator` testnet before promotion (since removed;
-the workload now lives directly in this testnet).
+The tx-generator workload was originally promoted here as
+`tx-generator:69bf815`, referenced from downstream commit `4687a09`.
+It was validated on a sibling `cardano_node_tx_generator` testnet
+before promotion (since removed; the workload now lives directly in
+this testnet). The active `cardano_node_master` image pin is
+`tx-generator:bf48615`, which includes the later composer-wrapper
+fixes from `d864ccf` and `bf48615`.
 
 | Evidence | Value |
 |----------|-------|
@@ -178,15 +181,18 @@ Measured pressure in that run:
 p1 (cardano-node 10.5.3) <-> p2 (cardano-node 10.6.2) <-> p3 (cardano-node 10.7.1)
 ^                                                                            |
 |                                                                            v
-p5 (Dingo 0.56.0, 0.56.0-antithesis) <-> p4 (cardano-node 11.0.1) <----------+
+p5 (Dingo 0.58.0) <-> p4 (cardano-node 11.0.1) <-----------------------------+
 
 relay1 (cardano-node 10.6.2) ----+---- connected to all producers
 relay2 (cardano-node 10.7.1) ----+
 relay3 (cardano-node 11.0.1) ----+
-relay4 (Dingo 0.56.0, 0.56.0-antithesis) -----------+
+relay4 (Dingo 0.58.0) -----------+
 ```
 
 Producers form a ring. Relays connect to all producers.
+The Dingo producer `p5` dials `p4` directly; `p1` still dials `p5`
+from its generated producer topology, preserving the ring while avoiding
+repeated Dingo producer outbound retries against `p1`.
 Tracer-derived per-producer log assertions currently cover the four
 cardano-node producers; Dingo does not forward logs to cardano-tracer.
 

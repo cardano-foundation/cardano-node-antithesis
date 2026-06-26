@@ -48,8 +48,11 @@ x-dingo-env: &dingo-env
   DINGO_SOCKET_PATH: /ipc/dingo.socket
 
 x-dingo: &dingo
-  image: ghcr.io/blinklabs-io/dingo:0.56.0-antithesis
-  platform: linux/amd64
+  image: ghcr.io/blinklabs-io/dingo:0.58.0
+  command:
+    - serve
+    - --logging-level
+    - warn
   # Configurator writes pool keys as root; Dingo needs to read p5 keys.
   user: "0:0"
   environment:
@@ -136,6 +139,7 @@ services:
       CARDANO_SHELLEY_OPERATIONAL_CERTIFICATE: /configs/keys/opcert.cert
     volumes:
       - p5-configs:/configs:ro
+      - ./p5-topology.json:/configs/configs/topology.json:ro
       - p5-state:/data/db
       - p5-ipc:/ipc
 
@@ -189,11 +193,10 @@ services:
   # after a 0-findings 1h Antithesis validation run on commit
   # 4687a09. The daemon connects to relay1 via N2C and the
   # composer fires short `transact`, `refill`, and `eventually`
-  # control-socket probes. Tag d864ccf moves the end-of-run summary
-  # probe from `finally_` to `eventually_` (#171) — `finally_` commands
-  # stopped running to completion at cfg=56; the bounded socket-probe
-  # wrapper that cleared the earlier "zero exit code" findings is
-  # retained.
+  # control-socket probes. Tag bf48615 includes the d864ccf move of the
+  # end-of-run summary probe from `finally_` to `eventually_` (#171)
+  # and ships flock for the composer wrappers; `finally_` commands
+  # stopped running to completion at cfg=56.
   tx-generator:
     image: ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator:bf48615
     platform: linux/amd64
@@ -281,10 +284,10 @@ services:
   # chain via N2C, exposes ready/utxos_at/await on /tmp/idx.sock;
   # composer scripts at /opt/antithesis/test/v1/asteria-game/ drive
   # bootstrap (one-shot serial driver), the player loop, and the
-  # admin-singleton / consistency invariant snapshots. Tag d864ccf
-  # moves the end-of-run liveness + consistency snapshots from
-  # `finally_` to `eventually_` (#171), which run to completion at
-  # cfg=56 where `finally_` no longer does. The player
+  # admin-singleton / consistency invariant snapshots. Tag bf48615
+  # includes the d864ccf move of the end-of-run liveness + consistency
+  # snapshots from `finally_` to `eventually_` (#171) and ships flock
+  # for the composer wrappers. The player
   # parallel_driver_ is the workload generator: builds + signs +
   # submits spawnShip txs against relay1 every tick, providing
   # sustained tx pressure under fault injection.
