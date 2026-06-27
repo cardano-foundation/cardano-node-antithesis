@@ -68,6 +68,51 @@ done
 # Always assertion enforces the cluster-wide unrecoverable-divergence
 # bound at runtime.
 
+# cardano_amaru: prove the amaru bootstrap pipeline. bootstrap-producer
+# builds the bundle (create-snapshots + bootstrap) and exits 0; the two
+# relay-only amaru nodes then consume it, exec `amaru run`, and stay up.
+if [[ "$TESTNET" == cardano_amaru* ]]; then
+  BOOTSTRAP_TIMEOUT="${AMARU_BOOTSTRAP_SMOKE_TIMEOUT:-1500}"
+  echo "Waiting for bootstrap-producer to build the bundle (timeout ${BOOTSTRAP_TIMEOUT}s)..."
+  BP_DEADLINE=$((SECONDS + BOOTSTRAP_TIMEOUT))
+  while true; do
+    BP_STATE="$(docker inspect -f '{{.State.Status}}' bootstrap-producer 2>/dev/null || true)"
+    BP_EXIT="$(docker inspect -f '{{.State.ExitCode}}' bootstrap-producer 2>/dev/null || echo -1)"
+    if [ "$BP_STATE" = "exited" ] && [ "$BP_EXIT" = "0" ]; then
+      echo "OK: bootstrap-producer built the bundle (exit 0)"; break
+    fi
+    if [ "$BP_STATE" = "exited" ] && [ "$BP_EXIT" != "0" ]; then
+      echo "FAIL: bootstrap-producer exited ${BP_EXIT}"
+      docker compose -f "$COMPOSE_FILE" logs --tail 60 bootstrap-producer 2>&1; exit 1
+    fi
+    if [ "$SECONDS" -ge "$BP_DEADLINE" ]; then
+      echo "FAIL: bootstrap-producer did not finish within ${BOOTSTRAP_TIMEOUT}s (state=${BP_STATE})"
+      docker compose -f "$COMPOSE_FILE" logs --tail 60 bootstrap-producer 2>&1; exit 1
+    fi
+    sleep 10
+  done
+  for RELAY in amaru-relay-1 amaru-relay-2; do
+    echo "Waiting for ${RELAY} to consume the bundle and run amaru..."
+    R_DEADLINE=$((SECONDS + 180))
+    while [ "$(docker inspect -f '{{.State.Status}}' "$RELAY" 2>/dev/null || true)" != "running" ]; do
+      if [ "$SECONDS" -ge "$R_DEADLINE" ]; then
+        echo "FAIL: ${RELAY} not running after bootstrap"
+        docker compose -f "$COMPOSE_FILE" logs --tail 60 "$RELAY" 2>&1; exit 1
+      fi
+      sleep 5
+    done
+    RB="$(docker inspect -f '{{.RestartCount}}' "$RELAY")"; sleep 20
+    RA="$(docker inspect -f '{{.RestartCount}}' "$RELAY" 2>/dev/null || echo x)"
+    if [ "$(docker inspect -f '{{.State.Status}}' "$RELAY" 2>/dev/null)" != "running" ] || [ "$RB" != "$RA" ]; then
+      echo "FAIL: ${RELAY} did not stay running (restarts ${RB}->${RA})"
+      docker compose -f "$COMPOSE_FILE" logs --tail 60 "$RELAY" 2>&1; exit 1
+    fi
+    echo "OK: ${RELAY} consumed bundle and stayed running"
+  done
+  echo "PASS: cardano_amaru bootstrap + relays"
+  exit 0
+fi
+
 # Adversary probe: if the testnet has the adversary container, exec
 # its driver once to prove the binary runs, the chainpoints file is
 # reachable, and exit code is zero. Antithesis composer dispatches
