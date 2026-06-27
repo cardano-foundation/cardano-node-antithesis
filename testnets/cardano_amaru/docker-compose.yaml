@@ -326,27 +326,19 @@ services:
       - amaru-startup:/startup
       - a2-state:/srv/amaru
 
+  # Convergence is the tracer-sidecar fork-tree probe ('cluster fork depth < k'),
+  # aligned to cardano_node_master. The old composer tip-equality probes (and
+  # the AMARU_RELAYS / amaru-startup wiring) were brittle and removed upstream
+  # (cna#119); amaru-follows-chain is tracked separately (cna#168).
   sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:784c74c
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1ff6913
     environment:
       NETWORKMAGIC: 42
       PORT: 3001
-      LIMIT: 100
       POOLS: "3"
-      NCONNS: 1
-      SLEEP_SETTLE: "30"
-      MAX_ATTEMPTS: "15"
-      RETRY_DELAY: "3"
-      CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
-      AMARU_STARTUP_REQUIRED: "true"
-      AMARU_STARTUP_DIR: "/amaru-startup"
-      AMARU_RELAYS: "amaru-relay-1 amaru-relay-2"
     container_name: sidecar
     labels: *fault-exclude
     hostname: sidecar.example
-    volumes:
-      - tracer:/opt/cardano-tracer
-      - amaru-startup:/amaru-startup:ro
     depends_on:
       tracer-sidecar:
         condition: service_started
@@ -355,7 +347,7 @@ services:
       - /tmp
 
   tracer-sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar@sha256:8474b148f447dc202ffb19511b136ef4bcb84be1e3aa668c2a96f01ce0b5c689
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:5271661
     container_name: tracer-sidecar
     labels: *fault-exclude
     hostname: tracer-sidecar.example
