@@ -240,6 +240,24 @@ services:
     # service_completed_successfully gate. Exits 0 once the bundle is built.
     restart: on-failure
 
+  amaru-consumer-seed:
+    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:03d2727b71e8d1fe7c793d5036dce3c3ce294f6c
+    container_name: amaru-consumer-seed
+    labels: *fault-exclude
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        if [ ! -d /seed/immutable ]; then
+          cp -a /bootstrap/. /seed/
+        fi
+    volumes:
+      - bootstrap-state:/bootstrap:ro
+      - amaru-consumer-state:/seed
+    depends_on:
+      bootstrap-producer:
+        condition: service_completed_successfully
+    restart: on-failure
+
   amaru-relay-1:
     <<: *amaru
     container_name: amaru-relay-1
@@ -282,6 +300,11 @@ services:
       - ./amaru-runtime:/amaru-runtime:ro
       - amaru-startup:/startup
       - a1-state:/srv/amaru
+    networks:
+      default:
+      amaru-consumer-net:
+        aliases:
+          - amaru-relay-1.example
 
   amaru-relay-2:
     <<: *amaru
@@ -325,6 +348,31 @@ services:
       - ./amaru-runtime:/amaru-runtime:ro
       - amaru-startup:/startup
       - a2-state:/srv/amaru
+    networks:
+      default:
+      amaru-consumer-net:
+        aliases:
+          - amaru-relay-2.example
+
+  amaru-consumer:
+    <<: *cardano-relay-10-7-1
+    container_name: amaru-consumer
+    labels: *fault-exclude
+    hostname: amaru-consumer.example
+    depends_on:
+      amaru-consumer-seed:
+        condition: service_completed_successfully
+      amaru-relay-1:
+        condition: service_started
+      amaru-relay-2:
+        condition: service_started
+    volumes:
+      - p1-configs:/configs:ro
+      - ./amaru-consumer-topology.json:/configs/configs/topology.json:ro
+      - amaru-consumer-state:/state
+      - tracer:/tracer
+    networks:
+      amaru-consumer-net:
 
   # Convergence is the tracer-sidecar fork-tree probe ('cluster fork depth < k'),
   # aligned to cardano_node_master. The old composer tip-equality probes (and
@@ -390,9 +438,14 @@ volumes:
   amaru-startup:
   a1-state:
   a2-state:
+  amaru-consumer-state:
 
 networks:
   default:
     name: cardano-amaru-testnet
+    driver: bridge
+    internal: ${INTERNAL_NETWORK}
+  amaru-consumer-net:
+    name: cardano-amaru-consumer-net
     driver: bridge
     internal: ${INTERNAL_NETWORK}
