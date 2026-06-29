@@ -84,6 +84,10 @@ configurator -> p1/p2/p3/relay1/relay2
              |             |
              v             v
       amaru-relay-1   amaru-relay-2
+              \           /
+               \         /
+                v       v
+             amaru-consumer
 ```
 
 `bootstrap-producer` owns the snapshot-refresh loop. It mounts `p1`'s
@@ -102,9 +106,28 @@ Each relay-only Amaru entrypoint copies the final bundle into its private
 state volume before it execs `amaru run`, so the two Amaru nodes do not
 share writable chain or ledger stores. The relays peer directly with
 cardano-node producers (`amaru-relay-1` to `p1`, `amaru-relay-2` to
-`p2`) rather than with each other, because this test is only proving
-bootstrap loading and should not require Amaru to serve blocks as a
-responder.
+`p2`) and also serve the isolated `amaru-consumer` path described below.
+
+## Amaru Consumer Path
+
+`amaru-consumer` is a cardano-node relay that starts from the Amaru
+bootstrap seed and then must catch up through Amaru. Its topology is
+`amaru-consumer-topology.json`, whose only local roots are
+`amaru-relay-1.example` and `amaru-relay-2.example`; it has no public
+roots and no direct producer or cardano-node relay peers.
+
+`amaru-consumer-seed` copies the `bootstrap-state` volume into
+`amaru-consumer-state` after `bootstrap-producer` exits successfully.
+`amaru-consumer` mounts that seeded state as its ChainDB, but it is
+attached only to `amaru-consumer-net`. The two Amaru relays are attached
+to both the producer network and `amaru-consumer-net`, so they are the
+only route by which the consumer can advance past its seed point.
+
+For `cardano_amaru`, the smoke captures the consumer's first readable tip
+as `N0`, then fails unless the consumer advances to a slot greater than
+`N0` and its tip hash matches `p1`. On timeout, crash, restart, or
+divergence, the smoke prints the consumer tip, the `p1` tip, `N0`, and a
+tail of the `amaru-consumer` logs before exiting non-zero.
 
 Each relay also writes a startup marker into the shared `amaru-startup`
 volume immediately before the `amaru run` exec. The sidecar mounts that
@@ -136,9 +159,9 @@ convergence checks still start. Because this profile has no
 `tx-generator`, the generic tx-generator smoke gate is skipped. For
 `cardano_amaru`, the smoke waits for `bootstrap-producer` to complete,
 checks that both relay-only Amaru nodes copied the bundle into private
-state and stayed running after `amaru run` opened the stores, and then
-executes the same Amaru startup property that Antithesis discovers under
-`/opt/antithesis/test/v1/convergence/`.
+state and stayed running after `amaru run` opened the stores, then proves
+`amaru-consumer` advanced past its seeded tip and converged to a producer
+tip through the Amaru-only topology.
 
 For the bootstrap-specific proof, inspect:
 

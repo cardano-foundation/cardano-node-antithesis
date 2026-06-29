@@ -24,14 +24,14 @@ orchestrator accepts the slice (amended into the slice commit with a
 
 ## Slice 2 — smoke asserts convergence through amaru (fail-closed) + README
 
-- [ ] T005 Extend `scripts/smoke-test.sh` `cardano_amaru` branch: capture the
+- [X] T005 Extend `scripts/smoke-test.sh` `cardano_amaru` branch: capture the
   consumer's seed tip `N0`, then poll (bounded by `AMARU_CONSUMER_CONVERGE_TIMEOUT`)
   until the consumer tip slot `> N0` AND its tip hash equals a producer tip hash.
-- [ ] T006 Fail-closed: on timeout/crash/divergence exit non-zero printing the
+- [X] T006 Fail-closed: on timeout/crash/divergence exit non-zero printing the
   consumer tip, the producer tip, and `N0`.
-- [ ] T007 Update `testnets/cardano_amaru/README.md`: document the consumer, its
+- [X] T007 Update `testnets/cardano_amaru/README.md`: document the consumer, its
   amaru-only topology, the bootstrap-state seed, and the assertion; remove the stale
   "should not require Amaru to serve blocks as a responder" claim.
-- [ ] T008 Proof: `scripts/smoke-test.sh cardano_amaru` passes because the consumer
+- [X] T008 Proof: `scripts/smoke-test.sh cardano_amaru` passes because the consumer
   converged (read the output); one-off negative run (break serving) fails with the
   divergence diagnostic. Record both in `WIP.md`.
