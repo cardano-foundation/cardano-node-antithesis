@@ -6,17 +6,17 @@ orchestrator accepts the slice (amended into the slice commit with a
 
 ## Slice 1 — amaru-consumer service + amaru-only topology, seeded from bootstrap-state
 
-- [ ] T001 Create `testnets/cardano_amaru/amaru-consumer-topology.json` with
+- [X] T001 Create `testnets/cardano_amaru/amaru-consumer-topology.json` with
   localRoots = `[amaru-relay-1.example:3001, amaru-relay-2.example:3001]` only,
   `publicRoots: []`, `useLedgerAfterSlot: 0`.
-- [ ] T002 Add `amaru-consumer-seed` one-shot to the compose (reuse the
+- [X] T002 Add `amaru-consumer-seed` one-shot to the compose (reuse the
   `amaru-bootstrap-producer` image; copy `bootstrap-state` → `amaru-consumer-state`
   after `bootstrap-producer` completes; `restart: on-failure`; fault-exclude label).
-- [ ] T003 Add `amaru-consumer` cardano-node service (block producer false; mounts
+- [X] T003 Add `amaru-consumer` cardano-node service (block producer false; mounts
   p1-configs + the amaru-only topology override + `amaru-consumer-state:/state` +
   tracer; depends on seed completed + both amaru relays started; fault-exclude label);
   add the `amaru-consumer-state` volume.
-- [ ] T004 Proof: `INTERNAL_NETWORK=false docker compose -f
+- [X] T004 Proof: `INTERNAL_NETWORK=false docker compose -f
   testnets/cardano_amaru/docker-compose.yaml config` validates; bring the cluster up
   far enough to confirm seed exits 0, the consumer opens the seeded DB + reaches
   RUNNING, and its only peers are the amaru relays (topology + a peer-selection trace).
