@@ -2,16 +2,16 @@
 
 ## Slice 1 — conditional convergence property + RED→GREEN tests
 
-- [ ] T001 RED: add tracer-sidecar test cases (hspec/golden) for the new
+- [X] T001 RED: add tracer-sidecar test cases (hspec/golden) for the new
   property — hit case (consumer advances + matches a producer tip), not-hit
   case (consumer stuck), no-consumer case (property not declared). Run and
   watch them FAIL (property absent). Record RED in WIP.md.
-- [ ] T002 `mkSpec` takes the consumer host (`Maybe Text`); `App.hs` reads
+- [X] T002 `mkSpec` takes the consumer host (`Maybe Text`); `App.hs` reads
   `AMARU_CONSUMER_HOST` and passes it.
-- [ ] T003 Extend `State` (`producerTipHashes`, `consumerFirstLen`) + the
+- [X] T003 Extend `State` (`producerTipHashes`, `consumerFirstLen`) + the
   updater rule + the `sometimes "amaru-served consumer reached producer tip"`
   property, added ONLY when a consumer host is configured.
-- [ ] T004 GREEN: `cd components/tracer-sidecar && cabal test` passes (all
+- [X] T004 GREEN: `cd components/tracer-sidecar && cabal test` passes (all
   three cases); `fourmolu`/`hlint`/`cabal-fmt` clean; existing golden stable.
   One bisect-safe commit (property + tests).
 
