@@ -1,4 +1,7 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -7,7 +10,12 @@ module Spec (spec)
 where
 
 import App (tailJsonLinesFromTracerLogDir)
-import Cardano.Antithesis.LogMessage (LogMessage)
+import Cardano.Antithesis.LogMessage
+    ( LogMessage (..)
+    , LogMessageData (..)
+    , NewTipSelectView (..)
+    , Severity (..)
+    )
 import Cardano.Antithesis.Sidecar
     ( Output (..)
     , initialState
@@ -28,7 +36,11 @@ import Data.Aeson
     , decodeStrict'
     , eitherDecodeStrict
     , encode
+    , object
     )
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Char8 qualified as B8
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Lazy.Char8 qualified as BL8
@@ -42,6 +54,8 @@ import Data.List
 import Data.Maybe
     ( mapMaybe
     )
+import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Time
 import ForkTreeSpec qualified
 import System.FilePath ((</>))
@@ -59,10 +73,47 @@ spec = do
     ForkTreeSpec.spec
     (input :: [B8.ByteString]) <-
         runIO $ B8.lines <$> B8.readFile "test/data/input.jsonl"
+    let runSynthetic propSpec msgs =
+            snd $ processMessages propSpec (initialState propSpec) msgs
+
+    describe "amaru consumer convergence property" $ do
+        it "hits when the consumer advances to a producer tip" $ do
+            let outputs =
+                    sdkAssertions
+                        $ runSynthetic
+                            (mkSpec 1 (Just "amaru-consumer.example"))
+                            [ addedToCurrentChain "amaru-consumer.example" 10 "seed"
+                            , addedToCurrentChain "p1.example" 11 "producer-tip"
+                            , addedToCurrentChain "amaru-consumer.example" 11 "producer-tip"
+                            ]
+            outputs `shouldSatisfy` any (assertionHit convergencePropertyName)
+
+        it "is declared but not hit when the consumer stays at its first tip" $ do
+            let outputs =
+                    sdkAssertions
+                        $ runSynthetic
+                            (mkSpec 1 (Just "amaru-consumer.example"))
+                            [ addedToCurrentChain "amaru-consumer.example" 10 "seed"
+                            , addedToCurrentChain "p1.example" 11 "producer-tip"
+                            , addedToCurrentChain "amaru-consumer.example" 10 "seed"
+                            ]
+            outputs
+                `shouldSatisfy` any (assertionDeclared convergencePropertyName)
+            outputs `shouldNotSatisfy` any (assertionHit convergencePropertyName)
+
+        it "is not declared when no consumer is configured" $ do
+            let outputs =
+                    sdkAssertions
+                        $ runSynthetic
+                            (mkSpec 1 Nothing)
+                            [ addedToCurrentChain "p1.example" 11 "producer-tip"
+                            ]
+            outputs
+                `shouldNotSatisfy` any (assertionDeclared convergencePropertyName)
 
     it "processMessages"
         $ let
-            propSpec = mkSpec 3
+            propSpec = mkSpec 3 Nothing
             (_finalState, actualVals) = processMessages propSpec (initialState propSpec) msgs
             msgs = mapMaybe decodeStrict' input
           in
@@ -98,6 +149,67 @@ spec = do
 collectAllInts :: MVar [Int] -> Int -> IO ()
 collectAllInts xs newInt = do
     modifyMVar_ xs $ \ints -> pure (ints <> [newInt])
+
+convergencePropertyName :: Text
+convergencePropertyName = "amaru-served consumer reached producer tip"
+
+sdkAssertions :: [Output] -> [Value]
+sdkAssertions = mapMaybe $ \case
+    AntithesisSdk v -> Just v
+    _ -> Nothing
+
+assertionDeclared :: Text -> Value -> Bool
+assertionDeclared = assertionIdIs
+
+assertionHit :: Text -> Value -> Bool
+assertionHit name v =
+    assertionIdIs name v && assertionBool "hit" v == Just True
+
+assertionIdIs :: Text -> Value -> Bool
+assertionIdIs name v =
+    assertionText "id" v == Just name
+
+assertionText :: Text -> Value -> Maybe Text
+assertionText field v = case assertionField field v of
+    Just (Aeson.String t) -> Just t
+    _ -> Nothing
+
+assertionBool :: Text -> Value -> Maybe Bool
+assertionBool field v = case assertionField field v of
+    Just (Aeson.Bool b) -> Just b
+    _ -> Nothing
+
+assertionField :: Text -> Value -> Maybe Value
+assertionField field (Aeson.Object outer) = do
+    Aeson.Object assertion <-
+        KeyMap.lookup (Key.fromString "antithesis_assert") outer
+    KeyMap.lookup (Key.fromText field) assertion
+assertionField _ _ = Nothing
+
+addedToCurrentChain :: Text -> Int -> Text -> LogMessage
+addedToCurrentChain host chainLength hash =
+    LogMessage
+        { at = UTCTime (fromGregorian 2025 11 1) 0
+        , ns = "ChainDB"
+        , details =
+            AddedToCurrentChain
+                { newTipSelectView =
+                    NewTipSelectView
+                        { chainLength
+                        , issueNo = 0
+                        , issuerHash = "issuer"
+                        , kind = "PraosChainSelectView"
+                        , slotNo = chainLength * 2
+                        , tieBreakVRF = "vrf"
+                        }
+                , newtip = hash <> "@" <> T.pack (show (chainLength * 2))
+                }
+        , sev = Info
+        , thread = "test"
+        , host
+        , kind = "AddedToCurrentChain"
+        , json = object []
+        }
 
 jsonifyOutput :: Output -> Value
 jsonifyOutput (StdOut msg) = toJSON $ "### STDOUT: " <> msg
