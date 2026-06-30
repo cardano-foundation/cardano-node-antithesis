@@ -395,7 +395,7 @@ services:
       - /tmp
 
   tracer-sidecar:
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:5271661
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar:e01ad90
     container_name: tracer-sidecar
     labels: *fault-exclude
     hostname: tracer-sidecar.example
@@ -404,6 +404,7 @@ services:
     environment:
       POOLS: "3"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+      AMARU_CONSUMER_HOST: amaru-consumer.example
     volumes:
       - tracer:/opt/cardano-tracer
     restart: always

@@ -17,12 +17,12 @@
 
 ## Slice 2 — wire into cardano_amaru + image bump
 
-- [ ] T005 `testnets/cardano_amaru/docker-compose.yaml`: set
+- [X] T005 `testnets/cardano_amaru/docker-compose.yaml`: set
   `AMARU_CONSUMER_HOST=amaru-consumer.example` on `tracer-sidecar`; leave
   `cardano_node_master` unset.
-- [ ] T006 Bump the `tracer-sidecar` image tag to a branch commit SHA so
+- [X] T006 Bump the `tracer-sidecar` image tag to a branch commit SHA so
   `publish-images` rebuilds with the property (image-tag hygiene).
-- [ ] T007 `INTERNAL_NETWORK=false docker compose -f
+- [X] T007 `INTERNAL_NETWORK=false docker compose -f
   testnets/cardano_amaru/docker-compose.yaml config` validates; image-spelling
   constraint preserved.
 
