@@ -47,6 +47,7 @@ import Data.List (isPrefixOf)
 import Data.Maybe (isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Data.Time (UTCTime, defaultTimeLocale, parseTimeM)
 import System.Directory
     ( listDirectory
@@ -54,6 +55,7 @@ import System.Directory
 import System.Environment
     ( getArgs
     , getEnv
+    , lookupEnv
     )
 import System.FilePath
     ( takeFileName
@@ -84,10 +86,11 @@ main = do
         _ -> error "Usage: <executable name> <directory>"
 
     (nPools :: Int) <- read <$> getEnv "POOLS"
+    consumerHost <- fmap Text.pack <$> lookupEnv "AMARU_CONSUMER_HOST"
 
     writeSdkJsonl $ sometimesTracesDeclaration "find log files"
 
-    let spec = mkSpec nPools
+    let spec = mkSpec nPools consumerHost
     mvar <- newMVar =<< initialStateIO spec
 
     -- Each cardano-node process gets its own subdirectory under `dir` once it
