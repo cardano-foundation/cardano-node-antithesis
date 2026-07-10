@@ -96,7 +96,7 @@ services:
 
   p4:
     <<: *cardano-node
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/cardano-node-sigterm-fix@sha256:658a9bf8523fce655c9c51d6cdcc6e0e59d081c9065fa0b001bb1690c19dab89
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator@sha256:658a9bf8523fce655c9c51d6cdcc6e0e59d081c9065fa0b001bb1690c19dab89
     container_name: p4
     hostname: p4.example
     volumes:
@@ -127,7 +127,7 @@ services:
 
   relay3:
     <<: *cardano-relay
-    image: ghcr.io/cardano-foundation/cardano-node-antithesis/cardano-node-sigterm-fix@sha256:658a9bf8523fce655c9c51d6cdcc6e0e59d081c9065fa0b001bb1690c19dab89
+    image: ghcr.io/cardano-foundation/cardano-node-antithesis/configurator@sha256:658a9bf8523fce655c9c51d6cdcc6e0e59d081c9065fa0b001bb1690c19dab89
     container_name: relay3
     hostname: relay3.example
     volumes:
