@@ -360,6 +360,10 @@ services:
     labels: *fault-exclude
     hostname: amaru-consumer.example
     depends_on:
+      configurator:
+        condition: service_completed_successfully
+      tracer-sidecar:
+        condition: service_started
       amaru-consumer-seed:
         condition: service_completed_successfully
       amaru-relay-1:
