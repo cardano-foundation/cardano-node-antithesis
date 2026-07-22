@@ -51,8 +51,8 @@ x-amaru: &amaru
     # Antithesis log ingestion is intentionally narrow: keep Amaru below
     # warning/error quiet by default. Upstream Amaru uses AMARU_LOG rather
     # than RUST_LOG for its tracing EnvFilter.
-    AMARU_LOG: warn
-    AMARU_TRACE: warn
+    AMARU_LOG: info
+    AMARU_TRACE: info
     AMARU_COLOR: never
   restart: always
   depends_on:
