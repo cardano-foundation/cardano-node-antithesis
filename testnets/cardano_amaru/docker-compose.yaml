@@ -281,9 +281,9 @@ services:
         fi
         mkdir -p /startup
         printf '%s\n' "$${HOSTNAME:-amaru-relay-1.example}" > /startup/amaru-relay-1.started
-        export AMARU_GLOBAL_CONSENSUS_SECURITY_PARAM=5
+        export AMARU_GLOBAL_CONSENSUS_SECURITY_PARAM=20
         export AMARU_GLOBAL_ACTIVE_SLOT_COEFF_INVERSE=5
-        export AMARU_GLOBAL_EPOCH_LENGTH_SCALE_FACTOR=5
+        export AMARU_GLOBAL_EPOCH_LENGTH_SCALE_FACTOR=4
         export AMARU_GLOBAL_MAX_LOVELACE_SUPPLY=45000000000000000
         export AMARU_GLOBAL_SLOTS_PER_KES_PERIOD=129600
         export AMARU_GLOBAL_MAX_KES_EVOLUTION=62
@@ -329,9 +329,9 @@ services:
         fi
         mkdir -p /startup
         printf '%s\n' "$${HOSTNAME:-amaru-relay-2.example}" > /startup/amaru-relay-2.started
-        export AMARU_GLOBAL_CONSENSUS_SECURITY_PARAM=5
+        export AMARU_GLOBAL_CONSENSUS_SECURITY_PARAM=20
         export AMARU_GLOBAL_ACTIVE_SLOT_COEFF_INVERSE=5
-        export AMARU_GLOBAL_EPOCH_LENGTH_SCALE_FACTOR=5
+        export AMARU_GLOBAL_EPOCH_LENGTH_SCALE_FACTOR=4
         export AMARU_GLOBAL_MAX_LOVELACE_SUPPLY=45000000000000000
         export AMARU_GLOBAL_SLOTS_PER_KES_PERIOD=129600
         export AMARU_GLOBAL_MAX_KES_EVOLUTION=62
