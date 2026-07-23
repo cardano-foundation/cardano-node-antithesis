@@ -88,6 +88,17 @@ spec = do
                             ]
             outputs `shouldSatisfy` any (assertionHit convergencePropertyName)
 
+        it "hits when the consumer advances to an Amaru producer tip" $ do
+            let outputs =
+                    sdkAssertions
+                        $ runSynthetic
+                            (mkSpec 1 (Just "amaru-consumer.example"))
+                            [ addedToCurrentChain "amaru-consumer.example" 10 "seed"
+                            , addedToCurrentChain "amaru-relay-1.example" 11 "producer-tip"
+                            , addedToCurrentChain "amaru-consumer.example" 11 "producer-tip"
+                            ]
+            outputs `shouldSatisfy` any (assertionHit convergencePropertyName)
+
         it "is declared but not hit when the consumer stays at its first tip" $ do
             let outputs =
                     sdkAssertions

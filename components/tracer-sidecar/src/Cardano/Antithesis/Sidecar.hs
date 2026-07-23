@@ -449,11 +449,14 @@ updateAmaruConsumerConvergence nPools consumerHost s LogMessage{host, details} =
 
 isProducerHost :: Int -> Text -> Bool
 isProducerHost nPools host =
-    hostStem host
-        `Set.member` Set.fromList
-            [ "p" <> T.pack (show i)
-            | i <- [1 :: Int .. nPools]
-            ]
+    let stem = hostStem host
+    in  stem
+            `Set.member` Set.fromList
+                ( [ "p" <> T.pack (show i) | i <- [1 :: Int .. nPools] ]
+                    ++ [ "relay" <> T.pack (show i) | i <- [1 :: Int .. nPools] ]
+                    ++ [ "amaru-relay-" <> T.pack (show i) | i <- [1 :: Int .. nPools] ]
+                    ++ [ "bootstrap-producer" ]
+                )
 
 sameHost :: Text -> Text -> Bool
 sameHost configured observed =

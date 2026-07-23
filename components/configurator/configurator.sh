@@ -175,3 +175,17 @@ for pool in $pools; do
   config_topology_json "$pool_ix" "$number_of_pools"
   set_start_time "$pool"
 done
+
+# Write roles.json manifest for tracer-sidecar & assertion probes
+echo "generating /configs/roles.json manifest..."
+cat <<EOF > /configs/roles.json
+{
+  "producers": [
+    "p1", "p2", "p3", "p4", "p5",
+    "relay1", "relay2", "relay3",
+    "amaru-relay-1", "amaru-relay-2", "amaru-relay-3",
+    "bootstrap-producer"
+  ],
+  "consumer": "amaru-consumer"
+}
+EOF
