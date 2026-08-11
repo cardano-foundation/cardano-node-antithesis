@@ -1,6 +1,6 @@
 # M2 — Amaru tested routinely under fault injection
 
-State — Updated: 2026-08-08
+State — Updated: 2026-08-11
 Legend: ✅ done · 🟡 active/next · ⏳ queued · ⛔ blocked · ❓ unknown
 
 ```mermaid
@@ -18,4 +18,4 @@ flowchart LR
 
 🟡 Next action (operator): Q-003 — dedicated least-privilege GitHub App on lambdasistemi/amaru-bootstrap; DAILY_AMARU_APP_ID + DAILY_AMARU_APP_PRIVATE_KEY into cna. Everything queued unblocks from it.
 
-Notes: daily fires 08-06/07/08 red as DECLARED (controller defect + missing App identity); zero real Antithesis runs consumed; receipts correctly ABSENCE-RED. Machine-wide pause since 2026-08-08 20:55Z; chain parked; resume order A-003 → cna#213 → ab#75 → cadence ticket.
+Notes: daily fires 08-06 through 08-11 all red as DECLARED (controller defect + missing App identity; Q-003 operator App decision open 8 days); zero real Antithesis runs consumed; receipts correctly ABSENCE-RED. Host CI had a 14h runner outage 08-10/11 (restored). Machine-wide pause since 2026-08-11 18:35Z; chain parked; resume order A-003 → cna#213 → ab#75 → cadence ticket.
