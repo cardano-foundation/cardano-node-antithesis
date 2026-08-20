@@ -2,7 +2,7 @@
 Home: cardano-foundation/cardano-node-antithesis milestone #2 · ledger: `milestones` branch, depth 1.
 Desk: tmux `amaru` win `ms2-amaru-routine` (amaru:1, %4914) · runtime /tmp/ms-cardano-node-antithesis-2/.
 Standing directives (operator): NO EXTERNAL PUBLISHING by agents — ever (2026-08-06; see registry external-publication-boundary; operator owns all human relations; upstream replies operator-only); seat contract 87eade1 (Claude T.O. → Codex commit owner → Claude auditor; agy/qwen draft-only); no AI attribution; worktrees under /code.
-Provider directive (operator 2026-08-19, supersedes 2+2 norm): MINIMIZE GPT/Codex — default seats Claude T.O. → Grok commit owner → Claude auditor; codex only when claude AND grok unavailable, reported before spawning; epic owner reseated to Claude at post-merge restpoint. qwen draft-only; agy revoked.
+Provider directive (operator 2026-08-20, supersedes all prior): CODEX-FIRST — Claude is the low provider. Seats: Codex T.O. → Grok commit owner → Codex auditor preferred; Claude only as recorded exception; existing Claude seats reseat to Codex at natural restpoints. qwen draft-only; agy revoked.
 Doctrine: desk = ask/answer/sweep; merges AUTHORIZED, executed by owning lane; verticalize doctrine (operator 2026-07-31): walking skeleton first, ≤1-day trunk slices, expendable-now OK, invisible-now NOT.
 OPERATOR GOAL (2026-08-19, standing): amaru daily runs on Antithesis RELIABLY — no infra bugs from us, bootstrap included. Sequencing: PR#221/#222 merged ✓ (day-propagation fix) → epic reseat to Claude ✓ → t75 resume (claude/grok) → #212 → #208 → #207 → #206 → consecutive clean fires.
 
