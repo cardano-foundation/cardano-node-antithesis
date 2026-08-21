@@ -26,7 +26,15 @@ The first streak-eligible 2026-08-21 run was red, so the frozen seven-day test
 cannot finish before the current `2026-08-28T00:00:00Z` due date. Preserve the
 acceptance test and reforecast the date; never waive the streak.
 
-## State — 2026-08-21 13:40Z
+## State — 2026-08-21 14:29Z
+
+**PARK ORDER RECEIVED from the operator at 14:29:22Z.** The public state page
+has been refreshed before worker shutdown, as required. The milestone owner is
+now relaying one durable pause through the cna#205 epic owner and will not log
+`PARKED` until that owner confirms its whole subtree parked. Already-started
+GitHub Actions are intentionally left running; agents must not merge, dispatch
+the exact fixture, fire production, or start new work while paused. Release
+requires an explicit operator resume.
 
 Controller fire-4, run
 [32470212421](https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/32470212421),
@@ -38,25 +46,26 @@ it read the candidate Build check only three seconds after push and treated
 packaging gap: upstream Amaru now requires git build metadata unavailable in a
 Nix-fetched tree. No image handoff or Antithesis launch occurred.
 
-The fire gate now has two remaining active fixes:
+The fire gate has two remaining fixes, both parked at hosted boundaries:
 
-- cna#229 plus governed recut cna#231 share draft PR#230. #231 closed PASS at
-  accepted candidate `63bdc61`; exact final `2859302` is candidate plus task
-  stamp and was pushed with its complete receipt chain. Hosted run 32487469955
-  then failed deterministically in `check-shell` on the new observation
-  fixture. No rerun or merge is allowed. A distinct bounded forward-correction
-  campaign is active at submission 1/2 on base `2859302`, with a one-file
-  ShellCheck RED→GREEN contract and unchanged focused behavior.
+- cna#229 plus governed recut cna#231 share draft PR#230. The governed
+  forward correction passed independent audit and exact head `a76330b` was
+  pushed without rewriting the known-red history. Fresh hosted evidence is
+  green on Daily Amaru dry-run, Build, unit, quality, docs, preview, and image
+  publication; Compose smoke is the sole context still running. The PR is
+  unmerged.
 - Amaru-bootstrap#88/PR#89 and #91/PR#92 are merged as `80b71cc` and `8e17e68`.
   #91 proved the tar.zst adaptation at its named boundary, then the unchanged
   PR#90-shape fixture, closed PR#93 head `b52ca563`, failed one layer later:
   upstream `amaru bootstrap` at `ba992f65` refuses custom networks before
   discovering the local archive. Issue #94 proved there is no stock in-repo
   route and closed packet-delivered. Desk ruling A-EPIC-003 authorized one
-  explicit SHA-bound repository-versioned build-time patch. Issue #95 has
-  frozen placement and mandate, opened draft PR#96 at planning head `5dd7c8f`,
-  and STARTED its Grok commit owner. Its latest reliance declaration has seven
-  rows (enforced 0, none 3, partial 4); no implementation candidate is claimed.
+  explicit SHA-bound repository-versioned build-time patch. Issue #95's final
+  independent repair audit passed all eight blocking rows with no residuals.
+  The accepted tree plus task stamp was squashed to exact head `fd6b100` and
+  pushed to draft PR#96. Documentation deploy is green and Build Gate is
+  running; hosted live proof and closed PR#93's byte-unchanged fixture remain
+  required before merge.
 
 The t75/amaru-bootstrap#75+#79 handoff repair has crossed its slice terminal.
 Its independent repair-delta audit passed all 5 rows at set-point, final
@@ -78,6 +87,9 @@ corrected to `Closes #95` before any PR existed.
 
 ## Priority and convergence
 
+0. While parked, perform no merge, new dispatch, fixture run, or production
+   fire. On explicit operator resume, first reconcile any GitHub Actions that
+   completed while agents were stopped.
 1. Accept and merge cna#229+#231 on PR#230 and amaru-bootstrap#95, the latter
    only with closed PR#93's exact PR#90-shape fixture green and unweakened.
    Amaru-bootstrap#88 and #91 are already merged.
@@ -94,10 +106,10 @@ corrected to `Closes #95` before any PR existed.
 
 | window / panes | owner | milestone-visible state |
 |---|---|---|
-| `amaru:4 cna-e205-reliable-daily` `%5195` | cna#205 epic owner, Claude Fable; runtime `/tmp/ms-cardano-node-antithesis-2/e-auto/` | ACTIVE: one rotating owner-level wait; remaining fire-gate fixes are #229+#231 and #95 |
-| `amaru:5 amaru-bootstrap-e205-t75-daily-handoff` `%6759` | epic-owned t75 ticket lane | ACTIVE: slice 4 accepted/pushed/hosted-green; ab#79 remainder underway, live-PR phase held for #95 merge |
-| `amaru:7 cardano-node-antithesis-e205-t229-check-wait` `%7073`, `%7108` | epic-owned #229+#231 lane | ACTIVE: #231 PASS/pushed, hosted ShellCheck red; bounded forward-correction submission 1/2 |
-| `amaru:2 amaru-bootstrap-e205-t95-carried-patch` `%7104`, `%7106` | epic-owned #95 lane | ACTIVE: placement/mandate frozen, draft PR#96 planning head `5dd7c8f`; Grok commit owner started |
+| `amaru:4 cna-e205-reliable-daily` `%5195` | cna#205 epic owner, Claude Fable; runtime `/tmp/ms-cardano-node-antithesis-2/e-auto/` | PARK REQUESTED: must park its whole subtree and acknowledge |
+| `amaru:5 amaru-bootstrap-e205-t75-daily-handoff` `%6759` | epic-owned t75 ticket lane | PARK REQUESTED: slice 4 remains accepted/pushed/hosted-green; ab#79 remainder stops at its durable boundary |
+| `amaru:7 cardano-node-antithesis-e205-t229-check-wait` `%7073` | epic-owned #229+#231 lane | PARK REQUESTED: PR#230 exact head `a76330b`; Compose smoke may finish externally, no merge |
+| `amaru:2 amaru-bootstrap-e205-t95-carried-patch` `%7104` | epic-owned #95 lane | PARK REQUESTED: PR#96 exact head `fd6b100`; Build Gate may finish externally, no fixture dispatch or merge |
 | `amaru:3 amaru-bootstrap-e205-t94-era-history` `%7102` | terminal #94 placement lane | COMPLETE packet-delivered; issue closed, local operator packet preserved, no upstream publication |
 
 ## Completed path and queue
