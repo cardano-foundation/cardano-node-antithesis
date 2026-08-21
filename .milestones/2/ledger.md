@@ -6,7 +6,7 @@ Provider directive (operator 2026-08-20, supersedes all prior): CODEX-FIRST — 
 Doctrine: desk = ask/answer/sweep; merges AUTHORIZED, executed by owning lane; verticalize doctrine (operator 2026-07-31): walking skeleton first, ≤1-day trunk slices, expendable-now OK, invisible-now NOT.
 OPERATOR GOAL (2026-08-19, standing): amaru daily runs on Antithesis RELIABLY — no infra bugs from us, bootstrap included. Sequencing: PR#221/#222 merged ✓ (day-propagation fix) → epic reseat to Claude ✓ → t75 resume (claude/grok) → #212 → #208 → #207 → #206 → consecutive clean fires.
 
-## STATE 2026-08-20 EOD: fix→fire compression day complete. Merged: cna#225/PR#226 (candidate-sha + env defects, 4 slices, 5 follow-ups named, desk-capped at gate v7) and ab#84/PR#85 (Rust-nightly toolchain drift — real interface-coverage gap found by fire-2). Fire-2 progress: App opened real ab bump PRs (#82/#83); died at bootstrap-checks (toolchain, now fixed). Cap able-to-refuse PROVEN (blocked same-head re-fire; follow-up CNA205-SUPERSEDE-CONSTITUENT-01 registered, desk-gated). NEXT: 08-21 04:17Z scheduled fire = end-to-end verification, first streak-eligible attempt; epic watch armed (05:13Z one-shot, absence=RED). Overnight: subtree idles at rest points. Seats codex-first per operator; t75 hardening continues on PR#76. Prior state below:
+## STATE 2026-08-21 06:13Z: first streak-eligible fire RED, honestly. Scheduled run 32447033481 opened real ab PR#86 for Amaru 8fdca45b and reached bootstrap checks, proving yesterday's candidate-sha/env and Rust-nightly fixes live. The Build Gate then stopped on `peer-snapshot-anchor-negative-control`: the unmutated anchored record was already RED because the unattended pin-only proposal changed `flake.lock` without atomically refreshing `nix/peer-snapshots/resolution.json`, the selected cardano-configurations revision, and snapshot bytes. No image handoff or Antithesis launch occurred; streak remains 0/7. This is a new cross-boundary automation contract, not a reason to weaken the working alarm. NEXT: epic owner receives NOTE-036 only after the 09:00Z Claude eligibility recheck and selects a bounded fix lane; peer-snapshot atomic bump integration precedes t75/#212/#208/#207/#206. The 2026-08-28 due date is now unreachable under the frozen seven-day test; desk recommendation is to preserve acceptance and reforecast. Prior state below:
 - t210 (skeleton): draft PR#211 head d624dae CLEAN — owner acceptance + task
   stamps DONE, epic independent gate PASS (22 focused; immutable daily-amaru-v1,
   19 tests, 0 real launches; #202 census + #196 live-boundary included);
@@ -27,18 +27,22 @@ run = loud red; reds filed upstream ≤24h (desk-assisted); declared reds never
 suppressed. COMPLETE after 7-day unattended streak, by outcome audit.
 Frozen in milestone #2 description. Typed-answer channel rule in force.
 
-## CLAUDE-HOLD — still IN FORCE for session amaru
-No Claude workers; release only via RELEASE file in /tmp/machine/pausa/.
+## Time-bounded Claude hold — IN FORCE through 2026-08-21T09:00:00Z
+Machine order POINTER-1787292477-3581374 preserves Claude panes %5195 and
+%6759 untouched through 10:00 BST. Mechanical audit found no Amaru-owned
+scheduled/background wake source, so none required disarming. At the boundary
+Claude is only eligible for reconsideration after provider, resource and role
+gates; it does not start automatically. The Codex milestone desk alone is
+active on the scheduled-fire sweep. No cold-build authority was used.
 
-## Live lanes (paused)
+## Live lanes
 | window | owner | state |
 |---|---|---|
-| amaru:2 cna-e205-t210-daily-skeleton (%5195) | E-A epic owner e-auto, codex-raw xhigh, root /tmp/ms-cardano-node-antithesis-2/e-auto/ | epic cna#205; paused post-acceptance of t210 gate; resume fragment resume/e205.md |
-| amaru:3 cna-e205-t210-skeleton-owner (3 panes: owner %5231, codex driver %5243, qwen navigator %5239) | epic-managed t210 | paused; PR#211 awaiting Compose smoke verdict |
-| (t75 seats released) | — | parked at a2edaa3 until skeleton lands |
+| amaru:2 cna-e205-reliable-daily (%5195) | cna#205 epic owner, Claude Fable, root /tmp/ms-cardano-node-antithesis-2/e-auto/ | HELD untouched until 09:00Z; NOTE-036 pending acknowledged delivery; last durable state rests after ab#85 merge |
+| amaru:3 amaru-bootstrap-e205-t75-daily-handoff (%6759, %6894) | t75 ticket owner Claude + slice-4 Codex commit owner | both preserved; Claude owner held, Codex candidate parked awaiting a fresh independent auditor and an admitted cold gate; `/nix/store` available 58.74GB vs 66.57GB one-lane bar |
 
 ## Epic cna#205 (verticalized order, operator-ruled)
-✅ 196 entrypoint → 🟡 210 walking skeleton (PR#211) → hardening: 75 → 208 → 207 remainder → 206.
+✅ entrypoint + walking skeleton + identity/evaluability/cap/transport fixes → ⛔ peer-snapshot atomic bump integration → 🟡 75/79 handoff hardening → 212 → 208 → 207 remainder → 206.
 Registry flips pending merged seeded-RED evidence per child.
 
 ## Contracts — see registry.md. Platform trunk gate ENFORCED (ruleset
@@ -47,7 +51,7 @@ live merge). #207 platform precondition MET.
 
 ## Queue / parked
 - QUEUED at release (operator ruling 2026-08-03): standalone ticket — cardano-node Antithesis schedule 4x/day → 1x/day (cron 5 1 * * *); ask drafted at /tmp/ms-cardano-node-antithesis-2/queued-ask-cardano-node-cadence.md; saves ~3 Antithesis hours/day; outside epic #205.
-- DISPATCHED 2026-08-06 (scoped operator override of OMNIA-PAUSA, on record in pausa trail): t-snap peer-snapshot fidelity lane — Claude T.O. %5665, Codex commit owner, Claude auditor; INTERNAL ONLY (no-external-publishing clause verbatim in brief); derives timestamp→rev rule from pinned amaru source, real pinned cardano-configurations contents replace empty placeholders; START pending verification.
+- DONE 2026-08-07: t-snap peer-snapshot fidelity landed in ab#77/PR#78. Its positive anchor and negative controls worked in production on 2026-08-21; the newly exposed gap is that the unattended bump path does not yet refresh the anchored bundle atomically.
 - Operator-parked: llm-settings PR #53 review; host GPG unlock.
 - Remnants after loop: cna#140, ab#36, ab#16; ⛔ ab#54 (lambdasistemi/amaru#9).
 - WATCH pragma-org/amaru#1104.
