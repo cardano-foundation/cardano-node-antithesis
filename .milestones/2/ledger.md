@@ -1,12 +1,12 @@
 # Milestone 2 — Amaru tested routinely under fault injection
 Home: cardano-foundation/cardano-node-antithesis milestone #2 · ledger: `milestones` branch, depth 1.
-Desk: tmux `amaru` win `ms2-amaru-routine` (amaru:1, %4914) · runtime /tmp/ms-cardano-node-antithesis-2/.
+Desk: tmux `amaru` win `ms2-amaru-routine` (amaru:1, %6722) · runtime /tmp/ms-cardano-node-antithesis-2/.
 Standing directives (operator): NO EXTERNAL PUBLISHING by agents — ever (2026-08-06; see registry external-publication-boundary; operator owns all human relations; upstream replies operator-only); seat contract 87eade1 (Claude T.O. → Codex commit owner → Claude auditor; agy/qwen draft-only); no AI attribution; worktrees under /code.
-Provider directive (operator 2026-08-20, supersedes all prior): CODEX-FIRST — Claude is the low provider. Seats: Codex T.O. → Grok commit owner → Codex auditor preferred; Claude only as recorded exception; existing Claude seats reseat to Codex at natural restpoints. qwen draft-only; agy revoked.
+Provider ruling (operator 2026-08-21): the Amaru Claude hold and temporary non-Claude preference are released; matching preserved Claude ownership resumes at safe boundaries without resetting either provider context. Standing alternation, secrets, and seat-role fences remain; qwen is draft-only and agy is revoked.
 Doctrine: desk = ask/answer/sweep; merges AUTHORIZED, executed by owning lane; verticalize doctrine (operator 2026-07-31): walking skeleton first, ≤1-day trunk slices, expendable-now OK, invisible-now NOT.
 OPERATOR GOAL (2026-08-19, standing): amaru daily runs on Antithesis RELIABLY — no infra bugs from us, bootstrap included. Sequencing: PR#221/#222 merged ✓ (day-propagation fix) → epic reseat to Claude ✓ → t75 resume (claude/grok) → #212 → #208 → #207 → #206 → consecutive clean fires.
 
-## STATE 2026-08-21 06:13Z: first streak-eligible fire RED, honestly. Scheduled run 32447033481 opened real ab PR#86 for Amaru 8fdca45b and reached bootstrap checks, proving yesterday's candidate-sha/env and Rust-nightly fixes live. The Build Gate then stopped on `peer-snapshot-anchor-negative-control`: the unmutated anchored record was already RED because the unattended pin-only proposal changed `flake.lock` without atomically refreshing `nix/peer-snapshots/resolution.json`, the selected cardano-configurations revision, and snapshot bytes. No image handoff or Antithesis launch occurred; streak remains 0/7. This is a new cross-boundary automation contract, not a reason to weaken the working alarm. NEXT: epic owner receives NOTE-036 only after the 09:00Z Claude eligibility recheck and selects a bounded fix lane; peer-snapshot atomic bump integration precedes t75/#212/#208/#207/#206. The 2026-08-28 due date is now unreachable under the frozen seven-day test; desk recommendation is to preserve acceptance and reforecast. Prior state below:
+## STATE 2026-08-21 08:24Z: provider hold released and Claude epic ownership resumed. Scheduled run 32447033481 opened real ab PR#86 for Amaru 8fdca45b and reached bootstrap checks, proving yesterday's candidate-sha/env and Rust-nightly fixes live. The Build Gate then stopped on `peer-snapshot-anchor-negative-control`: the unmutated anchored record was already RED because the unattended pin-only proposal changed `flake.lock` without atomically refreshing `nix/peer-snapshots/resolution.json`, the selected cardano-configurations revision, and snapshot bytes. No image handoff or Antithesis launch occurred; streak remains 0/7. The preserved cna#205 Claude owner %5195 acknowledged NOTE-037, absorbed NOTE-036, independently cross-checked the fire, and filed cna#227 as the bounded atomic-bump fix: run amaru-bootstrap's shipped resolver in the controller bump job and commit both pins plus regenerated record atomically, preserving the anchor and its controls. All cold-build and issue-75 interlocks remain. The 2026-08-28 due date is now unreachable under the frozen seven-day test; desk recommendation is to preserve acceptance and reforecast. Prior state below:
 - t210 (skeleton): draft PR#211 head d624dae CLEAN — owner acceptance + task
   stamps DONE, epic independent gate PASS (22 focused; immutable daily-amaru-v1,
   19 tests, 0 real launches; #202 census + #196 live-boundary included);
@@ -27,19 +27,20 @@ run = loud red; reds filed upstream ≤24h (desk-assisted); declared reds never
 suppressed. COMPLETE after 7-day unattended streak, by outcome audit.
 Frozen in milestone #2 description. Typed-answer channel rule in force.
 
-## Time-bounded Claude hold — IN FORCE through 2026-08-21T09:00:00Z
-Machine order POINTER-1787292477-3581374 preserves Claude panes %5195 and
-%6759 untouched through 10:00 BST. Mechanical audit found no Amaru-owned
-scheduled/background wake source, so none required disarming. At the boundary
-Claude is only eligible for reconsideration after provider, resource and role
-gates; it does not start automatically. The Codex milestone desk alone is
-active on the scheduled-fire sweep. No cold-build authority was used.
+## Claude release — APPLIED 2026-08-21T08:23:35Z
+Operator-authorized machine release
+`43c9a7565c9cda0690f4a8c605e626710311fc8bde02df68fadcc2e943ee1dea`
+superseded the time boundary and temporary non-Claude preference. The matching
+preserved cna#205 epic owner in %5195 acknowledged NOTE-037 and absorbed
+NOTE-036 without a context reset. The Codex milestone context %6722 remains
+preserved. No cold-build authority was granted or used.
 
 ## Live lanes
 | window | owner | state |
 |---|---|---|
-| amaru:2 cna-e205-reliable-daily (%5195) | cna#205 epic owner, Claude Fable, root /tmp/ms-cardano-node-antithesis-2/e-auto/ | HELD untouched until 09:00Z; NOTE-036 pending acknowledged delivery; last durable state rests after ab#85 merge |
-| amaru:3 amaru-bootstrap-e205-t75-daily-handoff (%6759, %6894) | t75 ticket owner Claude + slice-4 Codex commit owner | both preserved; Claude owner held, Codex candidate parked awaiting a fresh independent auditor and an admitted cold gate; `/nix/store` available 58.74GB vs 66.57GB one-lane bar |
+| amaru:2 cna-e205-reliable-daily (%5195) | cna#205 epic owner, Claude Fable, root /tmp/ms-cardano-node-antithesis-2/e-auto/ | ACTIVE: NOTE-037 acknowledged, NOTE-036 absorbed, fire evidence rederived; cna#227 filed for atomic bump |
+| amaru:3 amaru-bootstrap-e205-t75-daily-handoff (%6759, %6894) | t75 ticket owner Claude + slice-4 Codex commit owner | untouched by the release; Codex candidate parked awaiting a fresh independent auditor and an admitted cold gate; `/nix/store` available 58.62GB vs 66.57GB one-lane bar |
+| amaru:4 cardano-node-antithesis-e205-t227-atomic-bump (%7060) | cna#227 ticket owner, Codex, root /tmp/ms-cardano-node-antithesis-2/e-auto/t227-codex-to-01/ | ACTIVE: brief absorbed at 08:27:08Z; bounded iteration-3 fix; cold realization forbidden |
 
 ## Epic cna#205 (verticalized order, operator-ruled)
 ✅ entrypoint + walking skeleton + identity/evaluability/cap/transport fixes → ⛔ peer-snapshot atomic bump integration → 🟡 75/79 handoff hardening → 212 → 208 → 207 remainder → 206.

@@ -6,10 +6,10 @@ Legend: ✅ done · 🟡 active/next · ⏳ queued · ⛔ blocked · ❓ unknown
 ```mermaid
 flowchart LR
     fixes["✅ controller repair ladder + Rust toolchain fix merged"] --> fire["⛔ 08-21 scheduled fire: peer-snapshot anchor caught an incomplete bump"]
-    fire --> snap["🟡 atomically refresh Amaru pin + resolution record + configs pin + snapshot bytes"]
+    fire --> snap["🟡 cna#227: atomically refresh Amaru pin + resolution record + configs pin + snapshot bytes"]
     snap --> launch["⏳ first full image handoff and one-hour Antithesis launch"] --> streak["⏳ seven consecutive unattended days: 0/7"] --> audit["⏳ outcome audit"]
     t75["🟡 ab#75/#79 handoff hardening on PR#76"] --> e212["⏳ deterministic compose checks"] --> e208["⏳ exact interface preflight"] --> e207["⏳ guarded repin/launch"] --> e206["⏳ honest receipts + external watchdog"]
-    hold["⛔ Claude panes held until 09:00Z; Codex desk only"] -.-> snap
+    release["✅ Claude hold released; matching epic owner resumed"] --> snap
     unknown["❓ production layers beyond peer-snapshot validation remain unprobed"] -.-> launch
 ```
 
@@ -20,6 +20,14 @@ the committed peer-snapshot resolution record still named the old Amaru and
 cardano-configurations revisions. The existing positive anchor and negative
 control are working; the missing mechanism is atomic refresh of that complete
 bundle during the unattended bump.
+
+At 08:23Z the preserved Claude epic owner in pane `%5195` acknowledged the
+operator-authorized release, absorbed NOTE-036, rederived the fire evidence,
+and resumed owner-level routing of that fix. It filed cna#227 with an acceptance
+mechanism that runs amaru-bootstrap's shipped resolver in the controller bump
+job, commits both pins and the regenerated record atomically, and leaves the
+anchor plus its negative controls intact. The Codex desk context remains
+preserved; the issue-75 lane is untouched; `cold_build_authority=NONE`.
 
 No image handoff or Antithesis launch occurred. The streak remains 0/7. Because
 the first streak-eligible attempt was red, the frozen seven-day acceptance test
