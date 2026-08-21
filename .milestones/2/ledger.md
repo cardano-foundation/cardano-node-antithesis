@@ -26,7 +26,7 @@ The first streak-eligible 2026-08-21 run was red, so the frozen seven-day test
 cannot finish before the current `2026-08-28T00:00:00Z` due date. Preserve the
 acceptance test and reforecast the date; never waive the streak.
 
-## State — 2026-08-21 12:44Z
+## State — 2026-08-21 13:20Z
 
 Controller fire-4, run
 [32470212421](https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/32470212421),
@@ -40,47 +40,48 @@ Nix-fetched tree. No image handoff or Antithesis launch occurred.
 
 The fire gate now has two remaining active fixes:
 
-- cna#229 plus governed recut cna#231 share draft PR#230. The first campaign
-  found three blocking rows; the repair's final audit found one false-receipt
-  fault-labeling row, so the epic owner refused ship-with-residual and recut it
-  under #231. Submission 1 is now under independent audit on local candidate
-  `7516653`; PR#230's current dry-run red remains an intermediate campaign
-  state, not acceptance. Three same-seat transport restarts are recorded for
-  review by the ticket owner at the slice boundary.
-- amaru-bootstrap#88/PR#89 is accepted and merged as `80b71cc` (accepted head
-  `c596d2a`), satisfying gate condition 2 with all 3 hosted checks green. Its
-  exact candidate fixture proved the git-info bridge and exposed the next
-  interface: upstream now emits tar.zst snapshot archives rather than the
-  directories the producer counts. Amaru-bootstrap#91's submission-1 audit
-  passed 6/6 rows with zero builds on `c85b2b3`; final commit `3c63faa` is now
-  under an independent finalization-delta audit. Draft PR#92 still points at
-  its planning head, so no hosted candidate or green PR#90 fixture is claimed.
+- cna#229 plus governed recut cna#231 share draft PR#230. Submission 1 found
+  one blocking `INV-231-2` row; its final repair is candidate `63bdc61`, under
+  the submission-2/2 independent audit since 13:07Z. The fresh mutation
+  campaign is green at its declared set point, but the formal audit verdict,
+  accepted push, hosted checks, and merge are not yet claimed.
+- Amaru-bootstrap#88/PR#89 and #91/PR#92 are merged as `80b71cc` and `8e17e68`.
+  #91 proved the tar.zst adaptation at its named boundary, then the unchanged
+  PR#90-shape fixture, closed PR#93 head `b52ca563`, failed one layer later:
+  upstream `amaru bootstrap` at `ba992f65` refuses custom networks before
+  discovering the local archive. Issue #94 proved there is no stock in-repo
+  route and closed packet-delivered. Desk ruling A-EPIC-003 authorized one
+  explicit SHA-bound repository-versioned build-time patch; implementation
+  issue #95 is STARTED on base `8e17e68`, with no PR or later phase yet.
 
 The t75/amaru-bootstrap#75+#79 handoff repair has crossed its slice terminal.
 Its independent repair-delta audit passed all 5 rows at set-point, final
 `b7d835a` was proven to equal the audited candidate plus only its task stamp,
 and PR#76 is pushed with every current hosted context green. The epic owner
 accepted slice 4 and routed the lane into ab#79's remainder; only the live-PR
-phase is held until #91 merges because its proposal cannot pass the required
-bootstrap checks before that fix. Fresh store capacity at 12:35Z was
+phase is held until #95 merges and the exact fixture is green. Fresh store
+capacity at 12:35Z was
 59,570,909,184 bytes (55.48 GiB), still above the 54 GiB one-lane bar.
 
 Two unexplained tokenless composer texts were destroyed without execution
 during an input-integrity recovery: the epic-pane text was cleared before a
 safe durable pointer was delivered, and the wedged t75 client was restarted
 with conversation continuity. The epic owner now keeps one rotating
-owner-level wait instead of indefinite background monitor shells.
+owner-level wait instead of indefinite background monitor shells. A later
+#95 START-delivery race was corrected append-only: the first durable START was
+13:12:51Z; a second START was redundant, and a `Closes #94` brief typo was
+corrected to `Closes #95` before any PR existed.
 
 ## Priority and convergence
 
-1. Accept and merge cna#229+#231 on PR#230 and amaru-bootstrap#91, the latter
-   only with PR#90's exact candidate fixture green and unweakened. The third
-   gate condition, amaru-bootstrap#88, is already merged.
+1. Accept and merge cna#229+#231 on PR#230 and amaru-bootstrap#95, the latter
+   only with closed PR#93's exact PR#90-shape fixture green and unweakened.
+   Amaru-bootstrap#88 and #91 are already merged.
 2. Execute the next lawful production fire only after both remaining fixes are
    merged; report its real terminal, not merely green PRs. A real launch ends
    the UTC day's firing.
 3. In parallel, continue ab#79's remaining work while holding its live-PR phase
-   for #91's merge. Then finish cna#212, #208, #207 remainder, and #206 in that
+   for #95's merge. Then finish cna#212, #208, #207 remainder, and #206 in that
    order unless a new live fire exposes an earlier our-side blocker.
 4. Accumulate seven consecutive unattended days and audit the outcomes against
    the published artifact.
@@ -89,10 +90,11 @@ owner-level wait instead of indefinite background monitor shells.
 
 | window / panes | owner | milestone-visible state |
 |---|---|---|
-| `amaru:2 cna-e205-reliable-daily` `%5195` | cna#205 epic owner, Claude Fable; runtime `/tmp/ms-cardano-node-antithesis-2/e-auto/` | ACTIVE: one rotating owner-level wait; remaining fire-gate fixes are #229+#231 and #91 |
-| `amaru:3 amaru-bootstrap-e205-t75-daily-handoff` `%6759`, `%6894` | epic-owned t75 ticket lane | ACTIVE: slice 4 accepted/pushed/hosted-green; ab#79 remainder underway, live-PR phase held for #91 merge |
-| `amaru:4 amaru-bootstrap-e205-t91-snapshot-format` `%7089`, `%7100` | epic-owned #91 lane | ACTIVE: implementation audit passed; finalization-delta audit active on `3c63faa`, exact PR#90 fixture still required |
-| `amaru:5 cardano-node-antithesis-e205-t229-check-wait` `%7073`, `%7098` | epic-owned #229+#231 lane | ACTIVE: submission-1 independent audit on `7516653`; transport-choice review due at slice boundary |
+| `amaru:4 cna-e205-reliable-daily` `%5195` | cna#205 epic owner, Claude Fable; runtime `/tmp/ms-cardano-node-antithesis-2/e-auto/` | ACTIVE: one rotating owner-level wait; remaining fire-gate fixes are #229+#231 and #95 |
+| `amaru:5 amaru-bootstrap-e205-t75-daily-handoff` `%6759` | epic-owned t75 ticket lane | ACTIVE: slice 4 accepted/pushed/hosted-green; ab#79 remainder underway, live-PR phase held for #95 merge |
+| `amaru:7 cardano-node-antithesis-e205-t229-check-wait` `%7073`, `%7103` | epic-owned #229+#231 lane | ACTIVE: submission-2/2 final audit on `63bdc61` |
+| `amaru:2 amaru-bootstrap-e205-t95-carried-patch` `%7104` | epic-owned #95 lane | STARTED at 13:12:51Z on `8e17e68`; no later journaled phase or PR yet |
+| `amaru:3 amaru-bootstrap-e205-t94-era-history` `%7102` | terminal #94 placement lane | COMPLETE packet-delivered; issue closed, local operator packet preserved, no upstream publication |
 
 ## Completed path and queue
 
@@ -104,6 +106,9 @@ owner-level wait instead of indefinite background monitor shells.
   cna#227/PR#228 are enforced; see `registry.md`.
 - Deterministic Amaru source identity under Nix is enforced by
   amaru-bootstrap#88/PR#89; the exact candidate fixture proved the bridge.
+- Tar.zst snapshot consumption is enforced by amaru-bootstrap#91/PR#92 at
+  merge `8e17e68`; the fixture's later custom-network refusal is isolated to
+  #94/#95 rather than attributed to #91.
 - T75 slice 4 is accepted on PR#76 at `b7d835a`: 5/5 audit rows killed,
   exact task-stamp tree proof, and all current hosted contexts green.
 - Outside epic #205, the Cardano-node Antithesis schedule reduction to once

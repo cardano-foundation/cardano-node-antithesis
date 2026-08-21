@@ -7,43 +7,45 @@ epic's ticket owners or workers.
 
 Resurrect, do not restart:
 
-1. Read `.milestones/2/ledger.md`, `registry.md`, `state.md`, `session.md`, and
-   `resume/e205.md`. Never touch `.milestones/1/`. The immediate child is the
-   cna#205 epic owner in pane `%5195`, runtime
+1. Read `.milestones/2/ledger.md`, `registry.md`, `state.md`, `session.md`,
+   and `resume/e205.md`. Never touch `.milestones/1/`. The immediate child is
+   the cna#205 epic owner in pane `%5195`, runtime
    `/tmp/ms-cardano-node-antithesis-2/e-auto/`; supervise through its
    append-only STATUS and durable questions/answers only.
 2. Fire-4 run 32470212421 proved cna#227/PR#228's atomic peer-snapshot bundle
    live, then failed honestly before launch at a new check-observation race.
-   The exact candidate also exposed missing deterministic Amaru git metadata
-   under Nix. No image handoff or M2 Antithesis launch has occurred; streak is
-   0/7.
-3. Fire-gate condition 2 is met: amaru-bootstrap#88/PR#89 merged as `80b71cc`.
-   Two fixes remain in parallel. Cna#231 submission-1 audit is active on
-   `7516653` for PR#230. Amaru-bootstrap#91's implementation audit passed on
-   `c85b2b3`, and final `3c63faa` is under finalization-delta audit; it must
-   still turn closed fixture PR#90's exact candidate shape green unweakened.
-   Wait for artifact-bound terminals, independent epic acceptance, guarded
-   merges of both remaining fixes, and only then the next real fire. Green PRs
-   are not the outcome.
-4. T75/ab#75+#79 slice 4 is accepted: the final repair-delta audit passed 5/5
-   rows at set-point, `b7d835a` is the audited candidate plus only its task
-   stamp, and every current hosted PR#76 context is green. The lane is routed
-   to ab#79's remainder, with its live-PR phase held for #91's merge. Fresh
-   store capacity at 12:35Z was 59,570,909,184 bytes (55.48 GiB), above the
-   54 GiB bar. Re-enter the machine stop below 50 GiB; infer no extra build
-   authority.
-5. After a real full-path launch, continue the validated-handoff arc, cna#212,
+   No image handoff or M2 Antithesis launch has occurred; streak is 0/7.
+3. Merged fire-gate layers are amaru-bootstrap#88/PR#89 at `80b71cc` and
+   #91/PR#92 at `8e17e68`. Closed fixture PR#93 head `b52ca563` proved #91's
+   tar.zst fix, then exposed the distinct custom-network bootstrap refusal.
+   #94 proved no stock in-repo route and closed packet-delivered; no upstream
+   publication occurred. A-EPIC-003 authorizes one explicit SHA-bound
+   repository-versioned patch with executable retirement, implemented by #95.
+4. Two gate legs remain. Cna#231's final candidate `63bdc61` is under the
+   submission-2/2 independent audit on draft PR#230; its mutation campaign is
+   green but no formal verdict or accepted push is claimed. Amaru-bootstrap#95
+   is STARTED on `8e17e68`, with no PR or later journaled phase in this
+   snapshot. Wait for artifact-bound terminals, independent epic acceptance,
+   guarded merges, and a fully green byte-unchanged PR#93 fixture. Only then
+   allow the next real fire. Green PRs are not the outcome.
+5. T75/ab#75+#79 slice 4 is accepted: the final repair-delta audit passed 5/5,
+   `b7d835a` is the audited candidate plus only its task stamp, and every
+   current PR#76 context is green. The ab#79 remainder continues, while its
+   live-PR phase is held for #95's merge. The latest measured store capacity
+   was 59,570,909,184 bytes (55.48 GiB), above the 54 GiB bar; re-enter the
+   machine stop below 50 GiB and infer no extra build authority.
+6. After a real full-path launch, finish the validated-handoff arc, cna#212,
    #208, #207 remainder, and #206. Completion still requires seven consecutive
-   unattended daily runs and a published-artifact outcome audit. The present
+   unattended daily runs and a published-artifact outcome audit. The
    2026-08-28 due date is unreachable under the frozen test; preserve
    acceptance and recommend reforecasting.
-6. The 2026-08-21 operator release restored the matching preserved Claude
-   epic-owner context without resetting the Codex desk. Two later tokenless
-   composer texts were destroyed unexecuted under the input-integrity rule;
-   owner supervision now uses one rotating foreground wait. Standing provider
-   alternation, secret/identity, merge, cap, and role fences remain. Agy is
-   revoked, qwen is draft-only, and agents never publish to external humans.
-7. Refresh the `milestones` ledger and dated wiki state on every material
+7. Input integrity is append-only and evidence-bound. Two tokenless composer
+   texts were destroyed unexecuted. The #95 dispatch race was corrected:
+   earliest durable START 13:12:51Z, later START redundant; the brief's
+   `Closes #94` typo became `Closes #95` before any PR. One owner-level wait
+   rotates between #231 and #95. Agy is revoked, qwen is draft-only, and agents
+   never publish to external humans.
+8. Refresh the `milestones` ledger and dated wiki state on every material
    transition. Copy child-authored resurrection fragments mechanically; chase
    stale fragments instead of ghost-writing them. Verify signed ledger/wiki
    commits and rendered Mermaid before making completion claims.
