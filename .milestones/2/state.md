@@ -9,12 +9,12 @@ flowchart LR
     ladder["✅ controller repair ladder"] --> atomic["✅ atomic peer-snapshot bump<br/>cna#227 / PR#228"]
     atomic --> fire4["✅ fire-4 reached a later boundary<br/>honest pre-launch red"]
     fire4 --> observe["🟡 cna#229 + #231<br/>bounded check observation + truthful fault labels"]
-    fire4 --> gitinfo["🟡 ab#88<br/>deterministic Amaru git identity under Nix"]
-    observe --> fire5["⏳ all three fixes merged<br/>then next lawful fire"]
-    gitinfo --> snapshot6["🟡 iteration 6<br/>snapshot-create output drift<br/>exact PR#90 fixture"] --> fire5
+    fire4 --> gitinfo["✅ ab#88 / PR#89 merged<br/>deterministic Amaru git identity under Nix"]
+    observe --> fire5["⏳ both remaining fixes merged<br/>then next lawful fire"]
+    gitinfo --> snapshot6["🟡 ab#91<br/>consume tar.zst snapshot archives<br/>exact PR#90 fixture"] --> fire5
     fire5 --> launch["⏳ first full image handoff<br/>and one-hour Antithesis launch"]
     launch --> streak["⏳ seven consecutive unattended days<br/>0/7"] --> audit["⏳ published-artifact outcome audit"]
-    capacity["⛔ t75 realizing proofs<br/>45.96 GiB: machine stop active<br/>wake at fresh ≥54 GiB"] --> t75["⏳ ab#75/#79 validated handoff"]
+    capacity["✅ store admission recovered<br/>realizing gates green; token released"] --> t75["🟡 ab#75/#79<br/>final repair-delta audit"]
     t75 --> hardening["⏳ cna#212 → #208 → #207 remainder → #206"] --> streak
     unknown["❓ production layers beyond bootstrap validation<br/>remain unprobed"] -.-> launch
 ```
@@ -30,32 +30,29 @@ a second our-side packaging gap: Amaru's `build.rs` required git information
 that a Nix-fetched source tree did not supply. No image handoff or Antithesis
 launch occurred.
 
-The next production fire is gated by two parallel hosted-proof campaigns:
+The next production fire is gated by two remaining active campaigns:
 
 - [cna#229](https://github.com/cardano-foundation/cardano-node-antithesis/issues/229)
   plus its governed false-receipt recut
   [cna#231](https://github.com/cardano-foundation/cardano-node-antithesis/issues/231)
   on [PR#230](https://github.com/cardano-foundation/cardano-node-antithesis/pull/230);
-- [amaru-bootstrap#88](https://github.com/lambdasistemi/amaru-bootstrap/issues/88)
-  on stock-proof [PR#89](https://github.com/lambdasistemi/amaru-bootstrap/pull/89)
-  and fire-4-shape fixture
-  [PR#90](https://github.com/lambdasistemi/amaru-bootstrap/pull/90).
+- [amaru-bootstrap#91](https://github.com/lambdasistemi/amaru-bootstrap/issues/91)
+  consumes the upstream tar.zst snapshot archives and must make the exact
+  fire-4-shape fixture
+  [PR#90](https://github.com/lambdasistemi/amaru-bootstrap/pull/90) green.
 
-PR#89 is green in all three hosted contexts. PR#90 proves the git-info fix at
-the exact candidate shape: Amaru built and `amaru snapshot create` executed.
-It then failed the next interface contract because current upstream produced
-0 of at least 3 required snapshot directories. That named snapshot-create
-output drift becomes iteration 6 when #88 closes; the fixture stays intact.
-PR#230 remains an active campaign and its current dry-run red is not an
-accepted head. The next fire waits for all three fixes: #229+#231, #88, and
-the snapshot-output iteration with PR#90 green and unweakened.
+Amaru-bootstrap#88/PR#89 merged as `80b71cc` after all three hosted contexts
+passed; deterministic git identity is now proven at both stock and exact
+candidate shapes. PR#90 then exposed upstream's archive-format change, which
+is active as #91 with a bounded producer-surface grant. PR#230 remains an
+active recut and its old dry-run red is not an accepted head. The next fire
+waits for #229+#231 and #91 to merge; PR#90's fixture must stay unweakened.
 
-The t75 handoff repair is parked with its repair bounce intact. The normal
-one-lane `/nix/store` admission bar remains 54 GiB. Capacity briefly reached
-53.90 GiB, then fell again; the epic owner's fresh 11:41Z measurement was
-49,352,531,968 bytes (45.96 GiB). The below-50 GiB machine stop is active, no
-realization is running in the subtree, and wake still requires a later fresh
-measurement at or above 54 GiB.
+The t75 handoff lane also advanced. Three stable measurements cleared the
+54 GiB admission bar, both realizing proof legs passed on repair `c185c77`,
+and the build token was released with 59,619,618,816 bytes (55.52 GiB) free.
+Its final independent repair-delta auditor is dispatched; no acceptance is
+claimed before that verdict.
 
 The streak remains **0/7**. Since the first 2026-08-21 streak-eligible attempt
 was red, the frozen seven-consecutive-day outcome cannot finish before the

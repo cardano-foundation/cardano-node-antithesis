@@ -17,21 +17,21 @@ Resurrect, do not restart:
    The exact candidate also exposed missing deterministic Amaru git metadata
    under Nix. No image handoff or M2 Antithesis launch has occurred; streak is
    0/7.
-3. Current fire-5 gate is parallel: cna#229 plus recut cna#231 on PR#230 for
-   bounded observation and truthful fault labels; amaru-bootstrap#88 on PR#89
-   plus fixture PR#90 for deterministic git identity. PR#89 is 3/3 hosted
-   green; PR#90 reached terminal red at 11:31Z and is under epic-owner
-   classification. NOTE-042 makes the proven snapshot-create output drift an
-   iteration-6 gate as soon as #88 closes. Wait for artifact-bound terminal
-   events, independent epic acceptance, guarded merges of all three fixes by
-   the owning lanes, and only then the next real fire. Green PRs are not the
-   outcome.
-4. A-EPIC-002 preserves the 54 GiB `/nix/store` one-lane admission bar and
-   grants no early realization. A fresh 11:41Z owner measurement was
-   49,352,531,968 bytes (45.96 GiB), so the below-50 GiB machine stop is active
-   and t75/ab#75+#79 stays parked at repair commit `c185c77` with one repair
-   bounce. Wake only after a fresh byte measurement reaches 54 GiB. No
-   same-family audit, quiet omission, or inferred cold-build authority.
+3. Fire-gate condition 2 is met: amaru-bootstrap#88/PR#89 merged as `80b71cc`
+   after proving deterministic git identity at stock and exact candidate
+   shapes. Two fixes remain in parallel: cna#229 plus recut cna#231 on PR#230,
+   and amaru-bootstrap#91 adapting the producer to upstream tar.zst snapshot
+   archives. #91 must turn closed fixture PR#90's exact candidate shape green
+   without weakening it. Wait for artifact-bound terminal events, independent
+   epic acceptance, guarded merges of both remaining fixes, and only then the
+   next real fire. Green PRs are not the outcome.
+4. A-EPIC-002's 54 GiB admission bar was met by three stable samples at 11:47Z.
+   T75/ab#75+#79's two realizing gates then passed on repair `c185c77`, the
+   build token was released, and 59,619,618,816 bytes (55.52 GiB) remained
+   free. Final independent repair-delta auditor `%7091` is dispatched; await
+   its verified terminal before any stamp/push. Re-enter the machine stop on
+   store-path death or a fresh measurement below 50 GiB. No same-family audit,
+   quiet omission, or inferred extra build authority.
 5. After a real full-path launch, continue the validated-handoff arc, cna#212,
    #208, #207 remainder, and #206. Completion still requires seven consecutive
    unattended daily runs and a published-artifact outcome audit. The present
