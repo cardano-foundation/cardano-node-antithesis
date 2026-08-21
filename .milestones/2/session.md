@@ -1,50 +1,68 @@
-# tmux `amaru` — resurrection for MS2 — swept 2026-08-21 08:23Z
-# Work remains in its owning windows. The milestone desk asks/answers/sweeps.
-# Operator release 43c9a756...1dea restored eligible Claude ownership at the
-# next safe boundary. No provider context was reset; cold-build authority NONE.
+# tmux `amaru` — M2 resurrection — swept 2026-08-21 11:42Z
 
-## amaru:1 ms2-amaru-routine — milestone desk singleton (%6722)
+The milestone desk asks, answers, and sweeps. Technical work remains in its
+epic-owned windows and is resumed only through the cna#205 epic owner. The
+child-authored fragment copied verbatim to `resume/e205.md` has SHA-256
+`fe12ab5652408d095e1ce7b82f307a09a0f942592a1cbf76295be610df5f3507`.
+No cold-build authority exists.
 
-Current family: Codex. Current launch is a shell-hosted
+## `amaru:1 ms2-amaru-routine` — milestone desk singleton `%6722`
+
+Working directory: `/code/moog`. Current family: Codex. Launch:
+
 `codex-raw --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust`
-from `/code/moog`; runtime `/tmp/ms-cardano-node-antithesis-2/`.
 
-Resume by loading `.milestones/2/resume/ms.md`; supervise the acknowledged
-NOTE-037/NOTE-036 owner-level handoff. Do not implement a fix at the desk.
+Runtime: `/tmp/ms-cardano-node-antithesis-2/`. Resume by loading
+`.milestones/2/resume/ms.md`. Supervise only the cna#205 epic owner `%5195`;
+do not implement or address its descendants.
 
-## amaru:2 cna-e205-reliable-daily — cna#205 epic owner (%5195)
+## `amaru:2 cna-e205-reliable-daily` — cna#205 epic owner `%5195`
 
-Launch: `claude --dangerously-skip-permissions --model claude-fable-5`
-from `/code/cardano-node-antithesis`; runtime
-`/tmp/ms-cardano-node-antithesis-2/e-auto/`.
+Working directory: `/code/cardano-node-antithesis`. Launch:
 
-This matching preserved Claude context resumed cna#205 ownership at 08:23:35Z,
-acknowledging NOTE-037 and absorbing NOTE-036. It owns routing of the
-peer-snapshot atomic-bump fix. The epic owner's resurrection source is
-`.milestones/2/resume/e205.md` plus its STATUS and epic map.
+`claude --dangerously-skip-permissions --model claude-fable-5`
 
-## amaru:3 amaru-bootstrap-e205-t75-daily-handoff — epic-owned t75 lane
+Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/`. Resume from
+`.milestones/2/resume/e205.md`, then read the runtime STATUS and epic map.
+Current stage is the three-fix next-fire gate: cna#229+#231, ab#88, and the
+iteration-6 snapshot-output defect must all land before one production fire.
 
-Ticket owner pane %6759: `claude --dangerously-skip-permissions --model
-claude-opus-5[1m] --effort high`, runtime
-`/tmp/ms-cardano-node-antithesis-2/e-auto/t75-claude-to-01/`; not addressed by
-the milestone desk during the release handoff.
+## `amaru:3 amaru-bootstrap-e205-t75-daily-handoff` — parked epic lane
 
-Commit-owner pane %6894: `codex-raw --dangerously-bypass-approvals-and-sandbox
--m gpt-5.6-sol -C /code/amaru-bootstrap-issue-75 -c
-model_reasoning_effort=high`, runtime child
-`commit-owner-slice-04/`; parked, write-idle, and not legally auditable by the
-same family. The epic/ticket owner resumes this lane only after the peer-
-snapshot blocker is routed and both auditor-family and cold-gate resource
-conditions permit.
+Ticket-owner pane `%6759`, working directory
+`/code/amaru-bootstrap-issue-75`, launch:
 
-## amaru:4 cardano-node-antithesis-e205-t227-atomic-bump — epic-owned fix lane
+`claude --dangerously-skip-permissions --model 'claude-opus-5[1m]' --effort high`
 
-Ticket owner pane %7060: `codex-raw --dangerously-bypass-approvals-and-sandbox
--m gpt-5.6-sol -C /code/cardano-node-antithesis -c
-model_reasoning_effort=high`, runtime
-`/tmp/ms-cardano-node-antithesis-2/e-auto/t227-codex-to-01/`.
+Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/t75-claude-to-01/`.
+Commit-owner pane `%6894`, same working directory, launch:
 
-The cna#205 epic owner dispatched this lane at 08:27:08Z for the NOTE-036
-atomic peer-snapshot bump blocker. Resume it only through the epic owner and
-its own fragment; no cold realization is authorized.
+`codex-raw --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -C /code/amaru-bootstrap-issue-75 -c model_reasoning_effort=high`
+
+The lane is parked at local repair `c185c77`; the below-50 GiB machine stop is
+active and zero realization is allowed. Its two realizing legs wait for a
+fresh `/nix/store` measurement of at least 54 GiB. Resume only through the
+epic owner; preserve the single repair bounce and independent-auditor rule.
+
+## `amaru:4 amaru-bootstrap-e205-t88-git-info` — active epic lane `%7074`
+
+Working directory: `/code/amaru-bootstrap`. Launch:
+
+`codex-raw --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -C /code/amaru-bootstrap -c model_reasoning_effort=high`
+
+Runtime root begins at
+`/tmp/ms-cardano-node-antithesis-2/e-auto/t88-codex-to-01/`. Ab#88 is at its
+lawful terminal: PR#89 is stock-shape green and PR#90 proves git-info at the
+candidate shape before exposing snapshot-output drift. Resume only through
+the epic owner; on close it files/routes iteration 6.
+
+## `amaru:5 cardano-node-antithesis-e205-t229-check-wait` — active epic lane `%7073`
+
+Working directory: `/code/cardano-node-antithesis`. Launch:
+
+`codex-raw --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -C /code/cardano-node-antithesis -c model_reasoning_effort=high`
+
+Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/t229-codex-to-01/`.
+The lane now owns governed recut cna#231 on existing PR#230, inheriting the
+#229 seed candidate and frozen instruments read-only. Resume only through the
+epic owner; do not restart #229's closed campaign.
