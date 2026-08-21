@@ -26,15 +26,18 @@ The first streak-eligible 2026-08-21 run was red, so the frozen seven-day test
 cannot finish before the current `2026-08-28T00:00:00Z` due date. Preserve the
 acceptance test and reforecast the date; never waive the streak.
 
-## State — 2026-08-21 14:29Z
+## State — PARKED 2026-08-21 14:38Z
 
-**PARK ORDER RECEIVED from the operator at 14:29:22Z.** The public state page
-has been refreshed before worker shutdown, as required. The milestone owner is
-now relaying one durable pause through the cna#205 epic owner and will not log
-`PARKED` until that owner confirms its whole subtree parked. Already-started
-GitHub Actions are intentionally left running; agents must not merge, dispatch
-the exact fixture, fire production, or start new work while paused. Release
-requires an explicit operator resume.
+**OPERATOR PAUSE ACTIVE since 14:29:22Z; full subtree parked at 14:38:42Z.**
+The public state page was refreshed before worker shutdown, as required. The
+cna#205 epic owner relayed one durable pause through each ownership edge and
+confirmed cna#229+#231 parked at 14:35:12Z, amaru-bootstrap#95 at 14:36:54Z,
+and t75/ab#79 at 14:38:09Z before appending its terminal `PARKED` event. All
+epic wait shells are stopped. Already-started GitHub Actions were intentionally
+left running; their conclusions are evidence to reconcile after resume, not
+merge or release authority. Agents must not merge, push, dispatch the exact
+fixture, fire production, build, start a child run, or begin new work. Release
+requires an explicit operator resume through the milestone owner.
 
 Controller fire-4, run
 [32470212421](https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/32470212421),
@@ -52,8 +55,8 @@ The fire gate has two remaining fixes, both parked at hosted boundaries:
   forward correction passed independent audit and exact head `a76330b` was
   pushed without rewriting the known-red history. Fresh hosted evidence is
   green on Daily Amaru dry-run, Build, unit, quality, docs, preview, and image
-  publication; Compose smoke is the sole context still running. The PR is
-  unmerged.
+  publication; Compose smoke was the sole context left running at park. Its
+  eventual conclusion has not been reconciled by an agent. The PR is unmerged.
 - Amaru-bootstrap#88/PR#89 and #91/PR#92 are merged as `80b71cc` and `8e17e68`.
   #91 proved the tar.zst adaptation at its named boundary, then the unchanged
   PR#90-shape fixture, closed PR#93 head `b52ca563`, failed one layer later:
@@ -63,9 +66,11 @@ The fire gate has two remaining fixes, both parked at hosted boundaries:
   explicit SHA-bound repository-versioned build-time patch. Issue #95's final
   independent repair audit passed all eight blocking rows with no residuals.
   The accepted tree plus task stamp was squashed to exact head `fd6b100` and
-  pushed to draft PR#96. Documentation deploy is green and Build Gate is
-  running; hosted live proof and closed PR#93's byte-unchanged fixture remain
-  required before merge.
+  pushed to draft PR#96. Documentation deploy was green; the already-started
+  hosted run returned red while the pause propagated. The ticket owner parked
+  clean after recording that red and an unfrozen forward-correction draft as
+  resume context, without starting correction work. Hosted live proof and
+  closed PR#93's byte-unchanged fixture remain required before merge.
 
 The t75/amaru-bootstrap#75+#79 handoff repair has crossed its slice terminal.
 Its independent repair-delta audit passed all 5 rows at set-point, final
@@ -106,10 +111,10 @@ corrected to `Closes #95` before any PR existed.
 
 | window / panes | owner | milestone-visible state |
 |---|---|---|
-| `amaru:4 cna-e205-reliable-daily` `%5195` | cna#205 epic owner, Claude Fable; runtime `/tmp/ms-cardano-node-antithesis-2/e-auto/` | PARK REQUESTED: must park its whole subtree and acknowledge |
-| `amaru:5 amaru-bootstrap-e205-t75-daily-handoff` `%6759` | epic-owned t75 ticket lane | PARK REQUESTED: slice 4 remains accepted/pushed/hosted-green; ab#79 remainder stops at its durable boundary |
-| `amaru:7 cardano-node-antithesis-e205-t229-check-wait` `%7073` | epic-owned #229+#231 lane | PARK REQUESTED: PR#230 exact head `a76330b`; Compose smoke may finish externally, no merge |
-| `amaru:2 amaru-bootstrap-e205-t95-carried-patch` `%7104` | epic-owned #95 lane | PARK REQUESTED: PR#96 exact head `fd6b100`; Build Gate may finish externally, no fixture dispatch or merge |
+| `amaru:4 cna-e205-reliable-daily` `%5195` | cna#205 epic owner, Claude Fable; runtime `/tmp/ms-cardano-node-antithesis-2/e-auto/` | PARKED 14:38:42Z; subtree confirmed, no waits armed; wake only on explicit operator resume through milestone owner |
+| `amaru:5 amaru-bootstrap-e205-t75-daily-handoff` `%6759` | epic-owned t75 ticket lane | PARKED 14:38:09Z; slice 4 accepted/pushed/hosted-green, 13 child roots archived, ab#79 remainder durably mapped |
+| `amaru:7 cardano-node-antithesis-e205-t229-check-wait` `%7073` | epic-owned #229+#231 lane | PARKED 14:35:12Z at clean exact head `a76330b`; Compose smoke left external, no merge |
+| `amaru:2 amaru-bootstrap-e205-t95-carried-patch` `%7104` | epic-owned #95 lane | PARKED 14:36:54Z at clean exact head `fd6b100`; hosted red and unfrozen correction draft recorded for resume, descendants retired |
 | `amaru:3 amaru-bootstrap-e205-t94-era-history` `%7102` | terminal #94 placement lane | COMPLETE packet-delivered; issue closed, local operator packet preserved, no upstream publication |
 
 ## Completed path and queue

@@ -12,6 +12,10 @@ Resurrect, do not restart:
    the cna#205 epic owner in pane `%5195`, runtime
    `/tmp/ms-cardano-node-antithesis-2/e-auto/`; supervise through its
    append-only STATUS and durable questions/answers only.
+   This snapshot is `PARKED operator-pause-all`: do not wake the epic or any
+   descendant, arm a wait, reconcile hosted conclusions, push, merge, dispatch
+   the fixture, build, or fire until the operator explicitly resumes all
+   workers through this milestone desk.
 2. Fire-4 run 32470212421 proved cna#227/PR#228's atomic peer-snapshot bundle
    live, then failed honestly before launch at a new check-observation race.
    No image handoff or M2 Antithesis launch has occurred; streak is 0/7.
@@ -21,32 +25,37 @@ Resurrect, do not restart:
    #94 proved no stock in-repo route and closed packet-delivered; no upstream
    publication occurred. A-EPIC-003 authorizes one explicit SHA-bound
    repository-versioned patch with executable retirement, implemented by #95.
-4. Two gate legs remain. Cna#231 closed PASS on candidate `63bdc61`; final
-   `2859302` was accepted and pushed to draft PR#230, then hosted run
-   32487469955 failed deterministically in ShellCheck on the new fixture. No
-   rerun or merge is allowed. A distinct bounded one-file forward-correction
-   campaign is active at submission 1/2. Amaru-bootstrap#95 has frozen
-   placement/mandate, opened draft PR#96 at planning head `5dd7c8f`, and
-   started its Grok owner. Wait for a new all-green accepted PR#230 head,
-   independent epic acceptance, both guarded merges, and a fully green
-   byte-unchanged PR#93 fixture. Only then allow the next real fire. Green PRs
-   are not the outcome.
+4. Two gate legs remain parked. Cna PR#230 exact audited head
+   `a76330b610d3b34ba01044ffcb9dbd410df77c4c` had seven hosted successes,
+   production skipped, and Compose smoke left running externally when its
+   owner parked clean at 14:35:12Z. Amaru-bootstrap PR#96 exact audited and
+   squashed head `fd6b100feabc0d47104cf37cc3d0cd91f8827b3e` was pushed; its
+   already-started hosted run returned red while parking propagated. The #95
+   owner recorded that red plus an unfrozen forward-correction draft as resume
+   context and parked clean at 14:36:54Z with descendants retired. No agent has
+   reconciled either external conclusion. Closed PR#93 head `b52ca563` remains
+   the byte-unchanged required fixture and has not been dispatched on #95.
 5. T75/ab#75+#79 slice 4 is accepted: the final repair-delta audit passed 5/5,
    `b7d835a` is the audited candidate plus only its task stamp, and every
-   current PR#76 context is green. The ab#79 remainder continues, while its
-   live-PR phase is held for #95's merge. The latest measured store capacity
-   was 59,570,909,184 bytes (55.48 GiB), above the 54 GiB bar; re-enter the
-   machine stop below 50 GiB and infer no extra build authority.
-6. After a real full-path launch, finish the validated-handoff arc, cna#212,
-   #208, #207 remainder, and #206. Completion still requires seven consecutive
-   unattended daily runs and a published-artifact outcome audit. The
-   2026-08-28 due date is unreachable under the frozen test; preserve
-   acceptance and recommend reforecasting.
-7. Input integrity is append-only and evidence-bound. Two tokenless composer
-   texts were destroyed unexecuted. The #95 dispatch race was corrected:
-   earliest durable START 13:12:51Z, later START redundant; the brief's
-   `Closes #94` typo became `Closes #95` before any PR. One owner-level wait
-   rotates between the cna forward correction and #95. Agy is revoked, qwen is draft-only, and agents
+   current PR#76 context is green. The lane parked fully durable at 14:38:09Z
+   with 13 child roots archived and a blocked-on map for all open work. Its
+   live-PR phase remains held for #95's merge. The latest measured store
+   capacity was 59,570,909,184 bytes (55.48 GiB), above the 54 GiB bar; re-enter
+   the machine stop below 50 GiB and infer no extra build authority.
+6. On an explicit resume, reconcile the two external hosted conclusions first;
+   route #95's red under campaign law, then finish the exact PR#93 fixture and
+   guarded merges before one lawful production fire. After a real full-path
+   launch, finish the validated-handoff arc, cna#212, #208, #207 remainder,
+   and #206. Completion still requires seven consecutive unattended daily
+   runs and a published-artifact outcome audit. The 2026-08-28 due date is
+   unreachable under the frozen test; preserve acceptance and recommend
+   reforecasting.
+7. The epic owner appended `PARKED operator-pause-all` at 14:38:42Z after all
+   three child receipts and stopped every epic wait shell. Input integrity is
+   append-only and evidence-bound. Two tokenless composer texts were destroyed
+   unexecuted. The #95 dispatch race was corrected: earliest durable START
+   13:12:51Z, later START redundant; the brief's `Closes #94` typo became
+   `Closes #95` before any PR. Agy is revoked, qwen is draft-only, and agents
    never publish to external humans.
 8. Refresh the `milestones` ledger and dated wiki state on every material
    transition. Copy child-authored resurrection fragments mechanically; chase

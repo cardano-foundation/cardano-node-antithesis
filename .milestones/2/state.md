@@ -4,10 +4,12 @@ State — Updated: 2026-08-21
 
 Legend: ✅ done · 🟡 active/next · ⏳ queued · ⛔ blocked · ❓ unknown
 
-> ⛔ **Operator pause effective 2026-08-21T14:29:22Z.** All milestone
-> workers are being parked at durable boundaries. Already-started GitHub
-> Actions are not being cancelled and may finish while agents are paused.
-> No merge, fixture dispatch, production fire, or new work will occur until
+> ⛔ **Operator pause effective 2026-08-21T14:29:22Z; subtree fully parked
+> by 14:38:42Z.** Every milestone worker is at a durable rest point and all
+> owner-level wait shells are stopped. Already-started GitHub Actions were
+> left running; their conclusions are evidence to reconcile after resume,
+> never merge or release authority while parked. No merge, push, fixture
+> dispatch, production fire, build, child run, or new work will occur until
 > the operator explicitly resumes all workers.
 
 ```mermaid
@@ -19,7 +21,7 @@ flowchart LR
     fire4 --> gitinfo["✅ ab#88 / PR#89<br/>deterministic git identity"]
     gitinfo --> archives["✅ ab#91 / PR#92<br/>tar.zst consumption"]
     archives --> noroute["✅ ab#94 placement<br/>no stock route, packet preserved"]
-    noroute --> patch95["⛔ parked at hosted boundary<br/>PR#96 head fd6b100<br/>Build Gate running externally"] --> fire5["⏳ both PRs merged<br/>exact fixture green"]
+    noroute --> patch95["⛔ parked at hosted boundary<br/>PR#96 head fd6b100<br/>hosted red recorded for resume"] --> fire5["⏳ both PRs merged<br/>exact fixture green"]
     observe --> fire5
     fire5 --> launch["⏳ first full image handoff<br/>and one-hour Antithesis launch"]
     launch --> streak["⏳ seven consecutive unattended days<br/>0/7"] --> audit["⏳ published-artifact outcome audit"]
@@ -43,13 +45,16 @@ pull requests:
   The one-file hosted ShellCheck correction passed independent audit, and
   exact head `a76330b` is green on Daily Amaru dry-run, build, unit, quality,
   docs, preview, and image publication. Compose smoke is the only hosted
-  context still running. The PR remains draft and unmerged.
+  context left running at the park boundary. Its eventual conclusion has not
+  been reconciled by an agent. The PR remains draft and unmerged.
 - [amaru-bootstrap PR#96](https://github.com/lambdasistemi/amaru-bootstrap/pull/96)
   carries the SHA-bound, repository-versioned custom-network era-history patch
   with executable retirement. Final independent audit passed all eight
-  blocking rows with no residuals. Exact squashed head `fd6b100` is pushed;
-  documentation deploy is green and Build Gate is running. Hosted live proof
-  and the byte-unchanged
+  blocking rows with no residuals. Exact squashed head `fd6b100` is pushed.
+  The already-started hosted run returned red while the pause propagated; the
+  ticket owner recorded it, preserved an unfrozen forward-correction draft as
+  resume context, and parked clean without starting correction work. Hosted
+  live proof and the byte-unchanged
   [PR#93 fixture](https://github.com/lambdasistemi/amaru-bootstrap/pull/93)
   remain required before merge.
 
@@ -61,6 +66,12 @@ upstream.
 The t75 handoff slice remains accepted at `b7d835a`, independently audited,
 pushed, and hosted-green. The ab#79 remainder is parked; its live-PR phase
 remains held until #95 merges and the exact fixture is green.
+
+Durable park receipts: cna#229+#231 at 14:35:12Z on `a76330b`,
+amaru-bootstrap#95 at 14:36:54Z on `fd6b100`, and t75/ab#79 at 14:38:09Z.
+The cna#205 epic owner appended its terminal `PARKED operator-pause-all` event
+at 14:38:42Z. Wake requires an explicit operator resume relayed through the
+milestone owner.
 
 The frozen seven-consecutive-day outcome cannot finish by the current
 2026-08-28 due date because the first 2026-08-21 eligible attempt was red.
