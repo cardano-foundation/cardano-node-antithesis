@@ -1,9 +1,9 @@
-# tmux `amaru` — M2 resurrection — swept 2026-08-21 12:12Z
+# tmux `amaru` — M2 resurrection — swept 2026-08-21 12:44Z
 
 The milestone desk asks, answers, and sweeps. Technical work remains in its
 epic-owned windows and is resumed only through the cna#205 epic owner. The
 child-authored fragment copied verbatim to `resume/e205.md` has SHA-256
-`46f41c0354535848f63aa1bf5db904717dccd117403e297cf6a9b29aec62271b`.
+`7d6436e36df2a4c5e9c8182b56e7676a8786b3c5367a63877a608f0a0930bb85`.
 No cold-build authority exists.
 
 ## `amaru:1 ms2-amaru-routine` — milestone desk singleton `%6722`
@@ -27,27 +27,22 @@ Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/`. Resume from
 Fire-gate condition ab#88 is merged. The remaining gate is cna#229+#231 plus
 ab#91; both must land before one production fire.
 
-## `amaru:3 amaru-bootstrap-e205-t75-daily-handoff` — final-audit epic lane
+## `amaru:3 amaru-bootstrap-e205-t75-daily-handoff` — ab#79 remainder lane
 
 Ticket-owner pane `%6759`, working directory
 `/code/amaru-bootstrap-issue-75`, launch:
 
-`claude --dangerously-skip-permissions --model 'claude-opus-5[1m]' --effort high`
+`claude --dangerously-skip-permissions --model 'claude-opus-5[1m]' --effort high --continue`
 
 Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/t75-claude-to-01/`.
 Commit-owner pane `%6894`, same working directory, launch:
 
 `codex-raw --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -C /code/amaru-bootstrap-issue-75 -c model_reasoning_effort=high`
 
-The two realizing gates passed on local repair `c185c77`, and the build token
-was released. Final repair-delta auditor pane `%7091` works from
-`/code/amaru-bootstrap-audit-s8`; launch:
-
-`claude --dangerously-skip-permissions --model 'claude-opus-5[1m]' --effort high`
-
-The auditor's post-cursor verification landed at 11:58:10Z and its audit is
-active. Resume only through the epic owner; pass advances to stamp/push,
-findings close the campaign under its standing terms.
+Slice 4 is accepted at exact pushed head `b7d835a`; its final audit passed 5/5,
+the tree differs from the audited candidate only by the task stamp, and every
+current hosted PR#76 context is green. The lane now owns ab#79's remainder.
+Its live-PR phase is held until #91 merges. Resume only through the epic owner.
 
 ## `amaru:4 amaru-bootstrap-e205-t91-snapshot-format` — active epic lane `%7089`
 
@@ -58,12 +53,14 @@ Working directory: `/code/amaru-bootstrap`. Launch:
 Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/t91-codex-to-01/`.
 Amaru-bootstrap#91 is the active snapshot-archive-format adaptation under a
 bounded producer-surface grant. It must turn closed PR#90's exact candidate
-fixture green without weakening it. Current owner pane `%7092` works from
-`/code/amaru-bootstrap-issue-91`; launch:
+fixture green without weakening it. Submission-1 implementation audit passed
+on `c85b2b3`. Finalization-delta auditor pane `%7100` works from
+`/code/amaru-bootstrap-issue-91-audit-final`; launch:
 
-`grok --always-approve -m grok-4.6`
+`codex-raw --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -C /code/amaru-bootstrap-issue-91-audit-final -c model_reasoning_effort=high`
 
-Resume only through the epic owner.
+The audit is active on final `3c63faa`. No COMPLETE, push, or green exact
+fixture is claimed yet. Resume only through the epic owner.
 
 ## `amaru:5 cardano-node-antithesis-e205-t229-check-wait` — active epic lane `%7073`
 
@@ -72,10 +69,13 @@ Working directory: `/code/cardano-node-antithesis`. Launch:
 `codex-raw --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -C /code/cardano-node-antithesis -c model_reasoning_effort=high`
 
 Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/t229-codex-to-01/`.
-The lane now owns governed recut cna#231 on existing PR#230, inheriting the
-#229 seed candidate and frozen instruments read-only. Its same Claude
-conversation survived two clean transport restarts and currently runs in pane
-`%7094` from `/code/cardano-node-antithesis-issue-229` via `claude --continue
--p ... --dangerously-skip-permissions --model 'claude-opus-5[1m]' --effort
-high`, still at submission 0/2 with unchanged authority. Resume only through
-the epic owner; do not restart #229's closed campaign.
+The lane owns governed recut cna#231 on existing PR#230, inheriting the #229
+seed candidate and frozen instruments read-only. Submission-1 independent
+auditor pane `%7098` works from
+`/code/cardano-node-antithesis-issue-231-audit-s1`; launch:
+
+`codex-raw --dangerously-bypass-approvals-and-sandbox -m gpt-5.6-sol -C /code/cardano-node-antithesis-issue-231-audit-s1 -c model_reasoning_effort=high`
+
+The audit is active on candidate `7516653`. Three same-seat owner transport
+restarts are recorded for ticket-owner review at the slice boundary. Resume
+only through the epic owner; do not restart #229's closed campaign.
