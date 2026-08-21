@@ -1,9 +1,9 @@
-# tmux `amaru` — M2 resurrection — swept 2026-08-21 11:59Z
+# tmux `amaru` — M2 resurrection — swept 2026-08-21 12:12Z
 
 The milestone desk asks, answers, and sweeps. Technical work remains in its
 epic-owned windows and is resumed only through the cna#205 epic owner. The
 child-authored fragment copied verbatim to `resume/e205.md` has SHA-256
-`32b103f53e351b8046822bb195c86fac74a10feb78b523f620e2cb5e65a12026`.
+`46f41c0354535848f63aa1bf5db904717dccd117403e297cf6a9b29aec62271b`.
 No cold-build authority exists.
 
 ## `amaru:1 ms2-amaru-routine` — milestone desk singleton `%6722`
@@ -45,9 +45,9 @@ was released. Final repair-delta auditor pane `%7091` works from
 
 `claude --dangerously-skip-permissions --model 'claude-opus-5[1m]' --effort high`
 
-Resume only through the epic owner. The auditor's post-cursor verification is
-pending; pass advances to stamp/push, findings close the campaign under its
-standing terms.
+The auditor's post-cursor verification landed at 11:58:10Z and its audit is
+active. Resume only through the epic owner; pass advances to stamp/push,
+findings close the campaign under its standing terms.
 
 ## `amaru:4 amaru-bootstrap-e205-t91-snapshot-format` — active epic lane `%7089`
 
@@ -58,7 +58,12 @@ Working directory: `/code/amaru-bootstrap`. Launch:
 Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/t91-codex-to-01/`.
 Amaru-bootstrap#91 is the active snapshot-archive-format adaptation under a
 bounded producer-surface grant. It must turn closed PR#90's exact candidate
-fixture green without weakening it. Resume only through the epic owner.
+fixture green without weakening it. Current owner pane `%7092` works from
+`/code/amaru-bootstrap-issue-91`; launch:
+
+`grok --always-approve -m grok-4.6`
+
+Resume only through the epic owner.
 
 ## `amaru:5 cardano-node-antithesis-e205-t229-check-wait` — active epic lane `%7073`
 
@@ -68,5 +73,9 @@ Working directory: `/code/cardano-node-antithesis`. Launch:
 
 Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/t229-codex-to-01/`.
 The lane now owns governed recut cna#231 on existing PR#230, inheriting the
-#229 seed candidate and frozen instruments read-only. Resume only through the
-epic owner; do not restart #229's closed campaign.
+#229 seed candidate and frozen instruments read-only. Its same Claude
+conversation survived two clean transport restarts and currently runs in pane
+`%7094` from `/code/cardano-node-antithesis-issue-229` via `claude --continue
+-p ... --dangerously-skip-permissions --model 'claude-opus-5[1m]' --effort
+high`, still at submission 0/2 with unchanged authority. Resume only through
+the epic owner; do not restart #229's closed campaign.

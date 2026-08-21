@@ -28,8 +28,8 @@ Resurrect, do not restart:
 4. A-EPIC-002's 54 GiB admission bar was met by three stable samples at 11:47Z.
    T75/ab#75+#79's two realizing gates then passed on repair `c185c77`, the
    build token was released, and 59,619,618,816 bytes (55.52 GiB) remained
-   free. Final independent repair-delta auditor `%7091` is dispatched; await
-   its verified terminal before any stamp/push. Re-enter the machine stop on
+   free. Final independent repair-delta auditor `%7091` is verified active
+   since 11:58:10Z; await its terminal before any stamp/push. Re-enter the machine stop on
    store-path death or a fresh measurement below 50 GiB. No same-family audit,
    quiet omission, or inferred extra build authority.
 5. After a real full-path launch, continue the validated-handoff arc, cna#212,

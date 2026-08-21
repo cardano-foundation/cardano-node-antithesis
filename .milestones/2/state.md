@@ -51,8 +51,8 @@ waits for #229+#231 and #91 to merge; PR#90's fixture must stay unweakened.
 The t75 handoff lane also advanced. Three stable measurements cleared the
 54 GiB admission bar, both realizing proof legs passed on repair `c185c77`,
 and the build token was released with 59,619,618,816 bytes (55.52 GiB) free.
-Its final independent repair-delta auditor is dispatched; no acceptance is
-claimed before that verdict.
+Its final independent repair-delta auditor is verified active; no acceptance
+is claimed before that verdict.
 
 The streak remains **0/7**. Since the first 2026-08-21 streak-eligible attempt
 was red, the frozen seven-consecutive-day outcome cannot finish before the

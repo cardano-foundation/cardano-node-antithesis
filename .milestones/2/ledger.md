@@ -58,8 +58,9 @@ but it is no longer capacity-blocked. Three stable 11:47Z measurements reached
 about 55.77 GiB, satisfying A-EPIC-002's 54 GiB admission bar. Both realizing
 legs then passed (`slice-04-v3` plus `just build-gate`), the build token was
 released, and 59,619,618,816 bytes (55.52 GiB) remained free. The final
-independent repair-delta Claude auditor is dispatched in pane `%7091`; pass
-advances to stamp/push, while findings close the campaign under A-007/A-008.
+independent repair-delta Claude auditor is verified active in pane `%7091`;
+pass advances to stamp/push, while findings close the campaign under
+A-007/A-008.
 
 ## Priority and convergence
 
@@ -81,9 +82,9 @@ advances to stamp/push, while findings close the campaign under A-007/A-008.
 | window / panes | owner | milestone-visible state |
 |---|---|---|
 | `amaru:2 cna-e205-reliable-daily` `%5195` | cna#205 epic owner, Claude Fable; runtime `/tmp/ms-cardano-node-antithesis-2/e-auto/` | ACTIVE: #88 merged; supervises remaining fire-gate fixes #229+#231 and #91 plus t75 final audit |
-| `amaru:3 amaru-bootstrap-e205-t75-daily-handoff` `%6759`, `%6894`, `%7091` | epic-owned t75 ticket lane | ACTIVE: realizing legs green and token released; final independent repair-delta audit dispatched |
+| `amaru:3 amaru-bootstrap-e205-t75-daily-handoff` `%6759`, `%6894`, `%7091` | epic-owned t75 ticket lane | ACTIVE: realizing legs green and token released; final independent repair-delta audit verified active |
 | `amaru:4 amaru-bootstrap-e205-t91-snapshot-format` `%7089` plus campaign panes | epic-owned #91 lane | ACTIVE: tar.zst producer adaptation, zero-realization envelope, exact PR#90 fixture required |
-| `amaru:5 cardano-node-antithesis-e205-t229-check-wait` `%7073` plus campaign panes | epic-owned #229+#231 lane | ACTIVE: governed fault-labeling recut on PR#230 |
+| `amaru:5 cardano-node-antithesis-e205-t229-check-wait` `%7073`, owner `%7094` | epic-owned #229+#231 lane | ACTIVE: governed fault-labeling recut on PR#230; same Claude conversation recovered through two transport restarts, submission 0/2 |
 
 ## Completed path and queue
 
