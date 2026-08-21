@@ -26,7 +26,7 @@ The first streak-eligible 2026-08-21 run was red, so the frozen seven-day test
 cannot finish before the current `2026-08-28T00:00:00Z` due date. Preserve the
 acceptance test and reforecast the date; never waive the streak.
 
-## State — 2026-08-21 13:20Z
+## State — 2026-08-21 13:40Z
 
 Controller fire-4, run
 [32470212421](https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/32470212421),
@@ -40,19 +40,23 @@ Nix-fetched tree. No image handoff or Antithesis launch occurred.
 
 The fire gate now has two remaining active fixes:
 
-- cna#229 plus governed recut cna#231 share draft PR#230. Submission 1 found
-  one blocking `INV-231-2` row; its final repair is candidate `63bdc61`, under
-  the submission-2/2 independent audit since 13:07Z. The fresh mutation
-  campaign is green at its declared set point, but the formal audit verdict,
-  accepted push, hosted checks, and merge are not yet claimed.
+- cna#229 plus governed recut cna#231 share draft PR#230. #231 closed PASS at
+  accepted candidate `63bdc61`; exact final `2859302` is candidate plus task
+  stamp and was pushed with its complete receipt chain. Hosted run 32487469955
+  then failed deterministically in `check-shell` on the new observation
+  fixture. No rerun or merge is allowed. A distinct bounded forward-correction
+  campaign is active at submission 1/2 on base `2859302`, with a one-file
+  ShellCheck RED→GREEN contract and unchanged focused behavior.
 - Amaru-bootstrap#88/PR#89 and #91/PR#92 are merged as `80b71cc` and `8e17e68`.
   #91 proved the tar.zst adaptation at its named boundary, then the unchanged
   PR#90-shape fixture, closed PR#93 head `b52ca563`, failed one layer later:
   upstream `amaru bootstrap` at `ba992f65` refuses custom networks before
   discovering the local archive. Issue #94 proved there is no stock in-repo
   route and closed packet-delivered. Desk ruling A-EPIC-003 authorized one
-  explicit SHA-bound repository-versioned build-time patch; implementation
-  issue #95 is STARTED on base `8e17e68`, with no PR or later phase yet.
+  explicit SHA-bound repository-versioned build-time patch. Issue #95 has
+  frozen placement and mandate, opened draft PR#96 at planning head `5dd7c8f`,
+  and STARTED its Grok commit owner. Its latest reliance declaration has seven
+  rows (enforced 0, none 3, partial 4); no implementation candidate is claimed.
 
 The t75/amaru-bootstrap#75+#79 handoff repair has crossed its slice terminal.
 Its independent repair-delta audit passed all 5 rows at set-point, final
@@ -92,8 +96,8 @@ corrected to `Closes #95` before any PR existed.
 |---|---|---|
 | `amaru:4 cna-e205-reliable-daily` `%5195` | cna#205 epic owner, Claude Fable; runtime `/tmp/ms-cardano-node-antithesis-2/e-auto/` | ACTIVE: one rotating owner-level wait; remaining fire-gate fixes are #229+#231 and #95 |
 | `amaru:5 amaru-bootstrap-e205-t75-daily-handoff` `%6759` | epic-owned t75 ticket lane | ACTIVE: slice 4 accepted/pushed/hosted-green; ab#79 remainder underway, live-PR phase held for #95 merge |
-| `amaru:7 cardano-node-antithesis-e205-t229-check-wait` `%7073`, `%7103` | epic-owned #229+#231 lane | ACTIVE: submission-2/2 final audit on `63bdc61` |
-| `amaru:2 amaru-bootstrap-e205-t95-carried-patch` `%7104` | epic-owned #95 lane | STARTED at 13:12:51Z on `8e17e68`; no later journaled phase or PR yet |
+| `amaru:7 cardano-node-antithesis-e205-t229-check-wait` `%7073`, `%7108` | epic-owned #229+#231 lane | ACTIVE: #231 PASS/pushed, hosted ShellCheck red; bounded forward-correction submission 1/2 |
+| `amaru:2 amaru-bootstrap-e205-t95-carried-patch` `%7104`, `%7106` | epic-owned #95 lane | ACTIVE: placement/mandate frozen, draft PR#96 planning head `5dd7c8f`; Grok commit owner started |
 | `amaru:3 amaru-bootstrap-e205-t94-era-history` `%7102` | terminal #94 placement lane | COMPLETE packet-delivered; issue closed, local operator packet preserved, no upstream publication |
 
 ## Completed path and queue

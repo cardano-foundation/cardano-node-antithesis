@@ -8,11 +8,11 @@ Legend: ✅ done · 🟡 active/next · ⏳ queued · ⛔ blocked · ❓ unknown
 flowchart LR
     ladder["✅ controller repair ladder"] --> atomic["✅ atomic peer-snapshot bump<br/>cna#227 / PR#228"]
     atomic --> fire4["✅ fire-4 reached a later boundary<br/>honest pre-launch red"]
-    fire4 --> observe["🟡 cna#229 + #231<br/>final audit on 63bdc61"]
+    fire4 --> observe["🟡 cna#229 + #231<br/>PASS/pushed, hosted lint red<br/>forward correction active"]
     fire4 --> gitinfo["✅ ab#88 / PR#89<br/>deterministic git identity"]
     gitinfo --> archives["✅ ab#91 / PR#92<br/>tar.zst consumption"]
     archives --> noroute["✅ ab#94 placement<br/>no stock route, packet preserved"]
-    noroute --> patch95["🟡 ab#95<br/>SHA-bound carried patch"] --> fire5["⏳ #231 + #95 merged<br/>exact fixture green"]
+    noroute --> patch95["🟡 ab#95 / PR#96<br/>SHA-bound carried patch<br/>commit owner active"] --> fire5["⏳ PR#230 + #95 merged<br/>exact fixture green"]
     observe --> fire5
     fire5 --> launch["⏳ first full image handoff<br/>and one-hour Antithesis launch"]
     launch --> streak["⏳ seven consecutive unattended days<br/>0/7"] --> audit["⏳ published-artifact outcome audit"]
@@ -34,14 +34,18 @@ The next production fire is gated by two active campaigns:
   plus governed recut
   [cna#231](https://github.com/cardano-foundation/cardano-node-antithesis/issues/231)
   on draft [PR#230](https://github.com/cardano-foundation/cardano-node-antithesis/pull/230).
-  Submission 1 found one blocking fault-labeling row; candidate `63bdc61` is
-  under the final submission-2/2 audit. Its mutation campaign is green, but no
-  formal verdict, accepted push, hosted head, or merge is claimed yet.
+  #231 closed PASS on `63bdc61`; final `2859302` is the audited tree plus its
+  task stamp and was pushed. Hosted run 32487469955 then failed deterministically
+  in ShellCheck on the new fixture. No rerun or merge is allowed. A distinct
+  one-file forward-correction campaign is active at submission 1/2.
 - [amaru-bootstrap#95](https://github.com/lambdasistemi/amaru-bootstrap/issues/95)
   implements desk ruling A-EPIC-003: one explicit build-time patch carrying
   custom-network era history into upstream `node bootstrap`, with the bare
   upstream SHA and patch hash in build identity and executable retirement.
-  The lane is STARTED on `8e17e68`; no PR or later journaled phase exists yet.
+  Placement and mandate are frozen, draft
+  [PR#96](https://github.com/lambdasistemi/amaru-bootstrap/pull/96) is at
+  planning head `5dd7c8f`, and its Grok commit owner is active. No
+  implementation candidate is claimed yet.
 
 Amaru-bootstrap#88/PR#89 and #91/PR#92 are merged as `80b71cc` and `8e17e68`.
 Closed evidence [PR#93](https://github.com/lambdasistemi/amaru-bootstrap/pull/93)

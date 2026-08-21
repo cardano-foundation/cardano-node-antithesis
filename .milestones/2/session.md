@@ -1,9 +1,9 @@
-# tmux `amaru` — M2 resurrection — swept 2026-08-21 13:20Z
+# tmux `amaru` — M2 resurrection — swept 2026-08-21 13:40Z
 
 The milestone desk asks, answers, and sweeps. Technical work remains in its
 epic-owned windows and is resumed only through the cna#205 epic owner. The
 child-authored fragment copied verbatim to `resume/e205.md` has SHA-256
-`cbfed0ac019c30dc88cdc3c233b7951d6f01a8b9eb31bf410242efa65a47d590`.
+`bc84394728393d80ccb6a9fa664cf9846be07527f7bfe3e0ab7e11294381e0c7`.
 No cold-build authority exists.
 
 ## `amaru:1 ms2-amaru-routine` — milestone desk singleton `%6722`
@@ -29,19 +29,21 @@ and closed PR#93's exact fixture must be fully green before one production fire.
 
 ## `amaru:7 cardano-node-antithesis-e205-t229-check-wait` — #229+#231
 
-Ticket-owner pane `%7073`; final auditor pane `%7103`. Runtime:
+Ticket-owner pane `%7073`; forward-correction owner pane `%7108`. Runtime:
 `/tmp/ms-cardano-node-antithesis-2/e-auto/t229-codex-to-01/`.
-Candidate `63bdc61` is under the submission-2/2 final audit. The mutation
-campaign is green at set point, but no formal verdict or accepted push is yet
-claimed. Resume only through the epic owner.
+#231 closed PASS on `63bdc61`; final `2859302` was accepted and pushed, then
+hosted ShellCheck failed deterministically in the new fixture. A distinct
+one-file forward-correction campaign is active at submission 1/2. No rerun or
+merge is allowed on the red head. Resume only through the epic owner.
 
 ## `amaru:2 amaru-bootstrap-e205-t95-carried-patch` — #95
 
-Ticket-owner pane `%7104`, runtime:
+Ticket-owner pane `%7104`; Grok commit-owner pane `%7106`. Runtime:
 `/tmp/ms-cardano-node-antithesis-2/e-auto/t95-codex-to-01/`, base
 `8e17e68`. The first durable START is 13:12:51Z; the later START is redundant.
-The canonical brief says `Closes #95`. The lane is STARTED with no later
-journaled phase or PR in this snapshot. Resume only through the epic owner.
+The canonical brief says `Closes #95`. Placement and mandate are frozen,
+draft PR#96 is at planning head `5dd7c8f`, and the owner is active. No
+implementation candidate is claimed. Resume only through the epic owner.
 
 ## `amaru:5 amaru-bootstrap-e205-t75-daily-handoff` — ab#79 remainder
 
