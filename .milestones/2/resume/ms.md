@@ -13,11 +13,10 @@ Resurrect, do not restart:
    `/tmp/ms-cardano-node-antithesis-2/e-auto/`; supervise through its
    append-only STATUS and durable questions/answers only.
    The operator explicitly authorized cleanup and resume at
-   2026-08-22T09:54:57Z. Publish the dated resumed state before waking the one
-   immediate child. Then require the cna#205 epic owner to clean obsolete
-   milestone windows through its own ownership edges, reconcile both exact-head
-   hosted conclusions, and journal a durable resume acknowledgement. Never wake
-   or control the epic's descendants directly.
+   2026-08-22T09:54:57Z. The dated state was published first; the epic
+   acknowledged, retired #94/#91/#229+#231 windows with roots archived, and
+   reconciled both exact-head hosted conclusions. Never wake or control the
+   epic's descendants directly.
 2. Fire-4 run 32470212421 proved cna#227/PR#228's atomic peer-snapshot bundle
    live, then failed honestly before launch at a new check-observation race.
    No image handoff or M2 Antithesis launch has occurred; streak is 0/7.
@@ -27,15 +26,13 @@ Resurrect, do not restart:
    #94 proved no stock in-repo route and closed packet-delivered; no upstream
    publication occurred. A-EPIC-003 authorizes one explicit SHA-bound
    repository-versioned patch with executable retirement, implemented by #95.
-4. Two gate legs remain parked. Cna PR#230 exact audited head
-   `a76330b610d3b34ba01044ffcb9dbd410df77c4c` had seven hosted successes,
-   production skipped, and Compose smoke left running externally when its
-   owner parked clean at 14:35:12Z. Amaru-bootstrap PR#96 exact audited and
-   squashed head `fd6b100feabc0d47104cf37cc3d0cd91f8827b3e` was pushed; its
-   already-started hosted run returned red while parking propagated. The #95
-   owner recorded that red plus an unfrozen forward-correction draft as resume
-   context and parked clean at 14:36:54Z with descendants retired. No agent has
-   reconciled either external conclusion. Closed PR#93 head `b52ca563` remains
+4. One gate leg remains. Cna PR#230 exact accepted head
+   `a76330b610d3b34ba01044ffcb9dbd410df77c4c` passed all nine guards and merged
+   as `64024b9dfe73e552ae621526829074d74d484f7c`; issues #229+#231 are closed.
+   Amaru-bootstrap PR#96 exact audited/squashed head
+   `fd6b100feabc0d47104cf37cc3d0cd91f8827b3e` remains open and hosted-red. Its
+   ticket owner is active, classifying that artifact plus its unfrozen
+   correction draft under campaign law. Closed PR#93 head `b52ca563` remains
    the byte-unchanged required fixture and has not been dispatched on #95.
 5. T75/ab#75+#79 slice 4 is accepted: the final repair-delta audit passed 5/5,
    `b7d835a` is the audited candidate plus only its task stamp, and every
@@ -44,9 +41,9 @@ Resurrect, do not restart:
    live-PR phase remains held for #95's merge. The latest measured store
    capacity was 59,570,909,184 bytes (55.48 GiB), above the 54 GiB bar; re-enter
    the machine stop below 50 GiB and infer no extra build authority.
-6. Resume sequence: reconcile the two external hosted conclusions first; route
-   #95's red under campaign law, then finish the exact PR#93 fixture and guarded
-   merges before one lawful production fire. After a real full-path
+6. Active sequence: route #95's red under campaign law, then finish the exact
+   PR#93 fixture and guarded merge before one lawful production fire. Also
+   reconcile the 2026-08-22 04:17Z scheduled fire the same UTC day. After a real full-path
    launch, finish the validated-handoff arc, cna#212, #208, #207 remainder,
    and #206. Completion still requires seven consecutive unattended daily
    runs and a published-artifact outcome audit. The 2026-08-28 due date is
