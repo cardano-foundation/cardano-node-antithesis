@@ -1,12 +1,14 @@
-# tmux `amaru` — M2 parked resurrection — swept 2026-08-21 14:38Z
+# tmux `amaru` — M2 resume boundary — swept 2026-08-22 09:54Z
 
 The milestone desk asks, answers, and sweeps. Technical work remains in its
 epic-owned windows and is resumed only through the cna#205 epic owner. The
 child-authored fragment copied verbatim to `resume/e205.md` has SHA-256
 `6f9cf6cd83f0c08ce109ad0e7e4810ecebed5b6d2ca71adf39f8daffdf7f5c4a`.
-The whole subtree is `PARKED operator-pause-all`; no launch or resume command
-below may be used until an explicit operator resume reaches the milestone
-desk. No cold-build authority exists.
+The whole subtree's cold base is `PARKED operator-pause-all`. The operator
+authorized cleanup and resume at 2026-08-22T09:54:57Z; wake the epic owner only
+through the milestone desk's durable resume pointer after the public state is
+published. The epic owner cleans and wakes its own descendants. No cold-build
+authority exists.
 
 ## `amaru:1 ms2-amaru-routine` — milestone desk singleton `%6722`
 
@@ -27,9 +29,9 @@ Working directory: `/code/cardano-node-antithesis`. Launch:
 Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/`. Resume from
 `.milestones/2/resume/e205.md`, then read the runtime STATUS and epic map.
 The owner is parked idle with all wait shells stopped and its whole descendant
-tree confirmed parked. Wake only after an explicit operator resume relayed by
-the milestone owner. On resume, reconcile external hosted conclusions before
-any action. The remaining fire gate is cna#229+#231 plus
+tree confirmed parked, awaiting the authorized milestone resume pointer. On
+acknowledgement it must clean obsolete milestone windows and reconcile external
+hosted conclusions before technical action. The remaining fire gate is cna#229+#231 plus
 amaru-bootstrap#95; both must merge and closed PR#93's exact fixture must be
 fully green before one production fire.
 

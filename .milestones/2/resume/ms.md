@@ -12,10 +12,12 @@ Resurrect, do not restart:
    the cna#205 epic owner in pane `%5195`, runtime
    `/tmp/ms-cardano-node-antithesis-2/e-auto/`; supervise through its
    append-only STATUS and durable questions/answers only.
-   This snapshot is `PARKED operator-pause-all`: do not wake the epic or any
-   descendant, arm a wait, reconcile hosted conclusions, push, merge, dispatch
-   the fixture, build, or fire until the operator explicitly resumes all
-   workers through this milestone desk.
+   The operator explicitly authorized cleanup and resume at
+   2026-08-22T09:54:57Z. Publish the dated resumed state before waking the one
+   immediate child. Then require the cna#205 epic owner to clean obsolete
+   milestone windows through its own ownership edges, reconcile both exact-head
+   hosted conclusions, and journal a durable resume acknowledgement. Never wake
+   or control the epic's descendants directly.
 2. Fire-4 run 32470212421 proved cna#227/PR#228's atomic peer-snapshot bundle
    live, then failed honestly before launch at a new check-observation race.
    No image handoff or M2 Antithesis launch has occurred; streak is 0/7.
@@ -42,9 +44,9 @@ Resurrect, do not restart:
    live-PR phase remains held for #95's merge. The latest measured store
    capacity was 59,570,909,184 bytes (55.48 GiB), above the 54 GiB bar; re-enter
    the machine stop below 50 GiB and infer no extra build authority.
-6. On an explicit resume, reconcile the two external hosted conclusions first;
-   route #95's red under campaign law, then finish the exact PR#93 fixture and
-   guarded merges before one lawful production fire. After a real full-path
+6. Resume sequence: reconcile the two external hosted conclusions first; route
+   #95's red under campaign law, then finish the exact PR#93 fixture and guarded
+   merges before one lawful production fire. After a real full-path
    launch, finish the validated-handoff arc, cna#212, #208, #207 remainder,
    and #206. Completion still requires seven consecutive unattended daily
    runs and a published-artifact outcome audit. The 2026-08-28 due date is
