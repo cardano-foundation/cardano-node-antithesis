@@ -7,7 +7,8 @@ Legend: ✅ done · 🟡 active/next · ⏳ queued · ⛔ blocked · ❓ unknown
 > 🟡 **Active after operator resume at 2026-08-22T09:54:57Z.** The cna#205
 > epic owner acknowledged the wake, retired obsolete windows, reconciled both
 > exact-head hosted conclusions, and resumed the critical path. PR#230 is now
-> merged; PR#96's hosted red is being handled under its existing campaign law.
+> merged; PR#96 remains at its non-rewritten hosted-red head while final re-cut
+> S-095-CI-02 replaces the failed line-based proof with a semantic one.
 
 ```mermaid
 flowchart LR
@@ -18,7 +19,7 @@ flowchart LR
     fire4 --> gitinfo["✅ ab#88 / PR#89<br/>deterministic git identity"]
     gitinfo --> archives["✅ ab#91 / PR#92<br/>tar.zst consumption"]
     archives --> noroute["✅ ab#94 placement<br/>no stock route, packet preserved"]
-    noroute --> patch95["🟡 route hosted red<br/>PR#96 head fd6b100<br/>campaign active"] --> fire5["⏳ PR#96 merged<br/>exact fixture green"]
+    noroute --> patch95["🟡 final semantic proof re-cut<br/>S-095-CI-02<br/>PR#96 stays fd6b100"] --> fire5["⏳ green accepted head<br/>exact fixture green · PR#96 merged"]
     observe --> fire5
     fire5 --> launch["⏳ first full image handoff<br/>and one-hour Antithesis launch"]
     launch --> streak["⏳ seven consecutive unattended days<br/>0/7"] --> audit["⏳ published-artifact outcome audit"]
@@ -34,6 +35,13 @@ CI was observed only three seconds after push. The subsequent fixes isolated
 and repaired each later Amaru packaging boundary without an image handoff or
 Antithesis spend. The milestone streak remains **0/7**.
 
+Today's scheduled run
+[32551716188](https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/32551716188)
+ran before PR#230 merged, on old cna main head `9094d54`. Candidate creation
+succeeded, but exact-head checks were not uniquely successful; terminal was
+`bootstrap-checks: exact-head-checks-failed`. No image was published and no
+Antithesis launch occurred. This is a real red, not a missing receipt.
+
 At resume, both parked hosted conclusions were reconciled from their exact
 heads. The next production fire is now gated only by amaru-bootstrap#95:
 
@@ -46,8 +54,12 @@ heads. The next production fire is now gated only by amaru-bootstrap#95:
   with executable retirement. Final independent audit passed all eight
   blocking rows with no residuals. Exact squashed head `fd6b100` is pushed.
   The already-started hosted run returned red while the pause propagated. The
-  #95 ticket owner is active, classifying that exact artifact and its unfrozen
-  forward-correction draft under the unchanged campaign law. Hosted live proof
+  Two forward-correction submissions left both carried discovery-ordering
+  properties open, so the epic owner authorized final in-lane re-cut
+  S-095-CI-02. Its frozen proof shape is semantic/behavioral and must kill both
+  mutant classes by construction; rejected `80c2fcf` and all prior instruments
+  are read-only. If either property remains open at terminal, there is no third
+  campaign and the carried patch escalates under A-EPIC-003. Hosted live proof
   and the byte-unchanged
   [PR#93 fixture](https://github.com/lambdasistemi/amaru-bootstrap/pull/93)
   remain required before merge.
@@ -64,11 +76,11 @@ remains held until #95 merges and the exact fixture is green.
 Window cleanup is complete. Terminal #94, merged #91, and post-merge #229/#231
 windows were retired with their runtime roots archived; no worktree or runtime
 evidence was deleted. Four windows remain: the milestone desk, cna#205 epic
-owner, active #95 ticket owner, and parked/queued t75 owner. The 2026-08-22
-04:17Z scheduled fire still needs same-day reconciliation; it remains
-`❓ unknown` until its real terminal is recorded.
+owner, active #95 ticket owner, and parked/queued t75 owner. The epic owner has
+one foreground wait on S-095-CI-02/t95; the retired t231 lane is no longer a
+wait target. Today's scheduled fire is reconciled above.
 
 The frozen seven-consecutive-day outcome cannot finish by the current
 2026-08-28 due date because the first 2026-08-21 eligible attempt was red.
-Preserve the acceptance test and reforecast the date after resume; never waive
-the streak.
+Preserve the acceptance test and reforecast the date only after the first
+successful full-path fire establishes day 1; never waive the streak.

@@ -31,9 +31,13 @@ Resurrect, do not restart:
    as `64024b9dfe73e552ae621526829074d74d484f7c`; issues #229+#231 are closed.
    Amaru-bootstrap PR#96 exact audited/squashed head
    `fd6b100feabc0d47104cf37cc3d0cd91f8827b3e` remains open and hosted-red. Its
-   ticket owner is active, classifying that artifact plus its unfrozen
-   correction draft under campaign law. Closed PR#93 head `b52ca563` remains
-   the byte-unchanged required fixture and has not been dispatched on #95.
+   ticket owner is active on final in-lane re-cut S-095-CI-02 after both
+   forward-correction submissions left the two carried discovery-ordering
+   properties open. The proof shape is semantic/behavioral; rejected candidate
+   `80c2fcf` and the frozen instruments are read-only. Either row open at
+   terminal forbids a third campaign and escalates under A-EPIC-003. Closed
+   PR#93 head `b52ca563` remains the byte-unchanged required fixture and has not
+   been dispatched on #95.
 5. T75/ab#75+#79 slice 4 is accepted: the final repair-delta audit passed 5/5,
    `b7d835a` is the audited candidate plus only its task stamp, and every
    current PR#76 context is green. The lane parked fully durable at 14:38:09Z
@@ -41,14 +45,16 @@ Resurrect, do not restart:
    live-PR phase remains held for #95's merge. The latest measured store
    capacity was 59,570,909,184 bytes (55.48 GiB), above the 54 GiB bar; re-enter
    the machine stop below 50 GiB and infer no extra build authority.
-6. Active sequence: route #95's red under campaign law, then finish the exact
-   PR#93 fixture and guarded merge before one lawful production fire. Also
-   reconcile the 2026-08-22 04:17Z scheduled fire the same UTC day. After a real full-path
-   launch, finish the validated-handoff arc, cna#212, #208, #207 remainder,
-   and #206. Completion still requires seven consecutive unattended daily
-   runs and a published-artifact outcome audit. The 2026-08-28 due date is
-   unreachable under the frozen test; preserve acceptance and recommend
-   reforecasting.
+6. Active sequence: supervise S-095-CI-02 to success or its no-third-campaign
+   escalation, then finish the exact PR#93 fixture and guarded PR#96 merge
+   before one lawful production fire. The 2026-08-22 scheduled fire is already
+   reconciled: run 32551716188 on old cna head `9094d54` ended pre-launch at
+   `bootstrap-checks: exact-head-checks-failed`; no image or Antithesis launch,
+   streak 0/7. After a real full-path launch, finish the validated-handoff arc,
+   cna#212, #208, #207 remainder, and #206. Completion still requires seven
+   consecutive unattended daily runs and a published-artifact outcome audit.
+   The 2026-08-28 due date is unreachable under the frozen test; preserve
+   acceptance and reforecast only after day 1 is established.
 7. The epic owner appended `PARKED operator-pause-all` at 14:38:42Z after all
    three child receipts and stopped every epic wait shell. Input integrity is
    append-only and evidence-bound. Two tokenless composer texts were destroyed
@@ -56,7 +62,11 @@ Resurrect, do not restart:
    13:12:51Z, later START redundant; the brief's `Closes #94` typo became
    `Closes #95` before any PR. Agy is revoked, qwen is draft-only, and agents
    never publish to external humans.
-8. Refresh the `milestones` ledger and dated wiki state on every material
+8. The current child fragment SHA is
+   `92516650ee776c8adc12c9591c46de2ec91964a14a50d59bcd11561020f72ea9`.
+   NOTE-078 initially emitted a false fragment receipt after a failed edit;
+   NOTE-079 corrected it and established mechanical read-back for receipts.
+   Refresh the `milestones` ledger and dated wiki state on every material
    transition. Copy child-authored resurrection fragments mechanically; chase
    stale fragments instead of ghost-writing them. Verify signed ledger/wiki
    commits and rendered Mermaid before making completion claims.

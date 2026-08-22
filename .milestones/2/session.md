@@ -1,9 +1,9 @@
-# tmux `amaru` — M2 active endgame — swept 2026-08-22 10:08Z
+# tmux `amaru` — M2 active endgame — swept 2026-08-22 12:34Z
 
 The milestone desk asks, answers, and sweeps. Technical work remains in its
 epic-owned windows and is resumed only through the cna#205 epic owner. The
 child-authored fragment copied verbatim to `resume/e205.md` has SHA-256
-`aaef3a7292498533774f783214e108c5c932e3f2332c3de3adca66c2f2ac139e`.
+`92516650ee776c8adc12c9591c46de2ec91964a14a50d59bcd11561020f72ea9`.
 The operator authorized cleanup and resume at 2026-08-22T09:54:57Z. Cleanup is
 complete and the epic is active; PR#230 merged as `64024b9`, leaving #95 as the
 only fire-gate leg. The epic owner wakes and cleans its own descendants. No
@@ -27,7 +27,8 @@ Working directory: `/code/cardano-node-antithesis`. Launch:
 
 Runtime: `/tmp/ms-cardano-node-antithesis-2/e-auto/`. Resume from
 `.milestones/2/resume/e205.md`, then read the runtime STATUS and epic map.
-The owner is active with one foreground supervision wait on #95. PR#230 exact
+The owner is active with one foreground supervision wait on final re-cut
+S-095-CI-02/#95. PR#230 exact
 accepted head `a76330b` passed all nine guards and merged as `64024b9`; its
 ticket window was retired with runtime archived. The remaining fire gate is
 amaru-bootstrap#95, including closed PR#93's byte-unchanged exact fixture fully
@@ -37,11 +38,12 @@ green before one production fire.
 
 Ticket-owner pane `%7104`; descendants are retired. Runtime:
 `/tmp/ms-cardano-node-antithesis-2/e-auto/t95-codex-to-01/`, base
-`8e17e68`. The owner is active on exact audited/squashed/pushed PR#96 head
-`fd6b100feabc0d47104cf37cc3d0cd91f8827b3e`, classifying the hosted Build Gate
-red and its unfrozen correction draft under campaign law. Closed PR#93 head
-`b52ca563` remains the undispatched byte-unchanged fixture. Supervision remains
-through the epic owner.
+`8e17e68`. PR#96 remains at non-rewritten hosted-red head
+`fd6b100feabc0d47104cf37cc3d0cd91f8827b3e`. The owner is active on final
+re-cut S-095-CI-02: semantic/behavioral proof, rejected candidate `80c2fcf` and
+frozen instruments read-only, and no third campaign if either carried property
+survives. Closed PR#93 head `b52ca563` remains the undispatched byte-unchanged
+fixture. Supervision remains through the epic owner.
 
 ## `amaru:5 amaru-bootstrap-e205-t75-daily-handoff` — ab#79 remainder
 
