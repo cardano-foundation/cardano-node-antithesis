@@ -21,6 +21,8 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Images:
+      - Provenance: images/provenance.md
   - Components:
       - Tracer: components/tracer.md
       - Tracer-sidecar: components/tracer-sidecar.md

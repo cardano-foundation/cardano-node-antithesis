@@ -1708,6 +1708,39 @@ issue_225_allowed_paths=(
   specs/229-bounded-check-observation/tasks.md
   tests/fixtures/daily-amaru/check-observation.sh
   tests/fixtures/daily-amaru/observation-gh.sh
+  .github/workflows/publish-images.yaml
+  components/adversary/flake.lock
+  components/adversary/flake.nix
+  components/adversary/nix/docker-image.nix
+  components/asteria-game/flake.lock
+  components/asteria-game/flake.nix
+  components/asteria-game/nix/docker-image.nix
+  components/asteria-stub/flake.lock
+  components/asteria-stub/flake.nix
+  components/asteria-stub/nix/docker-image.nix
+  components/image-meta/meta.nix
+  components/sidecar/flake.lock
+  components/sidecar/flake.nix
+  components/sidecar/nix/docker-image.nix
+  components/tracer-sidecar/flake.lock
+  components/tracer-sidecar/flake.nix
+  components/tracer-sidecar/nix/docker-image.nix
+  components/tx-generator/flake.lock
+  components/tx-generator/flake.nix
+  components/tx-generator/nix/docker-image.nix
+  docs/images/provenance.md
+  docs/index.md
+  justfile
+  mkdocs.yml
+  scripts/check-image-provenance.sh
+  specs/241-nix-image-provenance/data-model.md
+  specs/241-nix-image-provenance/functions-model.md
+  specs/241-nix-image-provenance/modules-model.md
+  specs/241-nix-image-provenance/plan.md
+  specs/241-nix-image-provenance/spec.md
+  specs/241-nix-image-provenance/tasks.md
+  tests/test-image-provenance.sh
+  tests/fixtures/epoch-image/image.tar.gz
 )
 
 register_223_mutant() {

@@ -1,4 +1,4 @@
-{ pkgs, tx-generator-bin, version, composer-sdk-src, ... }:
+{ pkgs, tx-generator-bin, version, composer-sdk-src, imageMeta, ... }:
 let
   # Bake the antithesis composer scripts under the
   # canonical /opt/antithesis/test/v1/tx-generator/ path.
@@ -72,8 +72,10 @@ let
 in pkgs.dockerTools.buildImage {
   name = "ghcr.io/cardano-foundation/cardano-node-antithesis/tx-generator";
   tag = version;
+  created = imageMeta.created;
   config = {
     EntryPoint = [ "/bin/tx-generator-entrypoint" ];
+    Labels = imageMeta.labels;
   };
   copyToRoot = pkgs.buildEnv {
     name = "tx-generator-image-root";

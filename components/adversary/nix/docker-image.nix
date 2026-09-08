@@ -1,4 +1,4 @@
-{ pkgs, project, version, ... }:
+{ pkgs, project, version, imageMeta, ... }:
 let
   # Bake the antithesis composer scripts under
   # /opt/antithesis/test/v1/. The composer discovers
@@ -27,7 +27,11 @@ in
 pkgs.dockerTools.buildImage {
   name = "ghcr.io/cardano-foundation/cardano-node-antithesis/adversary";
   tag = version;
-  config = { EntryPoint = [ "/bin/sleep-forever" ]; };
+  created = imageMeta.created;
+  config = {
+    EntryPoint = [ "/bin/sleep-forever" ];
+    Labels = imageMeta.labels;
+  };
   copyToRoot = pkgs.buildEnv {
     name = "image-root";
     paths = [

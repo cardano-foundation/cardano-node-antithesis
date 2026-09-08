@@ -20,12 +20,21 @@
     cardano-node-runtime = {
       url = "github:IntersectMBO/cardano-node?ref=10.1.4";
     };
+    image-meta = {
+      url = "path:../image-meta";
+      flake = false;
+    };
   };
 
   outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, CHaP, iohkNix
-    , cardano-node-runtime, ... }:
+    , cardano-node-runtime, image-meta, ... }:
     let
-      version = self.dirtyShortRev or self.shortRev;
+      imageMeta = import (image-meta + "/meta.nix") {
+        inherit self;
+        sourceUrl =
+          "https://github.com/cardano-foundation/cardano-node-antithesis";
+      };
+      version = imageMeta.version;
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
         systems = [ "x86_64-linux" "aarch64-darwin" ];
         perSystem = { system, ... }:
@@ -46,7 +55,7 @@
               inherit pkgs;
             };
             docker-image = pkgs.callPackage ./nix/docker-image.nix {
-              inherit project version;
+              inherit project version imageMeta;
             };
           in rec {
             packages = {

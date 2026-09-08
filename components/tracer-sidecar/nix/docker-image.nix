@@ -1,9 +1,13 @@
-{ pkgs, project, version, ... }:
+{ pkgs, project, version, imageMeta, ... }:
 
 pkgs.dockerTools.buildImage {
   name = "ghcr.io/cardano-foundation/cardano-node-antithesis/tracer-sidecar";
   tag = version;
-  config = { EntryPoint = [ "tracer-sidecar" ]; };
+  created = imageMeta.created;
+  config = {
+    EntryPoint = [ "tracer-sidecar" ];
+    Labels = imageMeta.labels;
+  };
   copyToRoot = pkgs.buildEnv {
     name = "image-root";
     paths = [
