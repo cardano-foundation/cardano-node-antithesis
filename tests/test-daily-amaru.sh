@@ -1688,6 +1688,12 @@ issue_225_allowed_paths=(
   tests/fixtures/daily-amaru/boundary-nix.sh
   tests/fixtures/daily-amaru/boundary-resolver.sh
   tests/fixtures/daily-amaru/test-transport-boundary.sh
+  specs/205-already-pinned-bootstrap/data-model.md
+  specs/205-already-pinned-bootstrap/functions-model.md
+  specs/205-already-pinned-bootstrap/modules-model.md
+  specs/205-already-pinned-bootstrap/plan.md
+  specs/205-already-pinned-bootstrap/spec.md
+  specs/205-already-pinned-bootstrap/tasks.md
   specs/225-transport-value-channel/data-model.md
   specs/225-transport-value-channel/functions-model.md
   specs/225-transport-value-channel/modules-model.md
