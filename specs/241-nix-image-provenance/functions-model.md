@@ -14,11 +14,16 @@ Only new/changed signatures. No bodies, no algorithms.
 
 ## `scripts/check-image-provenance.sh`
 
-- `check-image-provenance.sh --image <tarball> --expected-revision <rev> --expected-created <rfc3339> [--allow-unpublished]`
+- `check-image-provenance.sh --image <tarball> --expected-revision <rev> --expected-created <rfc3339> --expected-source <url> --expected-version <ver>`
   - `tarball`: path to a `dockerTools.buildImage` output tarball.
-  - `expected-revision`: full SHA with optional `-dirty`, or the
-    unpublished marker only with `--allow-unpublished`.
+  - `expected-revision`: full SHA with optional `-dirty`. No unpublished
+    marker exists: sources without revision metadata fail closed before
+    verification (helper throws), so the verifier never certifies them.
   - `expected-created`: RFC 3339 UTC timestamp.
+  - `expected-source`: repository URL compared for equality against
+    `org.opencontainers.image.source`.
+  - `expected-version`: image tag compared for equality against
+    `org.opencontainers.image.version`.
   - Effect: read-only inspection; no daemon, no network, no mutation.
   - Success: exit 0 plus one canonical identity line
     (`created=… revision=… config_digest=… tarball_sha256=…`).

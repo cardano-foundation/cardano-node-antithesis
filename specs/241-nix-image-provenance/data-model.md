@@ -45,19 +45,28 @@ or the explicit unpublished marker.
 - INV-241-CREATED-TRUTH (ADVISORY): emitted OCI `created` equals the source
   revision time. Failure: epoch/default date. Success: exact documented
   source date, observed in the tarball config.
-- INV-241-PROVENANCE (ADVISORY): OCI labels carry revision/source/version
-  matching the producing inputs. Failure: missing label or mismatch.
-  Success: all labels present and equal to inputs.
+- INV-241-PROVENANCE (ADVISORY): all four OCI labels COMPARED to the
+  producing inputs (revision and created to CLI expectations, source to
+  the repository constant, version to the image tag). Failure: missing
+  label or any mismatch. Success: all labels present and equal.
+  Presence-only assertion is failure.
 - INV-241-REPRODUCIBLE (ADVISORY): identical sources yield identical image
-  bytes. Failure: wall-clock or other unpinned input inside the closure.
-  Success: consecutive builds share the store path.
+  bytes, shown by CROSS-SEAT store-path equality (independent worktrees
+  produce the identical path). Failure: wall-clock or other unpinned
+  input inside the closure. Success: cross-seat path equality.
 - INV-241-VERIFY-ARTIFACT (ADVISORY): acceptance rests on tarball-config
-  inspection. Failure: source-only grep standing as proof. Success: every
-  verdict cites tarball SHA-256 plus config digest.
+  inspection executing production bytes. Failure: source-only grep,
+  re-typed production copies, vendored-host-path fixtures, silent skips,
+  or reason-less exit codes standing as proof. Success: every verdict
+  cites tarball SHA-256 plus config digest recomputed from the bytes, the
+  rejection diagnostic names the reason, and absent preconditions fail.
 - INV-241-CACHE-HONEST (ADVISORY): rebuilds of identical sources report
-  reuse. Failure: a repeated build minting or claiming a new identity.
-  Success: same store path reported as reused with the original date.
+  reuse. Failure: a repeated build minting or claiming a new identity,
+  or reuse shown only by consecutive path equality without a printed
+  reuse statement. Success: consecutive equality PLUS an explicit
+  `reuse=<bool>` report line.
 - INV-241-PUBLISH-SKIP (ADVISORY): immutable published identities are never
   overwritten; new sources get new tags the consumer selects. Failure:
   retagging old bytes or skipping a corrected tag. Success: skip lines for
-  published tags, new tags for new sources, consumer file updated.
+  published tags, new tags for new sources; the consumer Compose update
+  itself happens post-publication (residual R-001), proven selectable here.

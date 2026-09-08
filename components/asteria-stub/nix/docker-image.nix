@@ -1,4 +1,4 @@
-{ pkgs, utxo-indexer, version, ... }:
+{ pkgs, utxo-indexer, version, imageMeta, ... }:
 let
   # Bake composer scripts under the canonical Antithesis composer
   # path. Antithesis discovers parallel_driver_*, eventually_*,
@@ -34,6 +34,7 @@ in
 pkgs.dockerTools.buildImage {
   name = "ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-stub";
   tag = version;
+  created = imageMeta.created;
   copyToRoot = pkgs.buildEnv {
     name = "image-root";
     paths = [
@@ -52,5 +53,6 @@ pkgs.dockerTools.buildImage {
     Entrypoint = [ "${utxo-indexer}/bin/utxo-indexer" ];
     Cmd = defaultIndexerArgs;
     WorkingDir = "/";
+    Labels = imageMeta.labels;
   };
 }

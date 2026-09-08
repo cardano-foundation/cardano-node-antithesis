@@ -1633,11 +1633,24 @@
         "type": "github"
       }
     },
+    "image-meta": {
+      "flake": false,
+      "locked": {
+        "path": "../image-meta",
+        "type": "path"
+      },
+      "original": {
+        "path": "../image-meta",
+        "type": "path"
+      },
+      "parent": []
+    },
     "root": {
       "inputs": {
         "cardano-node-clients": "cardano-node-clients",
         "composer-sdk": "composer-sdk",
         "flake-parts": "flake-parts_3",
+        "image-meta": "image-meta",
         "nixpkgs": "nixpkgs_2"
       }
     },

@@ -115,5 +115,39 @@ test-workflow-validation:
 test-daily-amaru:
     ./tests/test-daily-amaru.sh
 
+# focused proof plus representative tarball inspection (daemon-free)
+check-image-provenance:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source_url=https://github.com/cardano-foundation/cardano-node-antithesis
+    ./tests/test-image-provenance.sh
+    inspect_component() {
+        local comp=$1 out1 out2 rev created tag reuse
+        if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            rev=$(git rev-parse HEAD)-dirty
+        else
+            rev=$(git rev-parse HEAD)
+        fi
+        created=$(date -u -d "$(git log -1 --format=%cI)" +%Y-%m-%dT%H:%M:%SZ)
+        out1=$(cd "components/${comp}" && nix build .#docker-image --print-out-paths)
+        out2=$(cd "components/${comp}" && nix build .#docker-image --print-out-paths)
+        if [ "${out1}" = "${out2}" ]; then
+            reuse=true
+        else
+            reuse=false
+        fi
+        printf 'reuse=%s path=%s\n' "${reuse}" "${out1}"
+        [ "${reuse}" = true ]
+        tag=$(tar -xzOf "${out1}" manifest.json | jq -r '.[0].RepoTags[0]' | sed 's/.*://')
+        ./scripts/check-image-provenance.sh \
+            --image "${out1}" \
+            --expected-revision "${rev}" \
+            --expected-created "${created}" \
+            --expected-source "${source_url}" \
+            --expected-version "${tag}"
+    }
+    inspect_component asteria-stub
+    inspect_component tx-generator
+
 # complete local CI: no Docker, no network, no credentials
-ci: check-workflows check-shell format-check test-workflow-validation test-daily-amaru
+ci: check-workflows check-shell format-check test-workflow-validation test-daily-amaru check-image-provenance

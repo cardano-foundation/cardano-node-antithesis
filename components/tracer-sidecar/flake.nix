@@ -10,11 +10,20 @@
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-utils.url = "github:hamishmack/flake-utils/hkm/nested-hydraJobs";
+    image-meta = {
+      url = "path:../image-meta";
+      flake = false;
+    };
   };
 
-  outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, ... }:
+  outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, image-meta, ... }:
     let
-      version = self.dirtyShortRev or self.shortRev;
+      imageMeta = import (image-meta + "/meta.nix") {
+        inherit self;
+        sourceUrl =
+          "https://github.com/cardano-foundation/cardano-node-antithesis";
+      };
+      version = imageMeta.version;
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
         systems = [ "x86_64-linux" "aarch64-darwin" ];
         perSystem = { system, ... }:
@@ -27,7 +36,7 @@
             indexState = "2025-08-07T00:00:00Z";
           };
           docker-image = pkgs.callPackage ./nix/docker-image.nix {
-            inherit project version;
+            inherit project version imageMeta;
           };
         in rec {
           packages = {

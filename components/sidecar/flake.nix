@@ -11,12 +11,22 @@
     cardano-node-runtime.url = "github:IntersectMBO/cardano-node?ref=10.1.4";
     adversary.url =
       "github:cardano-foundation/cardano-node-antithesis?dir=components/adversary";
+    image-meta = {
+      url = "path:../image-meta";
+      flake = false;
+    };
   };
 
   outputs =
-    inputs@{ self, flake-parts, nixpkgs, cardano-node-runtime, adversary, ... }:
+    inputs@{ self, flake-parts, nixpkgs, cardano-node-runtime, adversary
+    , image-meta, ... }:
     let
-      version = self.dirtyShortRev or self.shortRev or "dev";
+      imageMeta = import (image-meta + "/meta.nix") {
+        inherit self;
+        sourceUrl =
+          "https://github.com/cardano-foundation/cardano-node-antithesis";
+      };
+      version = imageMeta.version;
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
         systems = [ "x86_64-linux" "aarch64-darwin" ];
         perSystem = { system, pkgs, ... }:
@@ -25,7 +35,7 @@
               cardano-node-runtime.project.${system}.pkgs.cardano-cli;
             adversary-exe = adversary.packages.${system}.adversary;
             sidecar-image = pkgs.callPackage ./nix/docker-image.nix {
-              inherit version adversary-exe cardano-cli;
+              inherit version adversary-exe cardano-cli imageMeta;
             };
           in {
             packages = {
