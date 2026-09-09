@@ -1741,6 +1741,8 @@ issue_225_allowed_paths=(
   specs/241-nix-image-provenance/tasks.md
   tests/test-image-provenance.sh
   tests/fixtures/epoch-image/image.tar.gz
+  docs/testnets/cardano-node-master.md
+  testnets/cardano_node_master/docker-compose.yaml
 )
 
 register_223_mutant() {
