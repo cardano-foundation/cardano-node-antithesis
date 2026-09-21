@@ -10,6 +10,21 @@ TESTNET="${1:-cardano_node_master}"
 TIMEOUT="${2:-120}"
 COMPOSE_FILE="testnets/${TESTNET}/docker-compose.yaml"
 MAGIC=42
+PING_ERR=$(mktemp)
+
+# `cardano-cli ping` changed interface at cli 11.2: --magic/--host/--port/--tip
+# were replaced by -m|--network-magic plus a positional ADDRS. The matrix spans
+# both, and each node is pinged with its OWN image cli, so try the legacy form
+# first and fall back to the modern one. Keep stderr: a usage error must never
+# be indistinguishable from a node that is not answering.
+ping_node() {
+  local node=$1
+  docker compose -f "$COMPOSE_FILE" exec -T "$node" \
+    cardano-cli ping --magic "$MAGIC" --host 127.0.0.1 --port 3001 \
+    --tip --quiet -c1 2>>"$PING_ERR" && return 0
+  docker compose -f "$COMPOSE_FILE" exec -T "$node" \
+    cardano-cli ping -m "$MAGIC" -q -c1 127.0.0.1:3001 2>>"$PING_ERR"
+}
 
 export INTERNAL_NETWORK=true
 
@@ -40,6 +55,7 @@ for i in $(seq 1 "$POOLS"); do
   while true; do
     if [ "$SECONDS" -ge "$DEADLINE" ]; then
       echo "FAIL: timed out waiting for ${NODE}"
+      echo "--- last cardano-cli ping stderr ---"; tail -20 "$PING_ERR" || true
       docker compose -f "$COMPOSE_FILE" logs --tail 20 "$NODE" 2>&1
       exit 1
     fi
@@ -58,9 +74,7 @@ for i in $(seq 1 "$POOLS"); do
 
     # Query the node tip via cardano-cli ping. `docker compose exec`
     # resolves the service name regardless of container_name.
-    if TIP=$(docker compose -f "$COMPOSE_FILE" exec -T "$NODE" \
-        cardano-cli ping --magic "$MAGIC" --host 127.0.0.1 --port 3001 \
-        --tip --quiet -c1 2>/dev/null); then
+    if TIP=$(ping_node "$NODE"); then
       echo "OK: ${NODE} — ${TIP}"
       break
     fi

@@ -1,5 +1,5 @@
 x-cardano-node: &cardano-node
-  image: ghcr.io/intersectmbo/cardano-node@sha256:5ae211f92eac18ed27b9e2f73c190b56bf4c1a7145d282e78ca58597a385d19f
+  image: ghcr.io/intersectmbo/cardano-node@sha256:6365403f44713d0a046865fb0466503ef207b71beae1b1ffece7f4399356db9f
   environment:
     CARDANO_BLOCK_PRODUCER: true
   command: >
