@@ -46,6 +46,7 @@ consumer_repository=${HEAD_CANDIDATE_REPOSITORY:-${GITHUB_REPOSITORY:-cardano-fo
 day=''
 claim_ref=''
 duration=''
+run_base=''
 if [ "$mode" = daily ] || [ "$mode" = validation ]; then
   day=${HEAD_CANDIDATE_DAY:-$(TZ=UTC0 printf '%(%Y-%m-%d)T' -1)}
   [[ "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] ||
@@ -65,6 +66,12 @@ if [ "$mode" = daily ] || [ "$mode" = validation ]; then
   receipt[duration]=$duration
   receipt[faults]=enabled
   receipt[consumer_repository]=$consumer_repository
+  # The consumer commit is pinned to the exact commit this run started
+  # from, never to whatever the default branch points at later.
+  run_base=${HEAD_CANDIDATE_RUN_BASE:-${GITHUB_SHA:-}}
+  [[ "$run_base" =~ ^[0-9a-f]{40}$ ]] ||
+    die "unresolved run base: ${run_base:-absent}"
+  receipt[run_base]=$run_base
 fi
 
 receipt_keys=(
@@ -73,7 +80,7 @@ receipt_keys=(
   candidate_ref binary_revision
   rendered_model topology_services topology_image
   submission
-  day claim_ref duration faults consumer_repository request
+  day claim_ref duration faults consumer_repository run_base request
   consumer_sha workflow_run moog_test_id report_url terminal_outcome
 )
 
@@ -322,7 +329,7 @@ fi
 # ---------------------------------------------------------------------------
 consumer_output=''
 if ! consumer_output=$(transport_call prepare-consumer \
-  "$day" "$rendered_model" "$candidate_ref" "$consumer_testnet"); then
+  "$day" "$run_base" "$rendered_model" "$candidate_ref" "$consumer_testnet"); then
   fail_stage prepare-consumer consumer-failed
 fi
 consumer_sha=''
@@ -333,6 +340,17 @@ fi
   fail_stage prepare-consumer malformed-consumer-sha
 receipt[consumer_sha]=$consumer_sha
 write_receipt prepare-consumer CONSUMED
+
+# ---------------------------------------------------------------------------
+# construct-request: validate and render the exact dispatch identity BEFORE
+# the day is claimed, so a request that cannot be constructed never burns
+# the day (I216-05 request construction)
+# ---------------------------------------------------------------------------
+[[ "$consumer_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+  fail_stage construct-request malformed-repository
+request="cardano-node.yaml|${claim_ref#refs/tags/}|$consumer_testnet|$duration|no-faults=false"
+receipt[request]=$request
+write_receipt construct-request RENDERED
 
 # ---------------------------------------------------------------------------
 # claim-day: atomic creation of the day ref; at most one attempt per UTC day
@@ -352,16 +370,6 @@ fi
 [ "$claim_verdict" = CLAIMED ] ||
   fail_stage claim-day malformed-claim-verdict
 write_receipt claim-day CLAIMED
-
-# ---------------------------------------------------------------------------
-# construct-request: validate and render the exact dispatch identity before
-# any submission operation is invoked (I216-05 request construction)
-# ---------------------------------------------------------------------------
-[[ "$consumer_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
-  fail_stage construct-request malformed-repository
-request="cardano-node.yaml|${claim_ref#refs/tags/}|$consumer_testnet|$duration|no-faults=false"
-receipt[request]=$request
-write_receipt construct-request RENDERED
 
 # ---------------------------------------------------------------------------
 # submit-run: dispatch the existing MOOG workflow at the immutable claim ref

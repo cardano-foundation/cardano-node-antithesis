@@ -199,9 +199,11 @@ case "$operation" in
     # by nothing here. The day claim is the single ref-creating boundary.
     require_commands git cp find mkdir
     day=${1:?day is required}
-    rendered_model=${2:?rendered model is required}
-    candidate_ref=${3:?candidate ref is required}
-    testnet=${4:?testnet is required}
+    run_base=${2:?run base is required}
+    rendered_model=${3:?rendered model is required}
+    candidate_ref=${4:?candidate ref is required}
+    testnet=${5:?testnet is required}
+    [[ "$run_base" =~ ^[0-9a-f]{40}$ ]] || die "invalid run base: $run_base"
     [ "$testnet" = cardano_node_head ] || die 'consumer directory is not the HEAD testnet'
     [ -f "$rendered_model" ] || die 'rendered model is absent'
     grep -Fq -- "image: $candidate_ref" "$rendered_model" ||
@@ -210,6 +212,11 @@ case "$operation" in
     [ ! -e "$directory" ] || die "consumer workspace already exists: $directory"
     git clone --quiet --filter=blob:none --depth=1 \
       "https://github.com/${consumer_repository}.git" "$directory"
+    # The consumer commit's parent is the exact commit this run started
+    # from. If the default branch moved since the run began, fail closed
+    # rather than pinning the moved main (I216-04).
+    [ "$(git -C "$directory" rev-parse HEAD)" = "$run_base" ] ||
+      die "start-sha-moved: the consumer base moved since the run started"
     target=$directory/testnets/$testnet
     mkdir -p "$target"
     cp "$rendered_model" "$target/docker-compose.yaml"

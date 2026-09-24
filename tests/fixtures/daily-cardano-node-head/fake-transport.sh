@@ -274,10 +274,11 @@ case "$operation" in
 
   prepare-consumer)
     day=${1:?day is required}
-    rendered_model=${2:?rendered model is required}
-    candidate_ref=${3:?candidate ref is required}
-    testnet=${4:?testnet is required}
-    log prepare-consumer "$day" "$rendered_model" "$candidate_ref" "$testnet"
+    run_base=${2:?run base is required}
+    rendered_model=${3:?rendered model is required}
+    candidate_ref=${4:?candidate ref is required}
+    testnet=${5:?testnet is required}
+    log prepare-consumer "$day" "$run_base" "$rendered_model" "$candidate_ref" "$testnet"
     case "$scenario" in
       daily-consumer-failure)
         printf 'consumer preparation failed\n' >&2

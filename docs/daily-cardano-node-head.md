@@ -72,16 +72,23 @@ preparation is idempotent for an unchanged `master`.
 ## The daily run
 
 Every UTC day the scheduled job runs the same controller in `daily` mode.
+Before any transport call the controller derives the UTC day (a malformed
+override is rejected as `invalid UTC day: …`) and pins the run base — the
+exact commit the workflow started from, from `HEAD_CANDIDATE_RUN_BASE` or
+`GITHUB_SHA` (an unresolvable base is rejected as `unresolved run base: …`).
 After the unchanged #215 candidate stages end at `submit-candidate PREPARED`,
 the daily stages run:
 
 1. **prepare-consumer** — the rendered all-HEAD topology is committed as its
    own testnet directory `testnets/cardano_node_head/` on top of the exact
-   `main` the run started from; the mixed-version `cardano_node_master`
-   profile is untouched.
+   run base, never on top of whatever `main` points at later: if the default
+   branch moved since the run started, the stage fails closed with
+   `start-sha-moved` instead of pinning the moved main. The mixed-version
+   `cardano_node_master` profile is untouched.
 2. **construct-request** — the exact dispatch identity (workflow file, claim
    tag, testnet directory, duration, fault setting) is validated and recorded
-   before anything is submitted.
+   before anything is submitted. A request that cannot be constructed stops
+   here and does **not** burn the day.
 3. **claim-day** — the UTC day is claimed by creating
    `refs/tags/daily-cardano-node-head/<YYYY-MM-DD>` at the consumer commit
    with a creation-only push. Creation succeeds at most once: a duplicate,
@@ -94,11 +101,18 @@ the daily stages run:
    artifact read back; the terminal record correlates the MOOG test id,
    report URL and outcome with every candidate identity.
 
-**No retry.** A failed or incomplete attempt leaves the day claimed: the same
-UTC day cannot produce a second real submission attempt — not through the
-schedule, not through recovery dispatch, and not through the Actions re-run
-button (the MOOG submit step refuses a non-first attempt for the HEAD testnet
-with `daily-head-rerun-refused`). The next UTC day starts fresh.
+**No retry.** Exactly three guards give one real attempt per UTC day, and no
+more: the controller's day claim (one dispatch per day, above), the MOOG
+submit step's re-run guard (a non-first workflow attempt for the HEAD testnet
+is refused with `daily-head-rerun-refused` before any request is constructed),
+and the MOOG submit step's census guard (a second *fresh* dispatch at the same
+consumer commit finds an existing test-run in the MOOG census and is refused
+with `daily-head-already-submitted`; an unreadable census is refused with
+`daily-head-census-unreadable` — the day is never spent on an unverified
+census). Together: a failed or incomplete attempt leaves the day claimed, the
+same UTC day cannot produce a second real submission attempt through the
+schedule, a recovery dispatch or the Actions re-run button, and the next UTC
+day starts fresh.
 
 ### Validation mode (one hour)
 
@@ -114,8 +128,11 @@ When a scheduled daily run fails, the receipt artifact names the stage that
 stopped it (see *Receipt lookup* below). Recovery is manual:
 
 - a failure **before the claim** (candidate stages, prepare-consumer,
-  construct-request) can be retried the same day by dispatching the workflow
-  with the **production** input — the day is still unclaimed;
+  construct-request, including a moved main) can be retried the same day by
+  dispatching the workflow with the **production** input — the day is still
+  unclaimed, and the retry starts from the new main; a moved main is the one
+  failure class that is *expected* on an active repository and simply needs
+  the re-dispatch;
 - a failure **at or after the claim** leaves the day consumed; the same-day
   re-dispatch stops at `claim-day` with `day-already-claimed` by design. Fix
   forward and let the next UTC day's schedule run it;
@@ -124,9 +141,11 @@ stopped it (see *Receipt lookup* below). Recovery is manual:
 
 ## Fail-closed stops
 
-Two preflight rejections exit non-zero with a stderr token before any
-receipt exists: an unsupported mode (`unsupported mode: …`) and a
-non-executable transport (`transport is not executable: …`). Every later
+Preflight rejections exit non-zero with a stderr token before any
+receipt exists: an unsupported mode (`unsupported mode: …`), a
+non-executable transport (`transport is not executable: …`), an invalid UTC
+day (`invalid UTC day: …`) and an unresolvable run base (`unresolved run
+base: …`) — the latter two in the daily modes only. Every later
 stop is a durable receipt record with `outcome=FAILED`, the failing stage,
 and a stable error token; no later stage runs after a stop.
 
@@ -143,7 +162,7 @@ and a stable error token; no later stage runs after a stop.
 | `verify-topology` | the census is empty, a node service is missing or duplicated, or any image differs from the candidate | `zero-topology-census`, `missing-node-service-<name>`, `census-count-<n>`, `image-mismatch`, `stale-topology-override`, `malformed-topology-row`, `empty-service`, `empty-image`, `whitespace-image` |
 | `validate-compose` | Compose rejects the rendered model | `compose-failed` |
 | `submit-candidate` | the fake submission fails or is malformed | `submission-failed`, `multi-line-submission`, `malformed-submission` |
-| `prepare-consumer` | the consumer commit cannot be created or is malformed | `consumer-failed`, `multi-line-consumer`, `malformed-consumer-sha` |
+| `prepare-consumer` | the base moved, or the consumer commit cannot be created or is malformed | `consumer-failed`, `multi-line-consumer`, `malformed-consumer-sha`, plus the transport's `start-sha-moved` and `invalid run base` |
 | `construct-request` | the dispatch identity cannot be constructed | `malformed-repository` |
 | `claim-day` | the day is already claimed, the push fails, or the verdict is malformed | `day-already-claimed`, `claim-failed`, `malformed-claim-verdict` |
 | `submit-run` | the dispatch is rejected or its run is not observable | `dispatch-failed`, `multi-line-run-url`, `malformed-run-url` |
@@ -174,7 +193,7 @@ The receipt is an append-only file of `CandidateReceiptV1` records, one
 | `rendered_model` | from `render-topology` on |
 | `topology_services`, `topology_image` | from `verify-topology` on |
 | `submission` | from `submit-candidate` on |
-| `day`, `claim_ref`, `duration`, `faults`, `consumer_repository` | daily and validation modes, always |
+| `day`, `claim_ref`, `duration`, `faults`, `consumer_repository`, `run_base` | daily and validation modes, always |
 | `consumer_sha` | from `prepare-consumer` on (daily modes) |
 | `request` | from `construct-request` on (daily modes) |
 | `workflow_run` | from `submit-run` on (daily modes) |

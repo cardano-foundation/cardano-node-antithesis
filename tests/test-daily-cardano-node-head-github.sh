@@ -75,14 +75,16 @@ case "${1:-}" in
     cat "${STUB_LSREMOTE_FILE:?}"
     ;;
   clone)
-    # Fabricate the cloned repository: one commit on main, no network.
+    # Fabricate the cloned repository: one commit on main, no network, with
+    # fixed dates so the fabricated main SHA is deterministic for the suite.
     target=${!#}
     "${STUB_REAL_GIT:?}" init --quiet --initial-branch=main "$target"
     "${STUB_REAL_GIT}" -C "$target" config user.name stub
     "${STUB_REAL_GIT}" -C "$target" config user.email stub@example.invalid
     printf 'placeholder main\n' >"$target/README.stub"
     "${STUB_REAL_GIT}" -C "$target" add README.stub
-    "${STUB_REAL_GIT}" -C "$target" commit --quiet -m 'stub main'
+    GIT_AUTHOR_DATE='2026-01-01T00:00:00Z' GIT_COMMITTER_DATE='2026-01-01T00:00:00Z' \
+      "${STUB_REAL_GIT}" -C "$target" commit --quiet -m 'stub main'
     ;;
   -C)
     case " $* " in
@@ -784,11 +786,26 @@ run_transport_in() {
     "$@" >"$case_stdout" 2>"$case_stderr" || case_rc=$?
 }
 
+# The deterministic fabricated main SHA the stub clone produces. The
+# probe runs under the same env -i shape as the transport's own clone so
+# both fabrications land on the identical commit.
+fabricated_main_sha() {
+  local dir=$tmp_root/fabricated-$RANDOM$RANDOM
+  env -i \
+    PATH="$stub_bin:$PATH" \
+    STUB_LOG="$stub_log" \
+    STUB_REAL_GIT="$real_git" \
+    "$stub_bin/git" clone \
+    "https://github.com/$consumer_repository.git" "$dir"
+  "$real_git" -C "$dir" rev-parse HEAD
+}
+
 # Render + prepare a consumer commit inside one state directory; echoes the
 # consumer commit SHA the transport produced.
 seed_consumer_workspace() {
   local state=$1
   local name=$2
+  local base=$3
   run_transport_in "$state" "$name-render" env \
     STUB_REAL_GIT="$real_git" \
     HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
@@ -797,7 +814,7 @@ seed_consumer_workspace() {
   run_transport_in "$state" "$name-prepare" env \
     STUB_REAL_GIT="$real_git" \
     HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
-    "$transport" prepare-consumer "$daily_day" \
+    "$transport" prepare-consumer "$daily_day" "$base" \
     "$state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
   require_success
   sed -n '1p' "$case_stdout"
@@ -805,7 +822,8 @@ seed_consumer_workspace() {
 
 # claim-day: creation-only push of the day tag.
 prepare_state=$tmp_root/prepare-state
-consumer_commit=$(seed_consumer_workspace "$prepare_state" prepare-ok)
+stub_main_sha=$(fabricated_main_sha)
+consumer_commit=$(seed_consumer_workspace "$prepare_state" prepare-ok "$stub_main_sha")
 [[ "$consumer_commit" =~ ^[0-9a-f]{40}$ ]] ||
   fail "prepare-consumer emitted a non-SHA commit: $consumer_commit"
 
@@ -821,6 +839,9 @@ done
 commit_count=$("$real_git" -C "$prepare_state/consumer" rev-list --count HEAD)
 [ "$commit_count" -eq 2 ] ||
   fail "prepare-consumer expected one commit on top of main, found $commit_count"
+parent_sha=$("$real_git" -C "$prepare_state/consumer" rev-parse HEAD^)
+[ "$parent_sha" = "$stub_main_sha" ] ||
+  fail "consumer commit is not pinned to the run's start SHA: parent=$parent_sha"
 assert_log_contains \
   "git clone --quiet --filter=blob:none --depth=1 https://github.com/$consumer_repository.git $prepare_state/consumer"
 if grep -Eq '^git -C [^ ]+ .* push ' "$stub_log"; then
@@ -830,7 +851,7 @@ pass prepare-consumer-renders-immutable-commit
 
 run_transport_in "$prepare_state" prepare-missing-model env \
   STUB_REAL_GIT="$real_git" \
-  "$transport" prepare-consumer "$daily_day" \
+  "$transport" prepare-consumer "$daily_day" "$stub_main_sha" \
   "$prepare_state/not-rendered.yaml" "$candidate_ref" "$consumer_testnet"
 require_failure
 assert_stderr_token 'rendered model is absent'
@@ -841,17 +862,45 @@ sed "s#image: $candidate_ref#image: $stale_upstream_ref#g" \
   "$prepare_state/docker-compose.yaml" >"$stale_model"
 run_transport_in "$prepare_state" prepare-stale-model env \
   STUB_REAL_GIT="$real_git" \
-  "$transport" prepare-consumer "$daily_day" \
+  "$transport" prepare-consumer "$daily_day" "$stub_main_sha" \
   "$stale_model" "$candidate_ref" "$consumer_testnet"
 require_failure
 assert_stderr_token 'does not carry the candidate image'
 pass prepare-consumer-rejects-stale-model
 
+# Main moved between the run's start and consumer preparation: the transport
+# fails closed instead of pinning the moved main.
+moved_state=$tmp_root/moved-state
+moved_base=9999999999999999999999999999999999999999
+run_transport_in "$moved_state" prepare-moved-render env \
+  STUB_REAL_GIT="$real_git" \
+  HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
+  "$transport" render-topology "$candidate_ref"
+require_success
+run_transport_in "$moved_state" prepare-moved-base env \
+  STUB_REAL_GIT="$real_git" \
+  HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
+  "$transport" prepare-consumer "$daily_day" "$moved_base" \
+  "$moved_state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
+require_failure
+assert_stderr_token 'start-sha-moved'
+[ ! -e "$moved_state/consumer/testnets/$consumer_testnet" ] ||
+  fail 'a moved base still produced a consumer commit'
+pass prepare-consumer-fails-closed-on-moved-base
+
+run_transport_in "$moved_state" prepare-bad-base env \
+  STUB_REAL_GIT="$real_git" \
+  "$transport" prepare-consumer "$daily_day" not-a-sha \
+  "$moved_state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
+require_failure
+assert_stderr_token 'invalid run base'
+pass prepare-consumer-rejects-malformed-base
+
 # claim-day: creation-only push of the day tag.
 claim_ok_state=$tmp_root/claim-ok-state
 claim_ok_fixture=$scenario_root/claim-ok-empty
 : >"$claim_ok_fixture"
-claim_commit=$(seed_consumer_workspace "$claim_ok_state" claim-ok)
+claim_commit=$(seed_consumer_workspace "$claim_ok_state" claim-ok "$stub_main_sha")
 run_transport_in "$claim_ok_state" claim-day-ok env \
   STUB_REAL_GIT="$real_git" \
   STUB_LSREMOTE_FILE="$claim_ok_fixture" \
@@ -870,7 +919,7 @@ pass claim-day-creates-tag-once
 claim_blocked_state=$tmp_root/claim-blocked-state
 claim_blocked_fixture=$scenario_root/claim-blocked
 : >"$claim_blocked_fixture"
-blocked_commit=$(seed_consumer_workspace "$claim_blocked_state" claim-blocked)
+blocked_commit=$(seed_consumer_workspace "$claim_blocked_state" claim-blocked "$stub_main_sha")
 printf '%s\t%s\n' "$blocked_commit" "$daily_claim_ref" >>"$claim_blocked_fixture"
 blocked_marker_pushes=$(grep -Ec "push --force-with-lease=$daily_claim_ref:" "$stub_log" || true)
 run_transport_in "$claim_blocked_state" claim-day-blocked env \
@@ -889,7 +938,11 @@ pass claim-day-refuses-existing-tag
 claim_fail_state=$tmp_root/claim-fail-state
 claim_fail_fixture=$scenario_root/claim-fail-empty
 : >"$claim_fail_fixture"
-fail_commit=$(seed_consumer_workspace "$claim_fail_state" claim-fail)
+fail_commit=$(seed_consumer_workspace "$claim_fail_state" claim-fail "$stub_main_sha")
+case ${fail_commit:0:1} in
+  0) wrong_commit="1${fail_commit:1}" ;;
+  *) wrong_commit="0${fail_commit:1}" ;;
+esac
 run_transport_in "$claim_fail_state" claim-day-push-failure env \
   STUB_REAL_GIT="$real_git" \
   STUB_LSREMOTE_FILE="$claim_fail_fixture" \
@@ -911,7 +964,7 @@ pass claim-day-rejects-non-day-ref
 run_transport_in "$claim_fail_state" claim-day-wrong-commit env \
   STUB_REAL_GIT="$real_git" \
   STUB_LSREMOTE_FILE="$claim_fail_fixture" \
-  "$transport" claim-day "$daily_claim_ref" "${fail_commit/1/2}"
+  "$transport" claim-day "$daily_claim_ref" "$wrong_commit"
 require_failure
 assert_stderr_token 'consumer workspace is not at the claimed commit'
 pass claim-day-requires-workspace-at-commit
@@ -1086,7 +1139,13 @@ cat >"$moog_stub_bin/moog" <<'STUB'
 set -euo pipefail
 printf 'moog %s\n' "$*" >>"${MOOG_STUB_LOG:?}"
 case "$1 $2" in
-  'facts test-runs') printf '[]\n' ;;
+  'facts test-runs')
+    if [ -n "${MOOG_STUB_CENSUS_FAIL:-}" ]; then
+      printf 'stub census unreadable\n' >&2
+      exit 1
+    fi
+    cat "${MOOG_STUB_CENSUS:?}"
+    ;;
   'requester create-test')
     printf '{"value":{"testRunId":"stub-test-run-id"},"txHash":"stub-tx"}\n'
     ;;
@@ -1128,10 +1187,12 @@ run_submit_step() {
   local testnet=$1
   local attempt=$2
   local out=$3
+  local census=$4
   : >"$moog_stub_log"
   env \
     PATH="$moog_stub_bin:$PATH" \
     MOOG_STUB_LOG="$moog_stub_log" \
+    MOOG_STUB_CENSUS="$census" \
     MOOG_REQUESTER=stub-requester \
     MOOG_PLATFORM=github \
     GITHUB_REPOSITORY="$consumer_repository" \
@@ -1142,8 +1203,19 @@ run_submit_step() {
     bash "$submit_step_script"
 }
 
+empty_census=$tmp_root/census-empty.json
+printf '[]\n' >"$empty_census"
+occupied_census=$tmp_root/census-occupied.json
+{
+  printf '[{"key":{"type":"test-run","commitId":"%s","directory":"testnets/cardano_node_head","platform":"github","repository":{"organization":"cardano-foundation","repo":"cardano-node-antithesis"},"requester":"stub-requester"}}]\n' "$consumer_commit"
+} >"$occupied_census"
+matrix_occupied_census=$tmp_root/census-matrix-occupied.json
+{
+  printf '[{"key":{"type":"test-run","commitId":"%s","directory":"testnets/cardano_node_master","platform":"github","repository":{"organization":"cardano-foundation","repo":"cardano-node-antithesis"},"requester":"stub-requester"}},{"key":{"type":"test-run","commitId":"%s","directory":"testnets/cardano_node_master","platform":"github","repository":{"organization":"cardano-foundation","repo":"cardano-node-antithesis"},"requester":"stub-requester"}}]\n' "$consumer_commit" "$consumer_commit"
+} >"$matrix_occupied_census"
+
 rerun_rc=0
-run_submit_step cardano_node_head 2 "$tmp_root/rerun-output" \
+run_submit_step cardano_node_head 2 "$tmp_root/rerun-output" "$empty_census" \
   >"$tmp_root/rerun-stdout" 2>"$tmp_root/rerun-stderr" || rerun_rc=$?
 [ "$rerun_rc" -ne 0 ] ||
   fail 'a re-run of the daily HEAD test was not refused'
@@ -1156,7 +1228,7 @@ fi
 pass moog-step-refuses-daily-head-rerun
 
 matrix_rc=0
-run_submit_step cardano_node_master 2 "$tmp_root/matrix-output" \
+run_submit_step cardano_node_master 2 "$tmp_root/matrix-output" "$empty_census" \
   >"$tmp_root/matrix-stdout" 2>"$tmp_root/matrix-stderr" || matrix_rc=$?
 [ "$matrix_rc" -eq 0 ] ||
   fail "a matrix testnet re-run was refused: $(cat "$tmp_root/matrix-stderr")"
@@ -1165,6 +1237,74 @@ grep -Fq 'requester create-test' "$moog_stub_log" ||
 grep -Fq 'id=stub-test-run-id' "$tmp_root/matrix-output" ||
   fail 'the matrix re-run did not export the test id'
 pass moog-step-matrix-rerun-unchanged
+
+# First fresh dispatch of the daily HEAD testnet: empty census, submits.
+first_rc=0
+run_submit_step cardano_node_head 1 "$tmp_root/first-output" "$empty_census" \
+  >"$tmp_root/first-stdout" 2>"$tmp_root/first-stderr" || first_rc=$?
+[ "$first_rc" -eq 0 ] ||
+  fail "the first fresh daily HEAD dispatch was refused: $(cat "$tmp_root/first-stderr")"
+grep -Fq 'requester create-test' "$moog_stub_log" ||
+  fail 'the first fresh daily HEAD dispatch did not construct its request'
+grep -Fq 'id=stub-test-run-id' "$tmp_root/first-output" ||
+  fail 'the first fresh daily HEAD dispatch did not export the test id'
+pass moog-step-first-fresh-dispatch-submits
+
+# Second fresh dispatch at the same consumer commit: the census already has
+# a test-run, so the step refuses before any create-test.
+second_rc=0
+run_submit_step cardano_node_head 1 "$tmp_root/second-output" "$occupied_census" \
+  >"$tmp_root/second-stdout" 2>"$tmp_root/second-stderr" || second_rc=$?
+[ "$second_rc" -ne 0 ] ||
+  fail 'a second fresh daily HEAD dispatch was not refused'
+grep -Fq 'daily-head-already-submitted: testnet=cardano_node_head existing=1' \
+  "$tmp_root/second-stderr" ||
+  fail 'the second-dispatch refusal lacks its stable reason token'
+if grep -Fq 'requester create-test' "$moog_stub_log"; then
+  fail 'the refused second dispatch constructed a MOOG request anyway'
+fi
+pass moog-step-second-fresh-dispatch-refused
+
+# An unreadable census refuses the daily HEAD testnet before create-test.
+census_fail_rc=0
+env \
+  PATH="$moog_stub_bin:$PATH" \
+  MOOG_STUB_LOG="$moog_stub_log" \
+  MOOG_STUB_CENSUS_FAIL=1 \
+  MOOG_STUB_CENSUS="$empty_census" \
+  MOOG_REQUESTER=stub-requester \
+  MOOG_PLATFORM=github \
+  GITHUB_REPOSITORY="$consumer_repository" \
+  GITHUB_OUTPUT="$tmp_root/census-fail-output" \
+  DURATION=3 \
+  TESTNET=cardano_node_head \
+  RUN_ATTEMPT=1 \
+  bash "$submit_step_script" >"$tmp_root/census-fail-stdout" 2>"$tmp_root/census-fail-stderr" ||
+  census_fail_rc=$?
+[ "$census_fail_rc" -ne 0 ] ||
+  fail 'an unreadable census did not refuse the daily HEAD dispatch'
+grep -Fq 'daily-head-census-unreadable: testnet=cardano_node_head' \
+  "$tmp_root/census-fail-stderr" ||
+  fail 'the unreadable-census refusal lacks its stable reason token'
+if grep -Fq 'requester create-test' "$moog_stub_log"; then
+  fail 'the unreadable-census refusal constructed a MOOG request anyway'
+fi
+pass moog-step-unreadable-census-refuses
+
+# Matrix testnets keep today's behaviour: an occupied census only feeds the
+# try counter, never a refusal.
+matrix_occupied_rc=0
+run_submit_step cardano_node_master 1 "$tmp_root/matrix-occupied-output" \
+  "$matrix_occupied_census" \
+  >"$tmp_root/matrix-occupied-stdout" 2>"$tmp_root/matrix-occupied-stderr" ||
+  matrix_occupied_rc=$?
+[ "$matrix_occupied_rc" -eq 0 ] ||
+  fail "a matrix dispatch with occupied census was refused: $(cat "$tmp_root/matrix-occupied-stderr")"
+grep -Fq 'TRY=3 for testnets/cardano_node_master' "$tmp_root/matrix-occupied-stdout" ||
+  fail 'the occupied matrix census did not advance the try counter'
+grep -Fq 'requester create-test' "$moog_stub_log" ||
+  fail 'the matrix dispatch with occupied census did not construct its request'
+pass moog-step-matrix-census-unchanged
 
 # The widened G4 shape: no secret expression in any run text of the MOOG
 # workflow either, including the wallet step.

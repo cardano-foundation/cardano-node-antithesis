@@ -477,6 +477,7 @@ daily_run_url=https://github.com/cardano-foundation/cardano-node-antithesis/acti
 daily_moog_id=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 daily_report_url=https://amaru-cardano.antithesis.com/report/00000000-0000-0000-0000-000000000000
 daily_repository=cardano-foundation/cardano-node-antithesis
+daily_run_base=5555555555555555555555555555555555555555
 
 claim_marker_path() {
   printf '%s/claims/%s\n' "$1" "${2//\//_}"
@@ -538,6 +539,7 @@ assert_daily_complete_receipt() {
   assert_last_receipt_contains "duration=$expected_duration"
   assert_last_receipt_contains 'faults=enabled'
   assert_last_receipt_contains "consumer_repository=$daily_repository"
+  assert_last_receipt_contains "run_base=$daily_run_base"
   assert_last_receipt_contains "request=cardano-node.yaml|${expected_claim_ref#refs/tags/}|cardano_node_head|$expected_duration|no-faults=false"
   assert_last_receipt_contains "upstream_sha=$upstream_sha"
   assert_last_receipt_contains "candidate_ref=$candidate_ref"
@@ -570,6 +572,7 @@ run_daily() {
   local mode=${3:-daily}
   local shared_state=${4:-}
   local day=${5:-$daily_day}
+  local run_base=${6-$daily_run_base}
   case_name=$label
   case_dir="$tmp_root/$daily_case_number-$label"
   mkdir -p "$case_dir"
@@ -599,9 +602,12 @@ run_daily() {
   if [ -n "$day" ]; then
     controller_env+=("HEAD_CANDIDATE_DAY=$day")
   fi
+  if [ -n "$run_base" ]; then
+    controller_env+=("HEAD_CANDIDATE_RUN_BASE=$run_base")
+  fi
   case_rc=0
   env -u HEAD_CANDIDATE_IMAGE_REPOSITORY -u HEAD_CANDIDATE_DAY \
-    -u HEAD_CANDIDATE_REPOSITORY \
+    -u HEAD_CANDIDATE_REPOSITORY -u HEAD_CANDIDATE_RUN_BASE -u GITHUB_SHA \
     "${controller_env[@]}" \
     "$controller" >"$case_stdout" 2>"$case_stderr" || case_rc=$?
 }
@@ -628,6 +634,12 @@ assert_log_count 1 '^await-run '
 stage_records=$(grep -c '^stage=' "$case_receipt" || true)
 [ "$stage_records" -eq 12 ] ||
   fail "daily-prepared expected 12 stage records, found $stage_records"
+# The request is constructed and validated before the day is claimed.
+construct_line=$(grep -n '^stage=construct-request$' "$case_receipt" | cut -d: -f1)
+claim_line=$(grep -n '^stage=claim-day$' "$case_receipt" | cut -d: -f1)
+[ -n "$construct_line" ] && [ -n "$claim_line" ] &&
+  [ "$construct_line" -lt "$claim_line" ] ||
+  fail 'construct-request must precede claim-day in the receipt'
 pass daily-prepared
 
 # The exact real request: 3 hours, faults on, exact consumer commit, at the
@@ -636,7 +648,7 @@ assert_file_contains "$case_log" \
   "submit-run $daily_consumer_sha $production_claim_ref cardano_node_head 3 false"
 assert_file_contains "$case_log" "await-run $daily_consumer_sha $daily_run_url"
 assert_file_contains "$case_log" \
-  "prepare-consumer $daily_day $case_state/rendered-model $candidate_ref cardano_node_head"
+  "prepare-consumer $daily_day $daily_run_base $case_state/rendered-model $candidate_ref cardano_node_head"
 assert_file_contains "$case_log" "claim-day $production_claim_ref $daily_consumer_sha"
 pass request-3h-faults-exact-consumer
 
@@ -708,6 +720,7 @@ run_daily_concurrent() {
     HEAD_CANDIDATE_TRANSPORT="$fake_transport" \
     HEAD_CANDIDATE_MODE=daily \
     HEAD_CANDIDATE_DAY="$daily_day" \
+    HEAD_CANDIDATE_RUN_BASE="$daily_run_base" \
     HEAD_CANDIDATE_STATE_DIR="$concurrent_state/state" \
     HEAD_CANDIDATE_RECEIPT="$dir/receipt" \
     "$controller" >"$dir/stdout" 2>"$dir/stderr" &
@@ -832,15 +845,17 @@ assert_file_contains "$case_receipt" "consumer_sha=$daily_consumer_sha"
 assert_no_real_submission
 pass prerequisite-claim-blocks-submission
 
-# A request that cannot be constructed stops before the submission operation
-# is invoked at all: zero submit calls, a stable token, the day still claimed.
+# A request that cannot be constructed stops before the day is claimed:
+# zero submit calls, a stable token, and the day is NOT burned.
 daily_extra_env=("HEAD_CANDIDATE_REPOSITORY=not-a-repo")
 run_daily prerequisite-request prepared daily
 daily_extra_env=()
 require_daily_failure prerequisite-request
 assert_daily_failure_receipt construct-request malformed-repository
-assert_file_contains "$case_receipt" 'stage=claim-day'
-assert_file_contains "$case_receipt" 'outcome=CLAIMED'
+assert_file_contains "$case_receipt" 'stage=prepare-consumer'
+if grep -Fqx 'outcome=CLAIMED' "$case_receipt"; then
+  fail 'a request-construction failure burned the day claim'
+fi
 assert_no_real_submission
 pass prerequisite-request-blocks-submission
 
@@ -968,3 +983,11 @@ grep -Fq 'invalid UTC day' "$case_stderr" ||
 assert_log_count 0 '.'
 assert_no_real_submission
 pass daily-invalid-day
+
+run_daily daily-unresolved-run-base prepared daily '' "$daily_day" ''
+require_daily_failure daily-unresolved-run-base
+grep -Fq 'unresolved run base' "$case_stderr" ||
+  fail 'daily-unresolved-run-base stderr lacks the preflight rejection token'
+assert_log_count 0 '.'
+assert_no_real_submission
+pass daily-unresolved-run-base

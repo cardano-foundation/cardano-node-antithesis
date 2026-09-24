@@ -104,15 +104,27 @@ jobs:
         RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
         set -euo pipefail
-        # One real attempt per UTC day: a re-run of a failed daily HEAD test
-        # must refuse before any MOOG request is constructed.
+        # One real attempt per UTC day for the HEAD testnet, from three
+        # guards: the daily controller's day claim (one dispatch per day),
+        # this step's run-attempt guard, and this step's MOOG census guard
+        # (a second fresh dispatch at the same consumer commit finds an
+        # existing test-run and refuses).
         if [ "$TESTNET" = "cardano_node_head" ] && [ "$RUN_ATTEMPT" != "1" ]; then
           printf 'daily-head-rerun-refused: testnet=%s attempt=%s\n' "$TESTNET" "$RUN_ATTEMPT" >&2
           exit 1
         fi
         COMMIT="${{ github.sha }}"
         TESTNET_DIR="testnets/$TESTNET"
-        TRY=$(moog facts test-runs --whose "$MOOG_REQUESTER" | jq \
+        census=''
+        if ! census=$(moog facts test-runs --whose "$MOOG_REQUESTER"); then
+          if [ "$TESTNET" = "cardano_node_head" ]; then
+            printf 'daily-head-census-unreadable: testnet=%s\n' "$TESTNET" >&2
+          else
+            printf 'moog census unreadable\n' >&2
+          fi
+          exit 1
+        fi
+        existing=$(printf '%s' "$census" | jq \
           --arg commit "$COMMIT" \
           --arg directory "$TESTNET_DIR" \
           --arg platform "$MOOG_PLATFORM" \
@@ -126,7 +138,11 @@ jobs:
             and ((.key.repository.organization + "/" + .key.repository.repo) == $repository)
             and .key.requester == $requester
           )) | length')
-        TRY=$((TRY + 1)) # start with try=1
+        if [ "$TESTNET" = "cardano_node_head" ] && [ "$existing" != "0" ]; then
+          printf 'daily-head-already-submitted: testnet=%s existing=%s\n' "$TESTNET" "$existing" >&2
+          exit 1
+        fi
+        TRY=$((existing + 1)) # start with try=1
         echo "TRY=$TRY for $TESTNET_DIR"
         if [ "${{ inputs.no-faults }}" = "true" ]; then
           render_args=(--no-faults)
