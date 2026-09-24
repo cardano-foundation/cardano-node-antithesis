@@ -141,6 +141,41 @@ jobs:
     - name: Wait for results
       run: timeout $(((DURATION + 1) * 3600)) ./scripts/wait-for-test.sh "${{ steps.request.outputs.id }}"
 
+    # The daily controller (daily-cardano-node-head.yaml) correlates its
+    # terminal receipt with this run's MOOG test identity through this
+    # artifact. Always reached, so a failed wait still exposes the phase the
+    # test actually reached.
+    - name: Expose MOOG correlation
+      if: ${{ always() }}
+      env:
+        TEST_RUN_ID: ${{ steps.request.outputs.id }}
+      run: |
+        set -euo pipefail
+        correlation="$RUNNER_TEMP/moog-correlation"
+        if [ -n "$TEST_RUN_ID" ]; then
+          RESULT=$(moog facts test-runs --test-run-id "$TEST_RUN_ID")
+          printf 'test_run_id=%s\n' "$TEST_RUN_ID" >"$correlation"
+          printf 'phase=%s\n' "$(printf '%s' "$RESULT" | jq -r '.[0].value.phase // "unknown"')" >>"$correlation"
+          printf 'outcome=%s\n' "$(printf '%s' "$RESULT" | jq -r '.[0].value.outcome // "-"')" >>"$correlation"
+          printf 'report_url=%s\n' "$(printf '%s' "$RESULT" | jq -r '.[0].value.url // "-"')" >>"$correlation"
+        else
+          {
+            printf 'test_run_id=-\n'
+            printf 'phase=never-submitted\n'
+            printf 'outcome=-\n'
+            printf 'report_url=-\n'
+          } >"$correlation"
+        fi
+        cat "$correlation"
+
+    - name: Upload MOOG correlation
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v6
+      with:
+        name: moog-correlation
+        path: ${{ runner.temp }}/moog-correlation
+        if-no-files-found: error
+
     # A scheduled run can fail silently for days (e.g. an upstream release
     # renames an asset). On a scheduled failure, open — or append to — a
     # single tracking issue so the breakage is visible.

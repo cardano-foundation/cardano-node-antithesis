@@ -1,7 +1,23 @@
 name: Cardano Node HEAD candidate
 
 on:
+  schedule:
+    # One production run per UTC day (02:23 UTC).
+    - cron: '23 2 * * *'
   workflow_dispatch:
+    inputs:
+      production:
+        description: Run the production daily path (manual recovery entrypoint)
+        required: false
+        type: boolean
+        default: false
+      validation:
+        description: >-
+          Run the one-hour validation mode (own claim namespace; cannot
+          consume a production day claim)
+        required: false
+        type: boolean
+        default: false
   pull_request:
 
 permissions:
@@ -32,7 +48,9 @@ jobs:
 
   head-candidate:
     name: Manual HEAD candidate preparation
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && !inputs.production && !inputs.validation
     runs-on: ubuntu-latest
     timeout-minutes: 180
     # The controller publishes one image per upstream SHA under the
@@ -75,6 +93,113 @@ jobs:
         run: scripts/daily-cardano-node-head.sh
 
       - name: Publish the candidate receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: daily-cardano-node-head-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/daily-cardano-node-head/receipt
+          if-no-files-found: error
+
+  daily-head-run:
+    name: Daily HEAD run (production)
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    # The controller publishes the candidate image under the repository's
+    # own GHCR namespace and creates the day tag (consumer commit) in this
+    # repository; nothing else is written.
+    permissions:
+      contents: write
+      packages: write
+    env:
+      HEAD_CANDIDATE_IMAGE_REPOSITORY: >-
+        ghcr.io/cardano-foundation/cardano-node-antithesis/cardano-node-head
+    steps:
+      - name: Check out the dispatched ref
+        uses: actions/checkout@v6
+
+      # Credentials are bound as step environment and fed to docker login's
+      # stdin; no secret expression appears inside any run text, and the
+      # controller, transport, receipt and logs never see a value.
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_ACTOR: ${{ github.actor }}
+        run: >-
+          printf '%s' "$GHCR_TOKEN" |
+          docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin
+
+      - uses: paolino/dev-assets/setup-nix@v0.0.1
+        with:
+          cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      # The exact-rev upstream build is only tractable on a runner with the
+      # IOG cache configured as a substituter; a cache miss still fails
+      # closed at the publish-candidate stage within the job timeout.
+      - name: Run the daily controller
+        env:
+          NIX_CONFIG: |
+            extra-substituters = https://cache.iog.io
+            extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+          GH_TOKEN: ${{ github.token }}
+          HEAD_CANDIDATE_MODE: daily
+          HEAD_CANDIDATE_STATE_DIR: ${{ runner.temp }}/daily-cardano-node-head
+          HEAD_CANDIDATE_RECEIPT: ${{ runner.temp }}/daily-cardano-node-head/receipt
+        run: scripts/daily-cardano-node-head.sh
+
+      - name: Publish the daily receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: daily-cardano-node-head-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/daily-cardano-node-head/receipt
+          if-no-files-found: error
+
+  validation-head-run:
+    name: Daily HEAD run (one-hour validation)
+    # Operator-authorized at run time; the validation claim namespace cannot
+    # consume a production day claim.
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.validation
+      && !inputs.production
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write
+      packages: write
+    env:
+      HEAD_CANDIDATE_IMAGE_REPOSITORY: >-
+        ghcr.io/cardano-foundation/cardano-node-antithesis/cardano-node-head
+    steps:
+      - name: Check out the dispatched ref
+        uses: actions/checkout@v6
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_ACTOR: ${{ github.actor }}
+        run: >-
+          printf '%s' "$GHCR_TOKEN" |
+          docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin
+
+      - uses: paolino/dev-assets/setup-nix@v0.0.1
+        with:
+          cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      - name: Run the validation controller
+        env:
+          NIX_CONFIG: |
+            extra-substituters = https://cache.iog.io
+            extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+          GH_TOKEN: ${{ github.token }}
+          HEAD_CANDIDATE_MODE: validation
+          HEAD_CANDIDATE_STATE_DIR: ${{ runner.temp }}/daily-cardano-node-head
+          HEAD_CANDIDATE_RECEIPT: ${{ runner.temp }}/daily-cardano-node-head/receipt
+        run: scripts/daily-cardano-node-head.sh
+
+      - name: Publish the validation receipt
         if: always()
         uses: actions/upload-artifact@v6
         with:
