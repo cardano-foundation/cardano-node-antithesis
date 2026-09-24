@@ -24,31 +24,31 @@ audited and accepted by the ticket owner.
 
 ## S2 — github-transport
 
-- [ ] T2161 Bare-remote observation and exact-rev Nix `dockerImage/node` build
+- [x] T2161 Bare-remote observation and exact-rev Nix `dockerImage/node` build
       with GHCR publication under the full-SHA tag (R-01, R-02).
-- [ ] T2162 Digest read-back and `CandidateRef` emission (I215-02).
-- [ ] T2163 Containerized `cardano-node` revision proof (I215-03).
-- [ ] T2164 Rendering of `cardano_node_master` into the state directory and
+- [x] T2162 Digest read-back and `CandidateRef` emission (I215-02).
+- [x] T2163 Containerized `cardano-node` revision proof (I215-03).
+- [x] T2164 Rendering of `cardano_node_master` into the state directory and
       Compose-resolved topology rows (I215-04, R-10).
-- [ ] T2165 Compose validation, fake submission, and receipt persistence
+- [x] T2165 Compose validation, fake submission, and receipt persistence
       (I215-05, I215-07, I215-09).
-- [ ] T2166 Credential handling confined to the effecting command's environment
+- [x] T2166 Credential handling confined to the effecting command's environment
       (I215-10).
 
-- [ ] T2167 Configurable image repository so the same transport publishes to
+- [x] T2167 Configurable image repository so the same transport publishes to
       a local registry on a workstation and to GHCR in CI; one local command
       runs the controller end to end (AL-1).
-- [ ] T2168 Local cluster proof: the rendered model starts, every producer and
+- [x] T2168 Local cluster proof: the rendered model starts, every producer and
       relay answers on the candidate image, the chain advances (AL-2).
 
 ## S3 — manual-entrypoint (folded into S2 by mandate v4)
 
-- [ ] T2174 `just ci` runs the candidate-path hermetic suite (AL-3).
+- [x] T2174 `just ci` runs the candidate-path hermetic suite (AL-3).
 
-- [ ] T2171 Manual `workflow_dispatch` candidate job running the real path with
+- [x] T2171 Manual `workflow_dispatch` candidate job running the real path with
       the fake submission transport and publishing the receipt (R-07).
-- [ ] T2172 Pull-request job running only the hermetic test suite (R-09).
-- [ ] T2173 Operator documentation naming the manual recovery entrypoint, each
+- [x] T2172 Pull-request job running only the hermetic test suite (R-09).
+- [x] T2173 Operator documentation naming the manual recovery entrypoint, each
       fail-closed stop, and the receipt fields (R-09).
 
 ## S1 — mandate v2 additions
