@@ -1743,6 +1743,24 @@ issue_225_allowed_paths=(
   tests/fixtures/epoch-image/image.tar.gz
   docs/testnets/cardano-node-master.md
   testnets/cardano_node_master/docker-compose.yaml
+  scripts/daily-cardano-node-head.sh
+  scripts/daily-cardano-node-head-github.sh
+  tests/test-daily-cardano-node-head.sh
+  tests/test-daily-cardano-node-head-github.sh
+  tests/fixtures/daily-cardano-node-head/fake-transport.sh
+  tests/mutants/daily-cardano-node-head.sh
+  tests/contain/run-suite.sh
+  specs/215-immutable-cardano-node-head-candidate/data-model.md
+  specs/215-immutable-cardano-node-head-candidate/functions-model.md
+  specs/215-immutable-cardano-node-head-candidate/modules-model.md
+  specs/215-immutable-cardano-node-head-candidate/plan.md
+  specs/215-immutable-cardano-node-head-candidate/spec.md
+  specs/215-immutable-cardano-node-head-candidate/tasks.md
+  .github/workflows/daily-cardano-node-head.yaml
+  docs/daily-cardano-node-head.md
+  scripts/head-candidate-cluster.sh
+  tests/test-head-candidate-cluster.sh
+  .gitignore
 )
 
 register_223_mutant() {

@@ -1,0 +1,83 @@
+name: Cardano Node HEAD candidate
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-cardano-node-head-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  candidate-tests:
+    name: Candidate path hermetic tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the exact candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: paolino/dev-assets/setup-nix@v0.0.1
+        with:
+          cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Run the hermetic candidate suites
+        run: >-
+          nix develop --quiet -c
+          just test-daily-cardano-node-head
+          test-daily-cardano-node-head-github
+
+  head-candidate:
+    name: Manual HEAD candidate preparation
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    # The controller publishes one image per upstream SHA under the
+    # repository's own GHCR namespace; nothing else is written.
+    permissions:
+      contents: read
+      packages: write
+    env:
+      HEAD_CANDIDATE_IMAGE_REPOSITORY: >-
+        ghcr.io/cardano-foundation/cardano-node-antithesis/cardano-node-head
+    steps:
+      - name: Check out the dispatched ref
+        uses: actions/checkout@v6
+
+      # The login token is bound as step environment and fed to docker
+      # login's stdin; no secret expression appears inside any run text,
+      # and the controller, transport, receipt and logs never see it.
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_ACTOR: ${{ github.actor }}
+        run: >-
+          printf '%s' "$GHCR_TOKEN" |
+          docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin
+
+      - uses: paolino/dev-assets/setup-nix@v0.0.1
+        with:
+          cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      # The exact-rev upstream build is only tractable on a runner with the
+      # IOG cache configured as a substituter; a cache miss still fails
+      # closed at the publish-candidate stage within the job timeout.
+      - name: Run the candidate controller
+        env:
+          NIX_CONFIG: |
+            extra-substituters = https://cache.iog.io
+            extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+          HEAD_CANDIDATE_STATE_DIR: ${{ runner.temp }}/daily-cardano-node-head
+          HEAD_CANDIDATE_RECEIPT: ${{ runner.temp }}/daily-cardano-node-head/receipt
+        run: scripts/daily-cardano-node-head.sh
+
+      - name: Publish the candidate receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: daily-cardano-node-head-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/daily-cardano-node-head/receipt
+          if-no-files-found: error

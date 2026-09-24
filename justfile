@@ -115,6 +115,34 @@ test-workflow-validation:
 test-daily-amaru:
     ./tests/test-daily-amaru.sh
 
+# focused proof for the Cardano Node HEAD candidate controller (S1 suite)
+test-daily-cardano-node-head:
+    ./tests/test-daily-cardano-node-head.sh
+
+# focused hermetic proof for the real Cardano Node HEAD candidate transport
+test-daily-cardano-node-head-github:
+    ./tests/test-daily-cardano-node-head-github.sh
+
+# focused hermetic proof for the HEAD candidate cluster command's teardown
+# contract
+test-head-candidate-cluster:
+    ./tests/test-head-candidate-cluster.sh
+
+# run the immutable cardano-node HEAD candidate controller end to end
+# against a throwaway local registry (workstation entrypoint; the hosted
+# entrypoint is the daily-cardano-node-head workflow)
+head-candidate-local:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! docker inspect head-registry >/dev/null 2>&1; then
+      docker run -d --name head-registry -p 5000:5000 registry:2
+    fi
+    if [ "$(docker inspect -f '{{{{.State.Running}}}}' head-registry)" != true ]; then
+      docker start head-registry
+    fi
+    HEAD_CANDIDATE_IMAGE_REPOSITORY=localhost:5000/cardano-node-head \
+      scripts/daily-cardano-node-head.sh
+
 # focused proof plus representative tarball inspection (daemon-free)
 check-image-provenance:
     #!/usr/bin/env bash
@@ -150,4 +178,4 @@ check-image-provenance:
     inspect_component tx-generator
 
 # complete local CI: no Docker, no network, no credentials
-ci: check-workflows check-shell format-check test-workflow-validation test-daily-amaru check-image-provenance
+ci: check-workflows check-shell format-check test-workflow-validation test-daily-amaru check-image-provenance test-daily-cardano-node-head test-daily-cardano-node-head-github test-head-candidate-cluster
