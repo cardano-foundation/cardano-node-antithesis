@@ -954,6 +954,13 @@ assert_daily_failure_receipt await-run run-not-terminal
 assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
 pass daily-await-not-terminal
 
+run_daily daily-outcome-unknown daily-outcome-unknown daily
+require_daily_failure daily-outcome-unknown
+assert_daily_failure_receipt await-run outcome-nonterminal
+assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
+assert_log_count 1 '^submit-run '
+pass daily-outcome-unknown
+
 run_daily daily-invalid-day prepared daily '' 20260924
 require_daily_failure daily-invalid-day
 grep -Fq 'invalid UTC day' "$case_stderr" ||

@@ -147,7 +147,7 @@ and a stable error token; no later stage runs after a stop.
 | `construct-request` | the dispatch identity cannot be constructed | `malformed-repository` |
 | `claim-day` | the day is already claimed, the push fails, or the verdict is malformed | `day-already-claimed`, `claim-failed`, `malformed-claim-verdict` |
 | `submit-run` | the dispatch is rejected or its run is not observable | `dispatch-failed`, `multi-line-run-url`, `malformed-run-url` |
-| `await-run` | the run cannot be awaited or its correlation is unusable | `await-failed`, `multi-line-correlation`, `malformed-correlation`, `run-not-terminal`, `malformed-report-url`, `malformed-moog-id` |
+| `await-run` | the run cannot be awaited or its correlation is unusable | `await-failed`, `multi-line-correlation`, `malformed-correlation`, `run-not-terminal`, `outcome-nonterminal`, `malformed-report-url`, `malformed-moog-id` |
 
 The transport adds its own fail-closed stops with named stderr tokens before
 the controller ever sees a value: a registry digest read-back that is not

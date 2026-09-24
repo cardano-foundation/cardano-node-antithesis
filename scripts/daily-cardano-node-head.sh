@@ -407,7 +407,7 @@ terminal_phase=${correlation_fields[3]}
   fail_stage await-run run-not-terminal
 case "$terminal_outcome" in
   success | failure) ;;
-  *) fail_stage await-run run-not-terminal ;;
+  *) fail_stage await-run outcome-nonterminal ;;
 esac
 [[ "$report_url" =~ ^https://[^/[:space:]]+/.+$|^antithesis://[^[:space:]]+/.+$ ]] ||
   fail_stage await-run malformed-report-url

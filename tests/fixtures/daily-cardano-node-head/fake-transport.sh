@@ -390,6 +390,9 @@ case "$operation" in
       daily-await-not-terminal)
         printf '%s|-|unknown|accepted\n' "$moog_test_id"
         ;;
+      daily-outcome-unknown)
+        printf '%s|%s|unknown|finished\n' "$moog_test_id" "$daily_report_url"
+        ;;
       daily-terminal-failure)
         printf '%s|%s|failure|finished\n' "$moog_test_id" "$daily_report_url"
         ;;
