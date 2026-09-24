@@ -36,6 +36,9 @@ nav:
   - Testnets:
       - testnets/index.md
       - Cardano Node Master: testnets/cardano-node-master.md
+  - Daily candidates:
+      - Cardano Node HEAD candidate: daily-cardano-node-head.md
+      - Daily Amaru: daily-amaru.md
   - Multi-run overview: overview.md
   - Triage: triage.md
   - Querying logs: query-logs.md
