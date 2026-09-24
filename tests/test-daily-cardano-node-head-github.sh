@@ -66,7 +66,10 @@ cat >"$stub_bin/git" <<'STUB'
 set -euo pipefail
 printf 'git %s\n' "$*" >>"${STUB_LOG:?}"
 [ "${1:-}" = ls-remote ] || exit 64
-[ -z "${STUB_GIT_FAIL:-}" ] || exit 3
+if [ -n "${STUB_GIT_FAIL:-}" ]; then
+  printf 'stub git remote unavailable\n' >&2
+  exit 3
+fi
 cat "${STUB_LSREMOTE_FILE:?}"
 STUB
 
@@ -289,6 +292,7 @@ run_transport resolve-upstream-failure env \
   STUB_GIT_FAIL=1 \
   "$transport" resolve-upstream "$upstream_origin" "$upstream_ref"
 require_failure
+assert_stderr_token 'stub git remote unavailable'
 pass resolve-upstream-command-failure-propagates
 
 # ---------------------------------------------------------------------------
@@ -454,13 +458,26 @@ require_success
 assert_stdout_line "fake://$upstream_sha"
 pass fake-submit-witnesses-rendered-model
 
-stale_rendered=$case_state/stale-docker-compose.yaml
-sed "s#image: $candidate_ref#image: ghcr.io/intersectmbo/cardano-node@sha256:9999999999999999999999999999999999999999999999999999999999999999#" \
-  "$rendered" >"$stale_rendered"
+stale_upstream_ref='ghcr.io/intersectmbo/cardano-node@sha256:9999999999999999999999999999999999999999999999999999999999999999'
+
+# Content is mutated at the SAME rendered path, so a transport that merely
+# rejects unfamiliar paths cannot pass: the original path already passed the
+# positive control above, and only its content changed.
+sed "0,\#image: $candidate_ref#s##image: $stale_upstream_ref#" \
+  "$rendered" >"$rendered.stale" && mv "$rendered.stale" "$rendered"
 run_transport fake-submit-stale env \
-  "$transport" fake-submit "$stale_rendered" "$candidate_ref" "$upstream_sha"
+  "$transport" fake-submit "$rendered" "$candidate_ref" "$upstream_sha"
 require_failure
-pass fake-submit-rejects-stale-model
+assert_stderr_token 'still references an upstream node image'
+pass fake-submit-rejects-stale-upstream-reference
+
+sed "s#image: $candidate_ref#image: ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar:1ff6913#g" \
+  "$rendered" >"$rendered.sidecar" && mv "$rendered.sidecar" "$rendered"
+run_transport fake-submit-no-candidate env \
+  "$transport" fake-submit "$rendered" "$candidate_ref" "$upstream_sha"
+require_failure
+assert_stderr_token 'does not carry the candidate image'
+pass fake-submit-rejects-candidate-less-model
 
 # ---------------------------------------------------------------------------
 # receipt
@@ -575,6 +592,7 @@ pass operation-surface-parity
 run_transport unknown-operation env \
   "$transport" not-an-operation
 require_failure
+assert_stderr_token 'unknown transport operation: not-an-operation'
 pass unknown-operation-rejected
 
 # ---------------------------------------------------------------------------
