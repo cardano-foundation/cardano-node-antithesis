@@ -409,7 +409,7 @@ case "$terminal_outcome" in
   success | failure) ;;
   *) fail_stage await-run run-not-terminal ;;
 esac
-[[ "$report_url" =~ ^https://|^antithesis:// ]] ||
+[[ "$report_url" =~ ^https://[^/[:space:]]+/.+$|^antithesis://[^[:space:]]+/.+$ ]] ||
   fail_stage await-run malformed-report-url
 receipt[moog_test_id]=$moog_test_id
 receipt[report_url]=$report_url

@@ -372,6 +372,15 @@ case "$operation" in
       daily-report-url-malformed)
         printf '%s|ftp://report.example/report|success|finished\n' "$moog_test_id"
         ;;
+      daily-report-url-bare)
+        printf '%s|https://|success|finished\n' "$moog_test_id"
+        ;;
+      daily-report-url-no-path)
+        printf '%s|https://amaru-cardano.antithesis.com|success|finished\n' "$moog_test_id"
+        ;;
+      daily-report-url-scheme-only)
+        printf '%s|antithesis://|success|finished\n' "$moog_test_id"
+        ;;
       daily-moog-id-empty)
         printf '|%s|success|finished\n' "$daily_report_url"
         ;;

@@ -692,10 +692,11 @@ assert_no_real_submission
 pass duplicate-day-claim
 
 # --- concurrent invocations: exactly one attempt wins -----------------------
+# Each invocation keeps its own transport log, so every fake-transport call
+# is attributable to the invocation that made it; the claim ledger in the
+# shared state directory is the only shared effect.
 concurrent_state=$tmp_root/concurrent-state
 mkdir -p "$concurrent_state/state"
-concurrent_log=$concurrent_state/transport.log
-: >"$concurrent_log"
 daily_pids=()
 run_daily_concurrent() {
   local slot=$1
@@ -703,7 +704,7 @@ run_daily_concurrent() {
   mkdir -p "$dir"
   env -u HEAD_CANDIDATE_IMAGE_REPOSITORY -u HEAD_CANDIDATE_DAY \
     FAKE_SCENARIO=prepared \
-    FAKE_LOG="$concurrent_log" \
+    FAKE_LOG="$dir/transport.log" \
     HEAD_CANDIDATE_TRANSPORT="$fake_transport" \
     HEAD_CANDIDATE_MODE=daily \
     HEAD_CANDIDATE_DAY="$daily_day" \
@@ -725,21 +726,40 @@ for pid in "${daily_pids[@]}"; do
 done
 [ "$concurrent_ok" -eq 1 ] && [ "$concurrent_fail" -eq 1 ] ||
   fail "concurrent-day-claim expected one winner and one refusal, got ok=$concurrent_ok fail=$concurrent_fail"
-claim_attempts=$(count_log "$concurrent_log" '^claim-day ')
-[ "$claim_attempts" -eq 2 ] ||
-  fail "concurrent-day-claim expected 2 claim attempts, found $claim_attempts"
-total_submissions=$(count_log "$concurrent_log" '^submit-run ')
-[ "$total_submissions" -eq 1 ] ||
-  fail "concurrent-day-claim expected exactly 1 submission, found $total_submissions"
-blocked_found=0
-for concurrent_receipt in "$tmp_root"/concurrent-one/receipt \
-  "$tmp_root"/concurrent-two/receipt; do
-  if grep -Fqx 'error=day-already-claimed' "$concurrent_receipt"; then
-    blocked_found=$((blocked_found + 1))
+concurrent_winner=''
+concurrent_loser=''
+for slot in one two; do
+  concurrent_dir=$tmp_root/concurrent-$slot
+  concurrent_log=$concurrent_dir/transport.log
+  claim_attempts=$(count_log "$concurrent_log" '^claim-day ')
+  [ "$claim_attempts" -eq 1 ] ||
+    fail "concurrent-day-claim slot=$slot expected exactly one claim attempt, found $claim_attempts"
+  if grep -Fqx 'error=day-already-claimed' "$concurrent_dir/receipt"; then
+    [ -n "$concurrent_loser" ] &&
+      fail 'concurrent-day-claim produced two losing invocations'
+    concurrent_loser=$slot
+    # The losing invocation never reached submission at all.
+    [ "$(count_log "$concurrent_log" '^submit-run ')" -eq 0 ] ||
+      fail "concurrent-day-claim loser slot=$slot reached submission"
+    [ "$(count_log "$concurrent_log" '^await-run ')" -eq 0 ] ||
+      fail "concurrent-day-claim loser slot=$slot awaited a run"
+    grep -Fqx 'stage=claim-day' "$concurrent_dir/receipt" ||
+      fail "concurrent-day-claim loser slot=$slot lacks the claim-day receipt"
+  elif grep -Fqx 'outcome=TERMINAL' "$concurrent_dir/receipt"; then
+    [ -n "$concurrent_winner" ] &&
+      fail 'concurrent-day-claim produced two winning invocations'
+    concurrent_winner=$slot
+    # The winning invocation submitted exactly once.
+    [ "$(count_log "$concurrent_log" '^submit-run ')" -eq 1 ] ||
+      fail "concurrent-day-claim winner slot=$slot did not submit exactly once"
+    [ "$(count_log "$concurrent_log" '^await-run ')" -eq 1 ] ||
+      fail "concurrent-day-claim winner slot=$slot did not await its run"
+  else
+    fail "concurrent-day-claim slot=$slot produced neither a refusal nor a terminal receipt"
   fi
 done
-[ "$blocked_found" -eq 1 ] ||
-  fail 'concurrent-day-claim expected exactly one day-already-claimed receipt'
+[ -n "$concurrent_winner" ] && [ -n "$concurrent_loser" ] ||
+  fail 'concurrent-day-claim could not attribute winner and loser'
 pass concurrent-day-claim
 
 # --- no retry after a failed attempt ----------------------------------------
@@ -897,6 +917,24 @@ require_daily_failure daily-report-url-malformed
 assert_daily_failure_receipt await-run malformed-report-url
 assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
 pass daily-report-url-malformed
+
+run_daily daily-report-url-bare daily-report-url-bare daily
+require_daily_failure daily-report-url-bare
+assert_daily_failure_receipt await-run malformed-report-url
+assert_last_receipt_lacks '^report_url='
+pass daily-report-url-bare
+
+run_daily daily-report-url-no-path daily-report-url-no-path daily
+require_daily_failure daily-report-url-no-path
+assert_daily_failure_receipt await-run malformed-report-url
+assert_last_receipt_lacks '^report_url='
+pass daily-report-url-no-path
+
+run_daily daily-report-url-scheme-only daily-report-url-scheme-only daily
+require_daily_failure daily-report-url-scheme-only
+assert_daily_failure_receipt await-run malformed-report-url
+assert_last_receipt_lacks '^report_url='
+pass daily-report-url-scheme-only
 
 run_daily daily-moog-id-empty daily-moog-id-empty daily
 require_daily_failure daily-moog-id-empty
