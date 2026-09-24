@@ -101,18 +101,24 @@ the daily stages run:
    artifact read back; the terminal record correlates the MOOG test id,
    report URL and outcome with every candidate identity.
 
-**No retry.** Exactly three guards give one real attempt per UTC day, and no
-more: the controller's day claim (one dispatch per day, above), the MOOG
-submit step's re-run guard (a non-first workflow attempt for the HEAD testnet
-is refused with `daily-head-rerun-refused` before any request is constructed),
-and the MOOG submit step's census guard (a second *fresh* dispatch at the same
-consumer commit finds an existing test-run in the MOOG census and is refused
-with `daily-head-already-submitted`; an unreadable census is refused with
-`daily-head-census-unreadable` — the day is never spent on an unverified
+**No retry.** Exactly these guards give one real attempt per UTC day, and no
+more: the controller's day claim (one dispatch per day, above); the MOOG
+submit step's **submission lock** — the exclusion — an atomic create-once tag
+`refs/tags/daily-cardano-node-head-submitted/<consumer commit>` pushed with a
+non-force push before any MOOG request is constructed (an existing lock
+refuses with `daily-head-already-submitted`; a refused push refuses with
+`daily-head-lock-unpushable`, and a push that turns out not to have created
+the ref — git reports an identical existing tag as *up-to-date* — refuses as
+`daily-head-already-submitted` too); the MOOG submit step's re-run guard (a
+non-first workflow attempt for the HEAD testnet is refused with
+`daily-head-rerun-refused`); and, as an extra read-only belt, the MOOG census
+refusal (`daily-head-already-submitted` for an existing test-run at this
+commit and directory; an unreadable census is refused with
+`daily-head-census-unreadable`, so the day is never spent on an unverified
 census). Together: a failed or incomplete attempt leaves the day claimed, the
 same UTC day cannot produce a second real submission attempt through the
-schedule, a recovery dispatch or the Actions re-run button, and the next UTC
-day starts fresh.
+schedule, a recovery dispatch, a manual re-dispatch of the MOOG workflow or
+the Actions re-run button, and the next UTC day starts fresh.
 
 ### Validation mode (one hour)
 
@@ -218,4 +224,7 @@ workflow, Actions tab). The dispatched MOOG run publishes its own
 `moog-correlation` artifact (`test_run_id`, `phase`, `outcome`, `report_url`)
 from the *Antithesis on cardano-node testnet* workflow, and the consumer
 commit for a day is `refs/tags/daily-cardano-node-head/<YYYY-MM-DD>` in this
-repository — three views of one correlated attempt.
+repository — three views of one correlated attempt. Each daily HEAD consumer
+commit also carries its one-shot submission lock
+`refs/tags/daily-cardano-node-head-submitted/<consumer commit>`, created by
+the dispatched MOOG run at the moment it constructs the request.

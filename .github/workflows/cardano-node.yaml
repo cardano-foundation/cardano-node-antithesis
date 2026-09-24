@@ -45,10 +45,12 @@ jobs:
     timeout-minutes: 600
 
     # required permissions to be able to push to registry, plus
-    # issues:write so a failed scheduled run can open/append an alert.
+    # issues:write so a failed scheduled run can open/append an alert, and
+    # contents:write so the daily HEAD testnet can create its one-shot
+    # submission-lock tag in this repository.
     permissions:
       packages: write
-      contents: read
+      contents: write
       attestations: write
       id-token: write
       issues: write
@@ -104,17 +106,38 @@ jobs:
         RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
         set -euo pipefail
-        # One real attempt per UTC day for the HEAD testnet, from three
+        # One real attempt per UTC day for the HEAD testnet, from these
         # guards: the daily controller's day claim (one dispatch per day),
-        # this step's run-attempt guard, and this step's MOOG census guard
-        # (a second fresh dispatch at the same consumer commit finds an
-        # existing test-run and refuses).
+        # this step's run-attempt guard, the atomic submission-lock ref
+        # created below (the exclusion: a create-once tag per consumer
+        # commit), and the read-only MOOG census refusal (an extra belt).
         if [ "$TESTNET" = "cardano_node_head" ] && [ "$RUN_ATTEMPT" != "1" ]; then
           printf 'daily-head-rerun-refused: testnet=%s attempt=%s\n' "$TESTNET" "$RUN_ATTEMPT" >&2
           exit 1
         fi
         COMMIT="${{ github.sha }}"
         TESTNET_DIR="testnets/$TESTNET"
+        lock_ref="refs/tags/daily-cardano-node-head-submitted/$COMMIT"
+        if [ "$TESTNET" = "cardano_node_head" ]; then
+          # The submission lock is the exclusion: a create-once tag at the
+          # consumer commit. An existing lock, a push the remote refuses,
+          # or a push that turns out not to have created the ref (git
+          # reports an identical existing tag as up-to-date, exit 0) all
+          # stop before any MOOG request is constructed.
+          if git ls-remote origin "$lock_ref" | grep -q .; then
+            printf 'daily-head-already-submitted: lock exists at %s\n' "$COMMIT" >&2
+            exit 1
+          fi
+          lock_output=''
+          if ! lock_output=$(git push --porcelain origin "$COMMIT:$lock_ref" 2>&1); then
+            printf 'daily-head-lock-unpushable: testnet=%s\n' "$TESTNET" >&2
+            exit 1
+          fi
+          if ! printf '%s\n' "$lock_output" | grep -Eq "^\*[[:space:]][^[:space:]]+:$lock_ref"; then
+            printf 'daily-head-already-submitted: %s was not created by this run\n' "$lock_ref" >&2
+            exit 1
+          fi
+        fi
         census=''
         if ! census=$(moog facts test-runs --whose "$MOOG_REQUESTER"); then
           if [ "$TESTNET" = "cardano_node_head" ]; then

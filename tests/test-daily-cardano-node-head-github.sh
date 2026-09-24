@@ -66,6 +66,45 @@ cat >"$stub_bin/git" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'git %s\n' "$*" >>"${STUB_LOG:?}"
+stub_lock_dir() {
+  printf '%s\n' "${STUB_LOCK_DIR:-${STUB_LOG%/*}/locks}"
+}
+# Rows for refs created by an atomic push, derived from the marker dirs.
+stub_lock_rows() {
+  local marker ref
+  for marker in "$(stub_lock_dir)"/*/; do
+    [ -f "${marker}sha" ] || continue
+    ref=${marker%/}
+    ref=${ref##*/}
+    ref=${ref//_/\/}
+    printf '%s\t%s\n' "$(cat "${marker%/}/sha")" "$ref"
+  done
+  return 0
+}
+# Atomic create-once push: the first push of a ref wins the marker
+# directory; every later push of the same ref is rejected, whatever value
+# it carries. The remote state file and the porcelain line record the
+# creation.
+stub_handle_push() {
+  if [ -n "${STUB_CLAIM_PUSH_FAIL:-}" ] || [ -n "${STUB_LOCK_PUSH_FAIL:-}" ]; then
+    printf 'stub push rejected\n' >&2
+    exit 1
+  fi
+  refspec=${*: -1}
+  pushed_sha=${refspec%%:*}
+  pushed_ref=${refspec#*:}
+  [ "${pushed_ref}" != "$refspec" ] || return 0
+  lock_dir=$(stub_lock_dir)
+  mkdir -p "$lock_dir"
+  marker="$lock_dir/${pushed_ref//\//_}"
+  if ! mkdir "$marker" 2>/dev/null; then
+    printf 'stub push rejected (ref exists): %s\n' "$pushed_ref" >&2
+    exit 1
+  fi
+  printf '%s\n' "$pushed_sha" >"$marker/sha"
+  printf '%s\t%s\n' "$pushed_sha" "$pushed_ref" >>"${STUB_LSREMOTE_FILE:?}"
+  printf '*\t%s:%s\t[new tag]\n' "$pushed_sha" "$pushed_ref"
+}
 case "${1:-}" in
   ls-remote)
     if [ -n "${STUB_GIT_FAIL:-}" ]; then
@@ -73,6 +112,10 @@ case "${1:-}" in
       exit 3
     fi
     cat "${STUB_LSREMOTE_FILE:?}"
+    stub_lock_rows
+    ;;
+  push)
+    stub_handle_push "$@"
     ;;
   clone)
     # Fabricate the cloned repository: one commit on main, no network, with
@@ -89,21 +132,11 @@ case "${1:-}" in
   -C)
     case " $* " in
       *' push '*)
-        if [ -n "${STUB_CLAIM_PUSH_FAIL:-}" ]; then
-          printf 'stub push rejected\n' >&2
-          exit 1
-        fi
-        # Record the pushed refspec as new remote state so a following
-        # ls-remote observes it.
-        refspec=${*: -1}
-        pushed_sha=${refspec%%:*}
-        pushed_ref=${refspec#*:}
-        if [ "${pushed_ref}" != "$refspec" ]; then
-          printf '%s\t%s\n' "$pushed_sha" "$pushed_ref" >>"${STUB_LSREMOTE_FILE:?}"
-        fi
+        stub_handle_push "$@"
         ;;
       *' ls-remote '*)
         cat "${STUB_LSREMOTE_FILE:?}"
+        stub_lock_rows
         ;;
       *)
         exec "${STUB_REAL_GIT:?}" "$@"
@@ -781,6 +814,7 @@ run_transport_in() {
     PATH="$stub_bin:$PATH" \
     STUB_LOG="$stub_log" \
     STUB_REAL_GIT="$real_git" \
+    STUB_LOCK_DIR="$case_dir/locks" \
     HEAD_CANDIDATE_STATE_DIR="$case_state" \
     HEAD_CANDIDATE_RECEIPT="$case_receipt" \
     "$@" >"$case_stdout" 2>"$case_stderr" || case_rc=$?
@@ -1188,10 +1222,18 @@ run_submit_step() {
   local attempt=$2
   local out=$3
   local census=$4
-  : >"$moog_stub_log"
-  env \
-    PATH="$moog_stub_bin:$PATH" \
-    MOOG_STUB_LOG="$moog_stub_log" \
+  local lock_dir=$5
+  local moog_log=${6:-$moog_stub_log}
+  : >"$moog_log"
+  : >"$census.lsremote"
+  mkdir -p "$lock_dir"
+  env -i \
+    PATH="$moog_stub_bin:$stub_bin:$PATH" \
+    STUB_LOG="$stub_log" \
+    STUB_REAL_GIT="$real_git" \
+    STUB_LSREMOTE_FILE="$census.lsremote" \
+    STUB_LOCK_DIR="$lock_dir" \
+    MOOG_STUB_LOG="$moog_log" \
     MOOG_STUB_CENSUS="$census" \
     MOOG_REQUESTER=stub-requester \
     MOOG_PLATFORM=github \
@@ -1214,9 +1256,12 @@ matrix_occupied_census=$tmp_root/census-matrix-occupied.json
   printf '[{"key":{"type":"test-run","commitId":"%s","directory":"testnets/cardano_node_master","platform":"github","repository":{"organization":"cardano-foundation","repo":"cardano-node-antithesis"},"requester":"stub-requester"}},{"key":{"type":"test-run","commitId":"%s","directory":"testnets/cardano_node_master","platform":"github","repository":{"organization":"cardano-foundation","repo":"cardano-node-antithesis"},"requester":"stub-requester"}}]\n' "$consumer_commit" "$consumer_commit"
 } >"$matrix_occupied_census"
 
+lock_ref_name="refs/tags/daily-cardano-node-head-submitted/$consumer_commit"
+
+# A non-first workflow attempt is refused before anything else.
 rerun_rc=0
 run_submit_step cardano_node_head 2 "$tmp_root/rerun-output" "$empty_census" \
-  >"$tmp_root/rerun-stdout" 2>"$tmp_root/rerun-stderr" || rerun_rc=$?
+  "$tmp_root/lock-rerun" >"$tmp_root/rerun-stdout" 2>"$tmp_root/rerun-stderr" || rerun_rc=$?
 [ "$rerun_rc" -ne 0 ] ||
   fail 'a re-run of the daily HEAD test was not refused'
 grep -Fq 'daily-head-rerun-refused: testnet=cardano_node_head attempt=2' \
@@ -1227,37 +1272,48 @@ if grep -Fq 'requester create-test' "$moog_stub_log"; then
 fi
 pass moog-step-refuses-daily-head-rerun
 
+# Matrix testnets are untouched by every daily HEAD guard, lock included.
+matrix_touches_before=$(grep -Ec '^git (push|ls-remote)' "$stub_log" || true)
 matrix_rc=0
 run_submit_step cardano_node_master 2 "$tmp_root/matrix-output" "$empty_census" \
-  >"$tmp_root/matrix-stdout" 2>"$tmp_root/matrix-stderr" || matrix_rc=$?
+  "$tmp_root/lock-matrix" >"$tmp_root/matrix-stdout" 2>"$tmp_root/matrix-stderr" || matrix_rc=$?
 [ "$matrix_rc" -eq 0 ] ||
   fail "a matrix testnet re-run was refused: $(cat "$tmp_root/matrix-stderr")"
 grep -Fq 'requester create-test' "$moog_stub_log" ||
   fail 'the matrix re-run did not construct its MOOG request'
 grep -Fq 'id=stub-test-run-id' "$tmp_root/matrix-output" ||
   fail 'the matrix re-run did not export the test id'
+matrix_touches_after=$(grep -Ec '^git (push|ls-remote)' "$stub_log" || true)
+[ "$matrix_touches_after" -eq "$matrix_touches_before" ] ||
+  fail 'a matrix dispatch touched the submission lock'
 pass moog-step-matrix-rerun-unchanged
 
-# First fresh dispatch of the daily HEAD testnet: empty census, submits.
+# First fresh dispatch: empty census, fresh lock, submits and creates the
+# lock ref with a non-force push.
 first_rc=0
 run_submit_step cardano_node_head 1 "$tmp_root/first-output" "$empty_census" \
-  >"$tmp_root/first-stdout" 2>"$tmp_root/first-stderr" || first_rc=$?
+  "$tmp_root/lock-first" >"$tmp_root/first-stdout" 2>"$tmp_root/first-stderr" || first_rc=$?
 [ "$first_rc" -eq 0 ] ||
   fail "the first fresh daily HEAD dispatch was refused: $(cat "$tmp_root/first-stderr")"
 grep -Fq 'requester create-test' "$moog_stub_log" ||
   fail 'the first fresh daily HEAD dispatch did not construct its request'
 grep -Fq 'id=stub-test-run-id' "$tmp_root/first-output" ||
   fail 'the first fresh daily HEAD dispatch did not export the test id'
+grep -Fq "git push --porcelain origin $consumer_commit:$lock_ref_name" "$stub_log" ||
+  fail 'the first fresh dispatch did not create the submission lock'
+if grep -Eq "push (-f |--force )([^w]|$)" "$stub_log"; then
+  fail 'the submission lock was pushed with a force flag'
+fi
 pass moog-step-first-fresh-dispatch-submits
 
-# Second fresh dispatch at the same consumer commit: the census already has
-# a test-run, so the step refuses before any create-test.
+# A second fresh dispatch at the same consumer commit: the lock already
+# exists, so the pre-check refuses before any create-test.
 second_rc=0
-run_submit_step cardano_node_head 1 "$tmp_root/second-output" "$occupied_census" \
-  >"$tmp_root/second-stdout" 2>"$tmp_root/second-stderr" || second_rc=$?
+run_submit_step cardano_node_head 1 "$tmp_root/second-output" "$empty_census" \
+  "$tmp_root/lock-first" >"$tmp_root/second-stdout" 2>"$tmp_root/second-stderr" || second_rc=$?
 [ "$second_rc" -ne 0 ] ||
   fail 'a second fresh daily HEAD dispatch was not refused'
-grep -Fq 'daily-head-already-submitted: testnet=cardano_node_head existing=1' \
+grep -Fq "daily-head-already-submitted: lock exists at $consumer_commit" \
   "$tmp_root/second-stderr" ||
   fail 'the second-dispatch refusal lacks its stable reason token'
 if grep -Fq 'requester create-test' "$moog_stub_log"; then
@@ -1265,11 +1321,97 @@ if grep -Fq 'requester create-test' "$moog_stub_log"; then
 fi
 pass moog-step-second-fresh-dispatch-refused
 
+# Two concurrent fresh dispatches with an atomic push: exactly one MOOG
+# request is constructed, the loser is refused with a lock token.
+concurrent_lock=$tmp_root/lock-concurrent
+concurrent_one_rc=0
+concurrent_two_rc=0
+run_submit_step cardano_node_head 1 "$tmp_root/cc-one-output" "$empty_census" \
+  "$concurrent_lock" "$tmp_root/cc-one.moglog" \
+  >"$tmp_root/cc-one-stdout" 2>"$tmp_root/cc-one-stderr" &
+concurrent_one_pid=$!
+run_submit_step cardano_node_head 1 "$tmp_root/cc-two-output" "$empty_census" \
+  "$concurrent_lock" "$tmp_root/cc-two.moglog" \
+  >"$tmp_root/cc-two-stdout" 2>"$tmp_root/cc-two-stderr" &
+concurrent_two_pid=$!
+wait "$concurrent_one_pid" || concurrent_one_rc=$?
+wait "$concurrent_two_pid" || concurrent_two_rc=$?
+if [ "$concurrent_one_rc" -eq 0 ] && [ "$concurrent_two_rc" -ne 0 ]; then
+  concurrent_winner_log=$tmp_root/cc-one.moglog
+  concurrent_loser_stderr=$tmp_root/cc-two-stderr
+  concurrent_loser_log=$tmp_root/cc-two.moglog
+elif [ "$concurrent_two_rc" -eq 0 ] && [ "$concurrent_one_rc" -ne 0 ]; then
+  concurrent_winner_log=$tmp_root/cc-two.moglog
+  concurrent_loser_stderr=$tmp_root/cc-one-stderr
+  concurrent_loser_log=$tmp_root/cc-one.moglog
+else
+  fail "concurrent dispatches expected one winner and one refusal, got rc=$concurrent_one_rc/$concurrent_two_rc"
+fi
+winner_requests=$(grep -Ec '^moog requester create-test' "$concurrent_winner_log" || true)
+loser_requests=$(grep -Ec '^moog requester create-test' "$concurrent_loser_log" || true)
+[ "$winner_requests" -eq 1 ] && [ "$loser_requests" -eq 0 ] ||
+  fail "concurrent dispatches expected exactly one MOOG request, got winner=$winner_requests loser=$loser_requests"
+grep -Eq 'daily-head-(already-submitted|lock-unpushable)' "$concurrent_loser_stderr" ||
+  fail 'the concurrent loser lacks a stable lock refusal token'
+pass moog-step-concurrent-dispatches-lock
+
+# A lock push the remote refuses stops before any request.
+: >"$empty_census.lsremote"
+unpushable_rc=0
+env -i \
+  PATH="$moog_stub_bin:$stub_bin:$PATH" \
+  STUB_LOG="$stub_log" \
+  STUB_REAL_GIT="$real_git" \
+  STUB_LSREMOTE_FILE="$empty_census.lsremote" \
+  STUB_LOCK_DIR="$tmp_root/lock-unpushable" \
+  STUB_LOCK_PUSH_FAIL=1 \
+  MOOG_STUB_LOG="$tmp_root/unpushable.moglog" \
+  MOOG_STUB_CENSUS="$empty_census" \
+  MOOG_REQUESTER=stub-requester \
+  MOOG_PLATFORM=github \
+  GITHUB_REPOSITORY="$consumer_repository" \
+  GITHUB_OUTPUT="$tmp_root/unpushable-output" \
+  DURATION=3 \
+  TESTNET=cardano_node_head \
+  RUN_ATTEMPT=1 \
+  bash "$submit_step_script" >"$tmp_root/unpushable-stdout" 2>"$tmp_root/unpushable-stderr" ||
+  unpushable_rc=$?
+[ "$unpushable_rc" -ne 0 ] ||
+  fail 'an unpushable lock did not refuse the dispatch'
+grep -Fq 'daily-head-lock-unpushable: testnet=cardano_node_head' \
+  "$tmp_root/unpushable-stderr" ||
+  fail 'the unpushable-lock refusal lacks its stable reason token'
+if grep -Fq 'requester create-test' "$tmp_root/unpushable.moglog"; then
+  fail 'the unpushable-lock refusal constructed a MOOG request anyway'
+fi
+pass moog-step-lock-push-error-refused
+
+# The read-only MOOG census remains an extra refusal behind the lock: an
+# existing test-run for this commit and directory is refused even when the
+# lock itself is creatable.
+census_rc=0
+run_submit_step cardano_node_head 1 "$tmp_root/census-output" "$occupied_census" \
+  "$tmp_root/lock-census" >"$tmp_root/census-stdout" 2>"$tmp_root/census-stderr" || census_rc=$?
+[ "$census_rc" -ne 0 ] ||
+  fail 'a census-occupied fresh dispatch was not refused'
+grep -Fq 'daily-head-already-submitted: testnet=cardano_node_head existing=1' \
+  "$tmp_root/census-stderr" ||
+  fail 'the census refusal lacks its stable reason token'
+if grep -Fq 'requester create-test' "$moog_stub_log"; then
+  fail 'the census refusal constructed a MOOG request anyway'
+fi
+pass moog-step-census-refusal-behind-lock
+
 # An unreadable census refuses the daily HEAD testnet before create-test.
+: >"$empty_census.lsremote"
 census_fail_rc=0
-env \
-  PATH="$moog_stub_bin:$PATH" \
-  MOOG_STUB_LOG="$moog_stub_log" \
+env -i \
+  PATH="$moog_stub_bin:$stub_bin:$PATH" \
+  STUB_LOG="$stub_log" \
+  STUB_REAL_GIT="$real_git" \
+  STUB_LSREMOTE_FILE="$empty_census.lsremote" \
+  STUB_LOCK_DIR="$tmp_root/lock-census-fail" \
+  MOOG_STUB_LOG="$tmp_root/census-fail.moglog" \
   MOOG_STUB_CENSUS_FAIL=1 \
   MOOG_STUB_CENSUS="$empty_census" \
   MOOG_REQUESTER=stub-requester \
@@ -1286,7 +1428,7 @@ env \
 grep -Fq 'daily-head-census-unreadable: testnet=cardano_node_head' \
   "$tmp_root/census-fail-stderr" ||
   fail 'the unreadable-census refusal lacks its stable reason token'
-if grep -Fq 'requester create-test' "$moog_stub_log"; then
+if grep -Fq 'requester create-test' "$tmp_root/census-fail.moglog"; then
   fail 'the unreadable-census refusal constructed a MOOG request anyway'
 fi
 pass moog-step-unreadable-census-refuses
@@ -1295,7 +1437,7 @@ pass moog-step-unreadable-census-refuses
 # try counter, never a refusal.
 matrix_occupied_rc=0
 run_submit_step cardano_node_master 1 "$tmp_root/matrix-occupied-output" \
-  "$matrix_occupied_census" \
+  "$matrix_occupied_census" "$tmp_root/lock-matrix-occupied" \
   >"$tmp_root/matrix-occupied-stdout" 2>"$tmp_root/matrix-occupied-stderr" ||
   matrix_occupied_rc=$?
 [ "$matrix_occupied_rc" -eq 0 ] ||
