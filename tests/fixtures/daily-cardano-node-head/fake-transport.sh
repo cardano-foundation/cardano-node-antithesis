@@ -14,7 +14,19 @@ fixture_origin=https://github.com/IntersectMBO/cardano-node.git
 fixture_ref=refs/heads/master
 fixture_mismatch_repository=ghcr.io/example/cardano-node
 
-mkdir -p "$state_dir"
+consumer_sha=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+moog_test_id=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+daily_report_url=https://amaru-cardano.antithesis.com/report/00000000-0000-0000-0000-000000000000
+daily_run_url=https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/424242
+
+mkdir -p "$state_dir" "$state_dir/claims"
+
+# Day-claim ledger: one directory per claim ref. `mkdir` is the atomic
+# creation primitive, so a claim succeeds exactly once per ref, including
+# under concurrent invocations.
+claim_marker() {
+  printf '%s/%s\n' "$state_dir/claims" "${1//\//_}"
+}
 
 log() {
   printf '%s' "$1" >>"$log_file"
@@ -257,6 +269,118 @@ case "$operation" in
         printf 'real://%s\n' "$sha"
         ;;
       *) printf 'fake://%s\n' "$sha" ;;
+    esac
+    ;;
+
+  prepare-consumer)
+    day=${1:?day is required}
+    rendered_model=${2:?rendered model is required}
+    candidate_ref=${3:?candidate ref is required}
+    testnet=${4:?testnet is required}
+    log prepare-consumer "$day" "$rendered_model" "$candidate_ref" "$testnet"
+    case "$scenario" in
+      daily-consumer-failure)
+        printf 'consumer preparation failed\n' >&2
+        exit 1
+        ;;
+      daily-consumer-multiline)
+        printf '%s\n%s\n' "${consumer_sha:0:20}" "${consumer_sha:20}"
+        ;;
+      daily-consumer-malformed-sha)
+        printf 'not-a-consumer-sha\n'
+        ;;
+      *)
+        [ -f "$rendered_model" ] || {
+          printf 'rendered model missing: %s\n' "$rendered_model" >&2
+          exit 1
+        }
+        consumer_candidate=$(read_rendered_candidate "$rendered_model")
+        [ "$consumer_candidate" = "$candidate_ref" ] || {
+          printf 'consumer model candidate mismatch\n' >&2
+          exit 1
+        }
+        printf '%s\n' "$consumer_sha"
+        ;;
+    esac
+    ;;
+
+  claim-day)
+    claim_ref=${1:?claim ref is required}
+    claimed_sha=${2:?consumer SHA is required}
+    log claim-day "$claim_ref" "$claimed_sha"
+    case "$scenario" in
+      daily-claim-failure)
+        printf 'claim push failed\n' >&2
+        exit 1
+        ;;
+      daily-claim-malformed-verdict)
+        printf 'STOLEN\n'
+        ;;
+      *)
+        marker=$(claim_marker "$claim_ref")
+        if ! mkdir "$marker" 2>/dev/null; then
+          printf 'BLOCKED day-already-claimed\n'
+          printf 'day already claimed: %s\n' "$claim_ref" >&2
+          exit 1
+        fi
+        printf 'CLAIMED\n'
+        ;;
+    esac
+    ;;
+
+  submit-run)
+    submitted_consumer=${1:?consumer SHA is required}
+    claim_ref=${2:?claim ref is required}
+    testnet=${3:?testnet is required}
+    duration=${4:?duration is required}
+    no_faults=${5:?fault setting is required}
+    log submit-run "$submitted_consumer" "$claim_ref" "$testnet" \
+      "$duration" "$no_faults"
+    case "$scenario" in
+      daily-request-failure)
+        printf 'request construction failed\n' >&2
+        exit 1
+        ;;
+      daily-run-url-multiline)
+        printf '%s\n%s\n' "${daily_run_url}runs/" "424243"
+        ;;
+      daily-run-url-malformed)
+        printf 'not-a-run-url\n'
+        ;;
+      *)
+        printf '%s\n' "$daily_run_url"
+        ;;
+    esac
+    ;;
+
+  await-run)
+    awaited_consumer=${1:?consumer SHA is required}
+    run_url=${2:?run URL is required}
+    log await-run "$awaited_consumer" "$run_url"
+    case "$scenario" in
+      daily-await-failure)
+        printf 'await failed\n' >&2
+        exit 1
+        ;;
+      daily-correlation-multiline)
+        printf '%s|%s|success|finished\n' "$moog_test_id" "$daily_report_url"
+        printf 'duplicate-correlation\n'
+        ;;
+      daily-correlation-malformed)
+        printf 'garbage\n'
+        ;;
+      daily-report-url-malformed)
+        printf '%s|ftp://report.example/report|success|finished\n' "$moog_test_id"
+        ;;
+      daily-await-not-terminal)
+        printf '%s|-|unknown|accepted\n' "$moog_test_id"
+        ;;
+      daily-terminal-failure)
+        printf '%s|%s|failure|finished\n' "$moog_test_id" "$daily_report_url"
+        ;;
+      *)
+        printf '%s|%s|success|finished\n' "$moog_test_id" "$daily_report_url"
+        ;;
     esac
     ;;
 

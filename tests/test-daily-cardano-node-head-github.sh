@@ -61,16 +61,57 @@ stub_log=$tmp_root/stub.log
 mkdir -p "$stub_bin"
 : >"$stub_log"
 
+real_git=$(command -v git)
 cat >"$stub_bin/git" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'git %s\n' "$*" >>"${STUB_LOG:?}"
-[ "${1:-}" = ls-remote ] || exit 64
-if [ -n "${STUB_GIT_FAIL:-}" ]; then
-  printf 'stub git remote unavailable\n' >&2
-  exit 3
-fi
-cat "${STUB_LSREMOTE_FILE:?}"
+case "${1:-}" in
+  ls-remote)
+    if [ -n "${STUB_GIT_FAIL:-}" ]; then
+      printf 'stub git remote unavailable\n' >&2
+      exit 3
+    fi
+    cat "${STUB_LSREMOTE_FILE:?}"
+    ;;
+  clone)
+    # Fabricate the cloned repository: one commit on main, no network.
+    target=${!#}
+    "${STUB_REAL_GIT:?}" init --quiet --initial-branch=main "$target"
+    "${STUB_REAL_GIT}" -C "$target" config user.name stub
+    "${STUB_REAL_GIT}" -C "$target" config user.email stub@example.invalid
+    printf 'placeholder main\n' >"$target/README.stub"
+    "${STUB_REAL_GIT}" -C "$target" add README.stub
+    "${STUB_REAL_GIT}" -C "$target" commit --quiet -m 'stub main'
+    ;;
+  -C)
+    case " $* " in
+      *' push '*)
+        if [ -n "${STUB_CLAIM_PUSH_FAIL:-}" ]; then
+          printf 'stub push rejected\n' >&2
+          exit 1
+        fi
+        # Record the pushed refspec as new remote state so a following
+        # ls-remote observes it.
+        refspec=${*: -1}
+        pushed_sha=${refspec%%:*}
+        pushed_ref=${refspec#*:}
+        if [ "${pushed_ref}" != "$refspec" ]; then
+          printf '%s\t%s\n' "$pushed_sha" "$pushed_ref" >>"${STUB_LSREMOTE_FILE:?}"
+        fi
+        ;;
+      *' ls-remote '*)
+        cat "${STUB_LSREMOTE_FILE:?}"
+        ;;
+      *)
+        exec "${STUB_REAL_GIT:?}" "$@"
+        ;;
+    esac
+    ;;
+  *)
+    exec "${STUB_REAL_GIT:?}" "$@"
+    ;;
+esac
 STUB
 
 cat >"$stub_bin/nix" <<'STUB'
@@ -113,10 +154,57 @@ case "${1:-}" in
 esac
 STUB
 
-chmod +x "$stub_bin/git" "$stub_bin/nix" "$stub_bin/docker"
+cat >"$stub_bin/gh" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'gh %s\n' "$*" >>"${STUB_LOG:?}"
+case "${1:-}" in
+  workflow)
+    # gh workflow run <file> -R <repo> --ref <ref> -f k=v ...
+    [ "${2:-}" = run ] || exit 64
+    ;;
+  run)
+    case "${2:-}" in
+      list)
+        [ -z "${STUB_RUN_LIST_EMPTY:-}" ] || exit 0
+        cat "${STUB_RUN_LIST_FILE:?}"
+        ;;
+      watch)
+        if [ -n "${STUB_WATCH_FAIL:-}" ]; then
+          printf 'stub watch failed\n' >&2
+          exit 1
+        fi
+        ;;
+      download)
+        if [ -n "${STUB_DOWNLOAD_FAIL:-}" ]; then
+          printf 'stub download failed\n' >&2
+          exit 1
+        fi
+        target=''
+        last=''
+        for arg in "$@"; do
+          if [ "$last" = -D ]; then target=$arg; fi
+          last=$arg
+        done
+        [ -n "$target" ] || exit 64
+        mkdir -p "$target"
+        cp "${STUB_CORRELATION_FILE:?}" "$target/moog-correlation"
+        ;;
+      *) exit 64 ;;
+    esac
+    ;;
+  auth)
+    # credential helper probe: succeed with no credential material.
+    ;;
+  *) exit 64 ;;
+esac
+STUB
+
+chmod +x "$stub_bin/git" "$stub_bin/nix" "$stub_bin/docker" "$stub_bin/gh"
 
 stub_env() {
-  printf 'STUB_LOG=%s\nPATH=%s:%s\n' "$stub_log" "$stub_bin" "$PATH"
+  printf 'STUB_LOG=%s\nSTUB_REAL_GIT=%s\nPATH=%s:%s\n' \
+    "$stub_log" "$real_git" "$stub_bin" "$PATH"
 }
 
 # ---------------------------------------------------------------------------
@@ -663,3 +751,323 @@ submit_calls=$(( $(grep -c '^docker push ' "$stub_log" || true) - pushes_before 
 [ "$submit_calls" -eq 1 ] ||
   fail "full candidate path expected exactly one push, found $submit_calls"
 pass full-path-controller-with-real-transport
+
+# ---------------------------------------------------------------------------
+# Daily operations (#216): consumer commit, day claim, dispatch, correlation.
+# Each daily case drives the real transport through the recording stubs.
+# ---------------------------------------------------------------------------
+daily_day=2026-09-24
+daily_claim_ref="refs/tags/daily-cardano-node-head/$daily_day"
+daily_tag=daily-cardano-node-head/$daily_day
+consumer_repository=cardano-foundation/cardano-node-antithesis
+consumer_testnet=cardano_node_head
+
+run_transport_in() {
+  local state=$1
+  local name=$2
+  shift 2
+  case_number=$((case_number + 1))
+  case_dir=$tmp_root/$case_number-$name
+  mkdir -p "$case_dir" "$state"
+  case_state=$state
+  case_receipt=$case_dir/receipt
+  case_stderr=$case_dir/stderr
+  case_stdout=$case_dir/stdout
+  : >"$case_receipt"
+  case_rc=0
+  env -i \
+    PATH="$stub_bin:$PATH" \
+    STUB_LOG="$stub_log" \
+    STUB_REAL_GIT="$real_git" \
+    HEAD_CANDIDATE_STATE_DIR="$case_state" \
+    HEAD_CANDIDATE_RECEIPT="$case_receipt" \
+    "$@" >"$case_stdout" 2>"$case_stderr" || case_rc=$?
+}
+
+# Render + prepare a consumer commit inside one state directory; echoes the
+# consumer commit SHA the transport produced.
+seed_consumer_workspace() {
+  local state=$1
+  local name=$2
+  run_transport_in "$state" "$name-render" env \
+    STUB_REAL_GIT="$real_git" \
+    HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
+    "$transport" render-topology "$candidate_ref"
+  require_success
+  run_transport_in "$state" "$name-prepare" env \
+    STUB_REAL_GIT="$real_git" \
+    HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
+    "$transport" prepare-consumer "$daily_day" \
+    "$state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
+  require_success
+  sed -n '1p' "$case_stdout"
+}
+
+# claim-day: creation-only push of the day tag.
+prepare_state=$tmp_root/prepare-state
+consumer_commit=$(seed_consumer_workspace "$prepare_state" prepare-ok)
+[[ "$consumer_commit" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "prepare-consumer emitted a non-SHA commit: $consumer_commit"
+
+consumer_model=$prepare_state/consumer/testnets/$consumer_testnet/docker-compose.yaml
+[ -f "$consumer_model" ] ||
+  fail "prepare-consumer wrote no consumer model: $consumer_model"
+grep -Fq -- "image: $candidate_ref" "$consumer_model" ||
+  fail 'consumer model does not pin the candidate image'
+for side_file in testnet.yaml tracer-config.yaml relay-topology.json README.md; do
+  [ -f "$prepare_state/consumer/testnets/$consumer_testnet/$side_file" ] ||
+    fail "consumer directory lacks side file: $side_file"
+done
+commit_count=$("$real_git" -C "$prepare_state/consumer" rev-list --count HEAD)
+[ "$commit_count" -eq 2 ] ||
+  fail "prepare-consumer expected one commit on top of main, found $commit_count"
+assert_log_contains \
+  "git clone --quiet --filter=blob:none --depth=1 https://github.com/$consumer_repository.git $prepare_state/consumer"
+if grep -Eq '^git -C [^ ]+ .* push ' "$stub_log"; then
+  fail 'prepare-consumer pushed before the day was claimed'
+fi
+pass prepare-consumer-renders-immutable-commit
+
+run_transport_in "$prepare_state" prepare-missing-model env \
+  STUB_REAL_GIT="$real_git" \
+  "$transport" prepare-consumer "$daily_day" \
+  "$prepare_state/not-rendered.yaml" "$candidate_ref" "$consumer_testnet"
+require_failure
+assert_stderr_token 'rendered model is absent'
+pass prepare-consumer-requires-rendered-model
+
+stale_model=$scenario_root/stale-consumer-model
+sed "s#image: $candidate_ref#image: $stale_upstream_ref#g" \
+  "$prepare_state/docker-compose.yaml" >"$stale_model"
+run_transport_in "$prepare_state" prepare-stale-model env \
+  STUB_REAL_GIT="$real_git" \
+  "$transport" prepare-consumer "$daily_day" \
+  "$stale_model" "$candidate_ref" "$consumer_testnet"
+require_failure
+assert_stderr_token 'does not carry the candidate image'
+pass prepare-consumer-rejects-stale-model
+
+# claim-day: creation-only push of the day tag.
+claim_ok_state=$tmp_root/claim-ok-state
+claim_ok_fixture=$scenario_root/claim-ok-empty
+: >"$claim_ok_fixture"
+claim_commit=$(seed_consumer_workspace "$claim_ok_state" claim-ok)
+run_transport_in "$claim_ok_state" claim-day-ok env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_LSREMOTE_FILE="$claim_ok_fixture" \
+  "$transport" claim-day "$daily_claim_ref" "$claim_commit"
+require_success
+assert_stdout_line 'CLAIMED'
+assert_log_contains \
+  "git -C $claim_ok_state/consumer -c credential.helper=!gh auth git-credential push --force-with-lease=$daily_claim_ref: origin $claim_commit:$daily_claim_ref"
+if grep -Eq ' push (--force|[[:space:]])' "$stub_log"; then
+  fail 'claim-day used a force push that can re-point the day ref'
+fi
+grep -Fq "$(printf '%s\t%s' "$claim_commit" "$daily_claim_ref")" "$claim_ok_fixture" ||
+  fail 'claim-day did not confirm the created tag on the remote'
+pass claim-day-creates-tag-once
+
+claim_blocked_state=$tmp_root/claim-blocked-state
+claim_blocked_fixture=$scenario_root/claim-blocked
+: >"$claim_blocked_fixture"
+blocked_commit=$(seed_consumer_workspace "$claim_blocked_state" claim-blocked)
+printf '%s\t%s\n' "$blocked_commit" "$daily_claim_ref" >>"$claim_blocked_fixture"
+blocked_marker_pushes=$(grep -Ec "push --force-with-lease=$daily_claim_ref:" "$stub_log" || true)
+run_transport_in "$claim_blocked_state" claim-day-blocked env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_LSREMOTE_FILE="$claim_blocked_fixture" \
+  "$transport" claim-day "$daily_claim_ref" "$blocked_commit"
+require_failure
+assert_stdout_line 'BLOCKED day-already-claimed'
+assert_stderr_token "day already claimed: $daily_tag"
+blocked_pushes_before=$blocked_marker_pushes
+blocked_pushes=$(grep -Ec "push --force-with-lease=$daily_claim_ref:" "$stub_log" || true)
+[ "$blocked_pushes" -eq "$blocked_pushes_before" ] ||
+  fail 'claim-day blocked case attempted a push'
+pass claim-day-refuses-existing-tag
+
+claim_fail_state=$tmp_root/claim-fail-state
+claim_fail_fixture=$scenario_root/claim-fail-empty
+: >"$claim_fail_fixture"
+fail_commit=$(seed_consumer_workspace "$claim_fail_state" claim-fail)
+run_transport_in "$claim_fail_state" claim-day-push-failure env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_LSREMOTE_FILE="$claim_fail_fixture" \
+  STUB_CLAIM_PUSH_FAIL=1 \
+  "$transport" claim-day "$daily_claim_ref" "$fail_commit"
+require_failure
+assert_stdout_empty
+assert_stderr_token 'claim push failed'
+pass claim-day-push-failure-fails-closed
+
+run_transport_in "$claim_fail_state" claim-day-bad-ref env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_LSREMOTE_FILE="$claim_fail_fixture" \
+  "$transport" claim-day refs/heads/daily-cardano-node-head "$fail_commit"
+require_failure
+assert_stderr_token 'claim ref is not a day tag'
+pass claim-day-rejects-non-day-ref
+
+run_transport_in "$claim_fail_state" claim-day-wrong-commit env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_LSREMOTE_FILE="$claim_fail_fixture" \
+  "$transport" claim-day "$daily_claim_ref" "${fail_commit/1/2}"
+require_failure
+assert_stderr_token 'consumer workspace is not at the claimed commit'
+pass claim-day-requires-workspace-at-commit
+
+# submit-run: dispatch the existing MOOG workflow at the claim tag.
+run_list_fixture=$scenario_root/run-list
+printf '424242\n' >"$run_list_fixture"
+
+run_transport claim-submit-daily env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$run_list_fixture" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 3 false
+require_success
+assert_stdout_line \
+  "https://github.com/$consumer_repository/actions/runs/424242"
+assert_log_contains \
+  "gh workflow run cardano-node.yaml -R $consumer_repository --ref $daily_tag -f test=$consumer_testnet -f duration=3 -f no-faults=false"
+pass submit-run-dispatches-moog-workflow-at-tag
+
+validation_claim_ref="refs/tags/daily-cardano-node-head/validation/$daily_day"
+validation_tag=daily-cardano-node-head/validation/$daily_day
+run_transport claim-submit-validation env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$run_list_fixture" \
+  "$transport" submit-run "$consumer_commit" "$validation_claim_ref" \
+  "$consumer_testnet" 1 false
+require_success
+assert_log_contains \
+  "gh workflow run cardano-node.yaml -R $consumer_repository --ref $validation_tag -f test=$consumer_testnet -f duration=1 -f no-faults=false"
+pass submit-run-dispatches-validation-at-own-tag
+
+run_transport submit-duration-rejected env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$run_list_fixture" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 5 false
+require_failure
+assert_stderr_token 'duration is outside the frozen contract'
+pass submit-run-rejects-foreign-duration
+
+run_transport submit-faults-rejected env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$run_list_fixture" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 3 true
+require_failure
+assert_stderr_token 'faults must stay enabled'
+pass submit-run-rejects-disabled-faults
+
+run_transport submit-testnet-rejected env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$run_list_fixture" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  cardano_node_master 3 false
+require_failure
+assert_stderr_token 'submit target is not the HEAD testnet'
+pass submit-run-rejects-foreign-testnet
+
+run_transport submit-unobservable env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$run_list_fixture" \
+  STUB_RUN_LIST_EMPTY=1 \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 3 false
+require_failure
+assert_stderr_token 'launched workflow run was not observable'
+pass submit-run-rejects-unobservable-run
+
+# await-run: read the MOOG correlation the dispatched run exposed.
+correlation_fixture=$scenario_root/moog-correlation
+{
+  printf 'test_run_id=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n'
+  printf 'phase=finished\n'
+  printf 'outcome=success\n'
+  printf 'report_url=https://amaru-cardano.antithesis.com/report/stub\n'
+} >"$correlation_fixture"
+
+run_transport await-reads-correlation env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_CORRELATION_FILE="$correlation_fixture" \
+  "$transport" await-run "$consumer_commit" \
+  "https://github.com/$consumer_repository/actions/runs/424242"
+require_success
+assert_stdout_line \
+  'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff|https://amaru-cardano.antithesis.com/report/stub|success|finished'
+assert_log_contains "gh run watch 424242 -R $consumer_repository"
+assert_log_contains \
+  "gh run download 424242 -R $consumer_repository -n moog-correlation -D"
+pass await-run-reads-moog-correlation
+
+run_transport await-watch-tolerated env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_CORRELATION_FILE="$correlation_fixture" \
+  STUB_WATCH_FAIL=1 \
+  "$transport" await-run "$consumer_commit" \
+  "https://github.com/$consumer_repository/actions/runs/424242"
+require_success
+assert_stdout_line \
+  'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff|https://amaru-cardano.antithesis.com/report/stub|success|finished'
+pass await-run-tolerates-watch-noise
+
+run_transport await-artifact-absent env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_CORRELATION_FILE="$correlation_fixture" \
+  STUB_DOWNLOAD_FAIL=1 \
+  "$transport" await-run "$consumer_commit" \
+  "https://github.com/$consumer_repository/actions/runs/424242"
+require_failure
+assert_stderr_token 'correlation artifact is absent'
+pass await-run-fails-without-correlation
+
+correlation_incomplete=$scenario_root/moog-correlation-incomplete
+{
+  printf 'test_run_id=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n'
+  printf 'phase=accepted\n'
+} >"$correlation_incomplete"
+run_transport await-record-incomplete env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_CORRELATION_FILE="$correlation_incomplete" \
+  "$transport" await-run "$consumer_commit" \
+  "https://github.com/$consumer_repository/actions/runs/424242"
+require_failure
+assert_stderr_token 'correlation record lacks'
+pass await-run-rejects-incomplete-record
+
+# ---------------------------------------------------------------------------
+# Workflow wiring: schedule, recovery, validation, correlation exposure.
+# ---------------------------------------------------------------------------
+daily_workflow=.github/workflows/daily-cardano-node-head.yaml
+moog_workflow=.github/workflows/cardano-node.yaml
+
+grep -Eq '^[[:space:]]+- cron:[[:space:]]+.[0-9]+ [0-9]+ \* \* \*.' "$daily_workflow" ||
+  fail 'daily workflow lacks a once-per-UTC-day schedule'
+grep -q 'workflow_dispatch' "$daily_workflow" ||
+  fail 'daily workflow lacks a manual dispatch entrypoint'
+pass workflow-schedule-once-per-utc-day
+
+grep -Eq "^[[:space:]]+production:" "$daily_workflow" ||
+  fail 'daily workflow lacks the production recovery input'
+grep -Eq "^[[:space:]]+validation:" "$daily_workflow" ||
+  fail 'daily workflow lacks the validation input'
+grep -Eq "github.event_name == 'schedule'|\(github.event_name == 'workflow_dispatch' && inputs.production\)" "$daily_workflow" ||
+  fail 'daily workflow does not route the schedule to the production job'
+pass workflow-manual-recovery-and-validation-inputs
+
+grep -Eq "github.event_name == 'workflow_dispatch' && inputs.validation" "$daily_workflow" ||
+  fail 'validation job is not dispatched through its own input'
+grep -Eq "workflow_dispatch' && !inputs.production" "$daily_workflow" ||
+  fail 'the #215 manual candidate path lost its dispatch routing'
+pass workflow-manual-candidate-path-preserved
+
+grep -q 'name: moog-correlation' "$moog_workflow" ||
+  fail 'cardano-node.yaml does not expose the moog-correlation artifact'
+grep -Eq 'if: \$\{\{ always\(\) \}\}' "$moog_workflow" ||
+  fail 'cardano-node.yaml correlation step is not always reached'
+grep -q 'steps.request.outputs.id' "$moog_workflow" ||
+  fail 'cardano-node.yaml correlation step does not bind the moog test id'
+pass moog-workflow-exposes-correlation
