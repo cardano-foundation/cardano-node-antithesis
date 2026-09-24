@@ -95,8 +95,9 @@ case "${1:-}" in
     cat "${STUB_RUN_OUTPUT:?}"
     ;;
   compose)
+    last=''
     for arg in "$@"; do
-      if [ "$last" = -f ]; then model=$arg; fi
+      if [ "${last:-}" = -f ]; then model=$arg; fi
       last=$arg
     done
     [ -n "${model:-}" ] || exit 64
@@ -119,6 +120,7 @@ stub_env() {
 # Scenario fixtures.
 # ---------------------------------------------------------------------------
 scenario_root=$tmp_root/scenarios
+mkdir -p "$scenario_root"
 
 make_nix_output() {
   local name=$1
@@ -306,7 +308,7 @@ assert_log_contains "docker load -i $nix_out/cardano-node-image.tar"
 assert_log_contains "docker tag $loaded_image $image_repository:$upstream_sha"
 assert_log_contains "docker push $image_repository:$upstream_sha"
 assert_log_contains \
-  "docker buildx imagetools inspect $image_repository:$upstream_sha"
+  "docker buildx imagetools inspect $image_repository:$upstream_sha --format {{json .Manifest.Digest}}"
 pass publish-candidate-exact-rev-build-tag-push-digest
 
 run_transport publish-digest-malformed env \
@@ -453,11 +455,8 @@ assert_stdout_line "fake://$upstream_sha"
 pass fake-submit-witnesses-rendered-model
 
 stale_rendered=$case_state/stale-docker-compose.yaml
-cp "$case_state/docker-compose.yaml" "$stale_rendered"
-sed -i "s#image: $candidate_ref#image: ghcr.io/intersectmbo/cardano-node@sha256:9999999999999999999999999999999999999999999999999999999999999999#" \
-  "$stale_rendered" 2>/dev/null ||
-  sed -E 's#image: [^ ]+#image: ghcr.io/intersectmbo/cardano-node@sha256:9999999999999999999999999999999999999999999999999999999999999999#' \
-    "$stale_rendered" >"$stale_rendered.new" && mv "$stale_rendered.new" "$stale_rendered"
+sed "s#image: $candidate_ref#image: ghcr.io/intersectmbo/cardano-node@sha256:9999999999999999999999999999999999999999999999999999999999999999#" \
+  "$rendered" >"$stale_rendered"
 run_transport fake-submit-stale env \
   "$transport" fake-submit "$stale_rendered" "$candidate_ref" "$upstream_sha"
 require_failure
@@ -593,6 +592,8 @@ path_stdout=$path_dir/stdout
 path_compose_config=$scenario_root/path-compose-config
 cp "$compose_config" "$path_compose_config"
 
+pushes_before=$(grep -c '^docker push ' "$stub_log" || true)
+
 path_rc=0
 env -i \
   PATH="$stub_bin:$PATH" \
@@ -627,7 +628,7 @@ receipt_records=$(grep -c '^schema=CandidateReceiptV1$' "$path_receipt" || true)
 if grep -Eq '^stage=complete$' "$path_receipt"; then
   fail 'receipt persistence invented a record the controller never wrote'
 fi
-submit_calls=$(grep -c '^docker push ' "$stub_log" || true)
+submit_calls=$(( $(grep -c '^docker push ' "$stub_log" || true) - pushes_before ))
 [ "$submit_calls" -eq 1 ] ||
   fail "full candidate path expected exactly one push, found $submit_calls"
 pass full-path-controller-with-real-transport
