@@ -172,9 +172,10 @@ printf 'chain-tip first-block=%s second-block=%s\n' "$first_tip" "$second_tip"
 [ "$second_tip" -gt "$first_tip" ] ||
   fail "chain did not advance between samples ($first_tip -> $second_tip)"
 
-# One image line per node container, taken with docker inspect while the
-# cluster runs. The container's resolved image ID must equal the candidate
-# image's local ID; the printed reference is the candidate's immutable ref.
+# One image line per node service, taken while the cluster runs: the
+# container's resolved image ID must equal the candidate image's local ID;
+# the line's final token is the candidate's registry digest, so the identity
+# is anchored to the immutable reference, not to a mutable tag.
 candidate_image_id=$(docker image inspect \
   --format '{{.Id}}' "${candidate_ref%@*}")
 record_node_image() {
@@ -184,8 +185,8 @@ record_node_image() {
   [ -n "$container_id" ] || fail "no container for service $service"
   container_image_id=$(docker inspect --format '{{.Image}}' "$container_id")
   [ "$container_image_id" = "$candidate_image_id" ] ||
-    fail "$service runs $container_image_id, not the candidate $candidate_image_id"
-  printf 'node-image %s %s\n' "$service" "$candidate_ref"
+    fail "$service runs $container_image_id, not the candidate $candidate_ref"
+  printf 'node-image %s %s\n' "$service" "${candidate_ref#*@}"
 }
 
 for service in "${node_services[@]}"; do
