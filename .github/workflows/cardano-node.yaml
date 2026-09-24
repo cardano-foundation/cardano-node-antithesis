@@ -94,12 +94,22 @@ jobs:
         moog --version
 
     - name: Configure moog wallet
-      run: printf '%s' "${{ secrets.MOOG_REQUESTER_WALLET }}" | base64 --decode > "$MOOG_WALLET_FILE"
+      env:
+        MOOG_REQUESTER_WALLET: ${{ secrets.MOOG_REQUESTER_WALLET }}
+      run: printf '%s' "$MOOG_REQUESTER_WALLET" | base64 --decode > "$MOOG_WALLET_FILE"
 
     - name: Submit test
       id: request
+      env:
+        RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
         set -euo pipefail
+        # One real attempt per UTC day: a re-run of a failed daily HEAD test
+        # must refuse before any MOOG request is constructed.
+        if [ "$TESTNET" = "cardano_node_head" ] && [ "$RUN_ATTEMPT" != "1" ]; then
+          printf 'daily-head-rerun-refused: testnet=%s attempt=%s\n' "$TESTNET" "$RUN_ATTEMPT" >&2
+          exit 1
+        fi
         COMMIT="${{ github.sha }}"
         TESTNET_DIR="testnets/$TESTNET"
         TRY=$(moog facts test-runs --whose "$MOOG_REQUESTER" | jq \

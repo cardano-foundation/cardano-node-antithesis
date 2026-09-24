@@ -1070,3 +1070,106 @@ grep -Eq 'if: \$\{\{ always\(\) \}\}' "$moog_workflow" ||
 grep -q 'steps.request.outputs.id' "$moog_workflow" ||
   fail 'cardano-node.yaml correlation step does not bind the moog test id'
 pass moog-workflow-exposes-correlation
+
+# ---------------------------------------------------------------------------
+# MOOG step guards: execute the real Submit test step text hermetically.
+# ---------------------------------------------------------------------------
+command -v jq >/dev/null 2>&1 ||
+  fail 'jq is required to execute the extracted MOOG step'
+
+moog_stub_bin=$tmp_root/moog-bin
+moog_stub_log=$tmp_root/moog.log
+mkdir -p "$moog_stub_bin"
+: >"$moog_stub_log"
+cat >"$moog_stub_bin/moog" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'moog %s\n' "$*" >>"${MOOG_STUB_LOG:?}"
+case "$1 $2" in
+  'facts test-runs') printf '[]\n' ;;
+  'requester create-test')
+    printf '{"value":{"testRunId":"stub-test-run-id"},"txHash":"stub-tx"}\n'
+    ;;
+  *) exit 64 ;;
+esac
+STUB
+chmod +x "$moog_stub_bin/moog"
+
+# The step's run block, verbatim from the workflow, with the Actions
+# expression substituted by a fixture commit (the only interpolation the
+# step performs).
+submit_step_script=$tmp_root/submit-test-step.sh
+awk '
+  /^    - name: Submit test$/ { in_step = 1; next }
+  in_step && /^    - name: / { exit }
+  in_step && /^      run: \|$/ { in_run = 1; next }
+  in_run {
+    if ($0 ~ /^        /) {
+      line = $0
+      sub(/^        /, "", line)
+      print line
+      next
+    }
+    if ($0 ~ /^[[:space:]]*$/) {
+      print ""
+      next
+    }
+    exit
+  }
+' "$moog_workflow" \
+  | sed -e "s/\${{ github\.sha }}/$consumer_commit/" -e "s/\${{ inputs\.no-faults }}/false/" \
+  >"$submit_step_script"
+grep -Fq 'moog requester create-test' "$submit_step_script" ||
+  fail 'the extracted Submit test step lost its MOOG request'
+grep -Fq 'daily-head-rerun-refused' "$submit_step_script" ||
+  fail 'the Submit test step lost its rerun guard'
+
+run_submit_step() {
+  local testnet=$1
+  local attempt=$2
+  local out=$3
+  : >"$moog_stub_log"
+  env \
+    PATH="$moog_stub_bin:$PATH" \
+    MOOG_STUB_LOG="$moog_stub_log" \
+    MOOG_REQUESTER=stub-requester \
+    MOOG_PLATFORM=github \
+    GITHUB_REPOSITORY="$consumer_repository" \
+    GITHUB_OUTPUT="$out" \
+    DURATION=3 \
+    TESTNET="$testnet" \
+    RUN_ATTEMPT="$attempt" \
+    bash "$submit_step_script"
+}
+
+rerun_rc=0
+run_submit_step cardano_node_head 2 "$tmp_root/rerun-output" \
+  >"$tmp_root/rerun-stdout" 2>"$tmp_root/rerun-stderr" || rerun_rc=$?
+[ "$rerun_rc" -ne 0 ] ||
+  fail 'a re-run of the daily HEAD test was not refused'
+grep -Fq 'daily-head-rerun-refused: testnet=cardano_node_head attempt=2' \
+  "$tmp_root/rerun-stderr" ||
+  fail 'the rerun refusal lacks its stable reason token'
+if grep -Fq 'requester create-test' "$moog_stub_log"; then
+  fail 'the refused re-run constructed a MOOG request anyway'
+fi
+pass moog-step-refuses-daily-head-rerun
+
+matrix_rc=0
+run_submit_step cardano_node_master 2 "$tmp_root/matrix-output" \
+  >"$tmp_root/matrix-stdout" 2>"$tmp_root/matrix-stderr" || matrix_rc=$?
+[ "$matrix_rc" -eq 0 ] ||
+  fail "a matrix testnet re-run was refused: $(cat "$tmp_root/matrix-stderr")"
+grep -Fq 'requester create-test' "$moog_stub_log" ||
+  fail 'the matrix re-run did not construct its MOOG request'
+grep -Fq 'id=stub-test-run-id' "$tmp_root/matrix-output" ||
+  fail 'the matrix re-run did not export the test id'
+pass moog-step-matrix-rerun-unchanged
+
+# The widened G4 shape: no secret expression in any run text of the MOOG
+# workflow either, including the wallet step.
+if awk '/^[[:space:]]*run:/{r=1} /^[[:space:]]*(- name|uses|with|env):/{r=0} r' \
+  "$moog_workflow" | grep -E '\$\{\{[[:space:]]*(secrets\.|github\.token)'; then
+  fail 'cardano-node.yaml carries a secret expression inside run text'
+fi
+pass moog-workflow-run-text-secret-free
