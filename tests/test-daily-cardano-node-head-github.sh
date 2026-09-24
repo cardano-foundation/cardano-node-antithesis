@@ -1258,6 +1258,16 @@ matrix_occupied_census=$tmp_root/census-matrix-occupied.json
 
 lock_ref_name="refs/tags/daily-cardano-node-head-submitted/$consumer_commit"
 
+# A MOOG call log that never materialized is a broken control, not a
+# passing one: every zero-call assertion requires the log to exist.
+assert_no_create_test() {
+  local log=$1
+  [ -f "$log" ] ||
+    fail "MOOG call log is missing (control broken): $log"
+  [ "$(grep -Ec '^moog requester create-test' "$log" || true)" -eq 0 ] ||
+    fail "a refused dispatch constructed a MOOG request: $log"
+}
+
 # A non-first workflow attempt is refused before anything else.
 rerun_rc=0
 run_submit_step cardano_node_head 2 "$tmp_root/rerun-output" "$empty_census" \
@@ -1267,9 +1277,7 @@ run_submit_step cardano_node_head 2 "$tmp_root/rerun-output" "$empty_census" \
 grep -Fq 'daily-head-rerun-refused: testnet=cardano_node_head attempt=2' \
   "$tmp_root/rerun-stderr" ||
   fail 'the rerun refusal lacks its stable reason token'
-if grep -Fq 'requester create-test' "$moog_stub_log"; then
-  fail 'the refused re-run constructed a MOOG request anyway'
-fi
+assert_no_create_test "$moog_stub_log"
 pass moog-step-refuses-daily-head-rerun
 
 # Matrix testnets are untouched by every daily HEAD guard, lock included.
@@ -1316,9 +1324,7 @@ run_submit_step cardano_node_head 1 "$tmp_root/second-output" "$empty_census" \
 grep -Fq "daily-head-already-submitted: lock exists at $consumer_commit" \
   "$tmp_root/second-stderr" ||
   fail 'the second-dispatch refusal lacks its stable reason token'
-if grep -Fq 'requester create-test' "$moog_stub_log"; then
-  fail 'the refused second dispatch constructed a MOOG request anyway'
-fi
+assert_no_create_test "$moog_stub_log"
 pass moog-step-second-fresh-dispatch-refused
 
 # Two concurrent fresh dispatches with an atomic push: exactly one MOOG
@@ -1347,6 +1353,8 @@ elif [ "$concurrent_two_rc" -eq 0 ] && [ "$concurrent_one_rc" -ne 0 ]; then
 else
   fail "concurrent dispatches expected one winner and one refusal, got rc=$concurrent_one_rc/$concurrent_two_rc"
 fi
+[ -f "$concurrent_winner_log" ] && [ -f "$concurrent_loser_log" ] ||
+  fail 'concurrent dispatches left no MOOG call log (control broken)'
 winner_requests=$(grep -Ec '^moog requester create-test' "$concurrent_winner_log" || true)
 loser_requests=$(grep -Ec '^moog requester create-test' "$concurrent_loser_log" || true)
 [ "$winner_requests" -eq 1 ] && [ "$loser_requests" -eq 0 ] ||
@@ -1357,6 +1365,7 @@ pass moog-step-concurrent-dispatches-lock
 
 # A lock push the remote refuses stops before any request.
 : >"$empty_census.lsremote"
+: >"$tmp_root/unpushable.moglog"
 unpushable_rc=0
 env -i \
   PATH="$moog_stub_bin:$stub_bin:$PATH" \
@@ -1381,9 +1390,7 @@ env -i \
 grep -Fq 'daily-head-lock-unpushable: testnet=cardano_node_head' \
   "$tmp_root/unpushable-stderr" ||
   fail 'the unpushable-lock refusal lacks its stable reason token'
-if grep -Fq 'requester create-test' "$tmp_root/unpushable.moglog"; then
-  fail 'the unpushable-lock refusal constructed a MOOG request anyway'
-fi
+assert_no_create_test "$tmp_root/unpushable.moglog"
 pass moog-step-lock-push-error-refused
 
 # The read-only MOOG census remains an extra refusal behind the lock: an
@@ -1397,13 +1404,12 @@ run_submit_step cardano_node_head 1 "$tmp_root/census-output" "$occupied_census"
 grep -Fq 'daily-head-already-submitted: testnet=cardano_node_head existing=1' \
   "$tmp_root/census-stderr" ||
   fail 'the census refusal lacks its stable reason token'
-if grep -Fq 'requester create-test' "$moog_stub_log"; then
-  fail 'the census refusal constructed a MOOG request anyway'
-fi
+assert_no_create_test "$moog_stub_log"
 pass moog-step-census-refusal-behind-lock
 
 # An unreadable census refuses the daily HEAD testnet before create-test.
 : >"$empty_census.lsremote"
+: >"$tmp_root/census-fail.moglog"
 census_fail_rc=0
 env -i \
   PATH="$moog_stub_bin:$stub_bin:$PATH" \
@@ -1428,9 +1434,7 @@ env -i \
 grep -Fq 'daily-head-census-unreadable: testnet=cardano_node_head' \
   "$tmp_root/census-fail-stderr" ||
   fail 'the unreadable-census refusal lacks its stable reason token'
-if grep -Fq 'requester create-test' "$tmp_root/census-fail.moglog"; then
-  fail 'the unreadable-census refusal constructed a MOOG request anyway'
-fi
+assert_no_create_test "$tmp_root/census-fail.moglog"
 pass moog-step-unreadable-census-refuses
 
 # Matrix testnets keep today's behaviour: an occupied census only feeds the

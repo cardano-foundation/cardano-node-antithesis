@@ -101,24 +101,24 @@ the daily stages run:
    artifact read back; the terminal record correlates the MOOG test id,
    report URL and outcome with every candidate identity.
 
-**No retry.** Exactly these guards give one real attempt per UTC day, and no
-more: the controller's day claim (one dispatch per day, above); the MOOG
-submit step's **submission lock** — the exclusion — an atomic create-once tag
-`refs/tags/daily-cardano-node-head-submitted/<consumer commit>` pushed with a
-non-force push before any MOOG request is constructed (an existing lock
-refuses with `daily-head-already-submitted`; a refused push refuses with
-`daily-head-lock-unpushable`, and a push that turns out not to have created
-the ref — git reports an identical existing tag as *up-to-date* — refuses as
-`daily-head-already-submitted` too); the MOOG submit step's re-run guard (a
-non-first workflow attempt for the HEAD testnet is refused with
-`daily-head-rerun-refused`); and, as an extra read-only belt, the MOOG census
-refusal (`daily-head-already-submitted` for an existing test-run at this
-commit and directory; an unreadable census is refused with
-`daily-head-census-unreadable`, so the day is never spent on an unverified
-census). Together: a failed or incomplete attempt leaves the day claimed, the
-same UTC day cannot produce a second real submission attempt through the
-schedule, a recovery dispatch, a manual re-dispatch of the MOOG workflow or
-the Actions re-run button, and the next UTC day starts fresh.
+**No retry, and this is the exact order in which an attempt is spent.** The
+controller spends the **day claim** first (the create-once day tag). The
+dispatched MOOG run then spends the **submission lock** — the atomic
+create-once tag `refs/tags/daily-cardano-node-head-submitted/<consumer
+commit>`, pushed with a non-force push before any MOOG request is constructed
+(the exclusion; an existing lock refuses with `daily-head-already-submitted`,
+a refused push with `daily-head-lock-unpushable`, and a push that turns out
+not to have created the ref — git reports an identical existing tag as
+*up-to-date* — refuses as `daily-head-already-submitted` too). Only then is
+the **MOOG census** read, as an extra belt: an existing test-run at this
+commit and directory refuses with `daily-head-already-submitted`, and an
+unreadable census refuses with `daily-head-census-unreadable` — at that point
+**both the day and the lock are already spent** and no request is constructed.
+The MOOG submit step's re-run guard (a non-first workflow attempt for the HEAD
+testnet, `daily-head-rerun-refused`) refuses before all of them. A failure
+before the claim spends nothing; a failure at the claim spends the day; a
+failure at or after the lock spends the day and the lock. The next UTC day
+starts fresh.
 
 ### Validation mode (one hour)
 
