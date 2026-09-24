@@ -20,6 +20,7 @@ state_dir=${HEAD_CANDIDATE_STATE_DIR:?HEAD_CANDIDATE_STATE_DIR is required}
 receipt_file=${HEAD_CANDIDATE_RECEIPT:?HEAD_CANDIDATE_RECEIPT is required}
 source_model=${HEAD_CANDIDATE_SOURCE_MODEL:-$script_dir/../testnets/cardano_node_master/docker-compose.yaml}
 upstream_flake=${HEAD_CANDIDATE_UPSTREAM_FLAKE:-github:IntersectMBO/cardano-node}
+consumer_repository=${HEAD_CANDIDATE_REPOSITORY:-${GITHUB_REPOSITORY:-cardano-foundation/cardano-node-antithesis}}
 
 # The cardano_node_master network definition interpolates ${INTERNAL_NETWORK};
 # an unset value is an invalid boolean for Compose, so every Compose
@@ -191,6 +192,140 @@ case "$operation" in
       die 'rendered model still references an upstream node image'
     fi
     emit "fake://$sha"
+    ;;
+
+  prepare-consumer)
+    # Local only: the consumer commit is created in the workspace and pushed
+    # by nothing here. The day claim is the single ref-creating boundary.
+    require_commands git cp find mkdir
+    day=${1:?day is required}
+    rendered_model=${2:?rendered model is required}
+    candidate_ref=${3:?candidate ref is required}
+    testnet=${4:?testnet is required}
+    [ "$testnet" = cardano_node_head ] || die 'consumer directory is not the HEAD testnet'
+    [ -f "$rendered_model" ] || die 'rendered model is absent'
+    grep -Fq -- "image: $candidate_ref" "$rendered_model" ||
+      die 'rendered model does not carry the candidate image'
+    directory=$state_dir/consumer
+    [ ! -e "$directory" ] || die "consumer workspace already exists: $directory"
+    git clone --quiet --filter=blob:none --depth=1 \
+      "https://github.com/${consumer_repository}.git" "$directory"
+    target=$directory/testnets/$testnet
+    mkdir -p "$target"
+    cp "$rendered_model" "$target/docker-compose.yaml"
+    # The same side-file set render-topology copied into the state directory
+    # keeps the consumer model self-contained next to its compose file.
+    find "$(dirname "$source_model")" -maxdepth 1 -type f \
+      ! -name docker-compose.yaml -exec cp -t "$target" {} +
+    git -C "$directory" add -- "testnets/$testnet"
+    git -C "$directory" -c user.name='daily-cardano-node-head' \
+      -c user.email='daily-cardano-node-head@users.noreply.github.com' \
+      commit --quiet -m "chore: render the daily cardano-node HEAD topology for $day"
+    emit "$(git -C "$directory" rev-parse HEAD)"
+    ;;
+
+  claim-day)
+    # One boundary: creation-only push of the day tag. An empty expected
+    # value in --force-with-lease refuses any existing ref, so the tag is
+    # created at most once and never re-pointed.
+    require_commands git gh
+    claim_ref=${1:?claim ref is required}
+    consumer_sha=${2:?consumer SHA is required}
+    [[ "$claim_ref" =~ ^refs/tags/daily-cardano-node-head(/validation)?/[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] ||
+      die "claim ref is not a day tag: $claim_ref"
+    [[ "$consumer_sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid consumer SHA: $consumer_sha"
+    directory=$state_dir/consumer
+    [ -d "$directory/.git" ] || die 'consumer workspace is absent'
+    [ "$(git -C "$directory" rev-parse HEAD)" = "$consumer_sha" ] ||
+      die 'consumer workspace is not at the claimed commit'
+    tag_name=${claim_ref#refs/tags/}
+    if [ -n "$(git -C "$directory" ls-remote origin "$claim_ref")" ]; then
+      emit 'BLOCKED day-already-claimed'
+      die "day already claimed: $tag_name"
+    fi
+    if ! git -C "$directory" -c credential.helper='!gh auth git-credential' \
+      push --force-with-lease="$claim_ref": origin "$consumer_sha:$claim_ref"; then
+      # A concurrent claimant may have won the creation between the census
+      # and the push; that refusal is the same day-already-claimed outcome.
+      if [ -n "$(git -C "$directory" ls-remote origin "$claim_ref")" ]; then
+        emit 'BLOCKED day-already-claimed'
+        die "day already claimed: $tag_name"
+      fi
+      die 'claim push failed'
+    fi
+    confirmed=$(git -C "$directory" ls-remote origin "$claim_ref")
+    [ "${confirmed%%$'\t'*}" = "$consumer_sha" ] ||
+      die 'claim did not take effect'
+    emit 'CLAIMED'
+    ;;
+
+  submit-run)
+    # One boundary: dispatch the existing MOOG workflow at the immutable
+    # claim tag. No MOOG client is embedded here (plan.md: reuse
+    # cardano-node.yaml rather than a second client).
+    require_commands gh date sleep seq head
+    consumer_sha=${1:?consumer SHA is required}
+    claim_ref=${2:?claim ref is required}
+    testnet=${3:?testnet is required}
+    duration=${4:?duration is required}
+    no_faults=${5:?fault setting is required}
+    [ "$testnet" = cardano_node_head ] || die 'submit target is not the HEAD testnet'
+    case "$duration" in
+      1 | 3) ;;
+      *) die 'duration is outside the frozen contract' ;;
+    esac
+    [ "$no_faults" = false ] || die 'faults must stay enabled'
+    tag_name=${claim_ref#refs/tags/}
+    started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    gh workflow run cardano-node.yaml -R "$consumer_repository" \
+      --ref "$tag_name" -f "test=$testnet" -f "duration=$duration" \
+      -f no-faults=false
+    run_id=''
+    for _ in $(seq 1 30); do
+      run_id=$(gh run list -R "$consumer_repository" \
+        --workflow cardano-node.yaml --commit "$consumer_sha" \
+        --event workflow_dispatch --limit 10 --json databaseId,createdAt \
+        --jq ".[] | select(.createdAt >= \"$started\") | .databaseId" | head -n 1)
+      [ -z "$run_id" ] || break
+      sleep 2
+    done
+    [ -n "$run_id" ] || die 'launched workflow run was not observable'
+    emit "https://github.com/$consumer_repository/actions/runs/$run_id"
+    ;;
+
+  await-run)
+    # One boundary: the correlation artifact the dispatched run exposed.
+    require_commands gh awk rm mkdir
+    consumer_sha=${1:?consumer SHA is required}
+    run_url=${2:?run URL is required}
+    [[ "$run_url" =~ ^https://github\.com/[^/[:space:]]+/[^/[:space:]]+/actions/runs/[0-9]+$ ]] ||
+      die 'run URL is malformed'
+    run_id=${run_url##*/}
+    # Watch progress only; the artifact, not the conclusion, carries the
+    # terminal state (a completed-but-failed test also ends this run red).
+    gh run watch "$run_id" -R "$consumer_repository" ||
+      printf 'run watch reported a non-zero exit; continuing to the artifact\n' >&2
+    correlation_dir=$state_dir/correlation
+    rm -rf "$correlation_dir"
+    mkdir -p "$correlation_dir"
+    gh run download "$run_id" -R "$consumer_repository" \
+      -n moog-correlation -D "$correlation_dir" ||
+      die 'correlation artifact is absent'
+    record=$correlation_dir/moog-correlation
+    [ -f "$record" ] || die 'correlation record is absent'
+    correlation_field() {
+      awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$record"
+    }
+    test_run_id=$(correlation_field test_run_id)
+    phase=$(correlation_field phase)
+    outcome=$(correlation_field outcome)
+    report_url=$(correlation_field report_url)
+    [ -n "$test_run_id" ] || die 'correlation record lacks test_run_id'
+    [ -n "$phase" ] || die 'correlation record lacks phase'
+    [ -n "$outcome" ] || die 'correlation record lacks outcome'
+    [ -n "$report_url" ] || die 'correlation record lacks report_url'
+    printf 'awaiting correlation for consumer %s\n' "$consumer_sha" >&2
+    emit "$test_run_id|$report_url|$outcome|$phase"
     ;;
 
   receipt)

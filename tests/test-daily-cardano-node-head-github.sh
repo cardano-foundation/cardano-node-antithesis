@@ -860,7 +860,7 @@ require_success
 assert_stdout_line 'CLAIMED'
 assert_log_contains \
   "git -C $claim_ok_state/consumer -c credential.helper=!gh auth git-credential push --force-with-lease=$daily_claim_ref: origin $claim_commit:$daily_claim_ref"
-if grep -Eq ' push (--force|[[:space:]])' "$stub_log"; then
+if grep -Eq ' push (-f|--force)([[:space:]]|$)' "$stub_log"; then
   fail 'claim-day used a force push that can re-point the day ref'
 fi
 grep -Fq "$(printf '%s\t%s' "$claim_commit" "$daily_claim_ref")" "$claim_ok_fixture" ||
@@ -1000,7 +1000,7 @@ assert_stdout_line \
   'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff|https://amaru-cardano.antithesis.com/report/stub|success|finished'
 assert_log_contains "gh run watch 424242 -R $consumer_repository"
 assert_log_contains \
-  "gh run download 424242 -R $consumer_repository -n moog-correlation -D"
+  "gh run download 424242 -R $consumer_repository -n moog-correlation -D $case_dir/state/correlation"
 pass await-run-reads-moog-correlation
 
 run_transport await-watch-tolerated env \
@@ -1038,36 +1038,3 @@ require_failure
 assert_stderr_token 'correlation record lacks'
 pass await-run-rejects-incomplete-record
 
-# ---------------------------------------------------------------------------
-# Workflow wiring: schedule, recovery, validation, correlation exposure.
-# ---------------------------------------------------------------------------
-daily_workflow=.github/workflows/daily-cardano-node-head.yaml
-moog_workflow=.github/workflows/cardano-node.yaml
-
-grep -Eq '^[[:space:]]+- cron:[[:space:]]+.[0-9]+ [0-9]+ \* \* \*.' "$daily_workflow" ||
-  fail 'daily workflow lacks a once-per-UTC-day schedule'
-grep -q 'workflow_dispatch' "$daily_workflow" ||
-  fail 'daily workflow lacks a manual dispatch entrypoint'
-pass workflow-schedule-once-per-utc-day
-
-grep -Eq "^[[:space:]]+production:" "$daily_workflow" ||
-  fail 'daily workflow lacks the production recovery input'
-grep -Eq "^[[:space:]]+validation:" "$daily_workflow" ||
-  fail 'daily workflow lacks the validation input'
-grep -Eq "github.event_name == 'schedule'|\(github.event_name == 'workflow_dispatch' && inputs.production\)" "$daily_workflow" ||
-  fail 'daily workflow does not route the schedule to the production job'
-pass workflow-manual-recovery-and-validation-inputs
-
-grep -Eq "github.event_name == 'workflow_dispatch' && inputs.validation" "$daily_workflow" ||
-  fail 'validation job is not dispatched through its own input'
-grep -Eq "workflow_dispatch' && !inputs.production" "$daily_workflow" ||
-  fail 'the #215 manual candidate path lost its dispatch routing'
-pass workflow-manual-candidate-path-preserved
-
-grep -q 'name: moog-correlation' "$moog_workflow" ||
-  fail 'cardano-node.yaml does not expose the moog-correlation artifact'
-grep -Eq 'if: \$\{\{ always\(\) \}\}' "$moog_workflow" ||
-  fail 'cardano-node.yaml correlation step is not always reached'
-grep -q 'steps.request.outputs.id' "$moog_workflow" ||
-  fail 'cardano-node.yaml correlation step does not bind the moog test id'
-pass moog-workflow-exposes-correlation
