@@ -349,6 +349,19 @@ assert_log_contains \
   "docker run --rm --entrypoint cardano-node $candidate_ref --version"
 pass prove-revision-runs-containerized-binary
 
+# Upstream's current output says `git rev`; both spellings are accepted.
+version_rev_form=$scenario_root/version-rev-form
+{
+  printf 'cardano-node 11.1.1 - linux-x86_64 - ghc-9.6\n'
+  printf 'git rev %s\n' "$upstream_sha"
+} >"$version_rev_form"
+run_transport prove-revision-rev-form env \
+  STUB_RUN_OUTPUT="$version_rev_form" \
+  "$transport" prove-revision "$candidate_ref"
+require_success
+assert_stdout_line "$upstream_sha"
+pass prove-revision-accepts-git-rev-form
+
 version_bare=$scenario_root/version-bare
 printf 'cardano-node 10.2.1 - linux-x86_64 - ghc-9.6\n' >"$version_bare"
 run_transport prove-revision-unparsable env \

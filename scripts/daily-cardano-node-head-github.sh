@@ -114,7 +114,9 @@ case "$operation" in
     candidate_ref=${1:?candidate ref is required}
     version_output=$(docker run --rm --entrypoint cardano-node \
       "$candidate_ref" --version)
-    revision=$(sed -nE 's/^git revision ([0-9a-f]{40})$/\1/p' \
+    # Upstream has printed both `git revision <sha>` and `git rev <sha>`;
+    # either form is the binary's own revision claim, nothing else is.
+    revision=$(sed -nE 's/^git (revision|rev) ([0-9a-f]{40})$/\2/p' \
       <<<"$version_output" | head -n 1)
     [ -n "$revision" ] ||
       die "containerized cardano-node reported no git revision: $version_output"
