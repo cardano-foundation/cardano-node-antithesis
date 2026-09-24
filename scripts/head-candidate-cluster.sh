@@ -47,6 +47,12 @@ sed -e '/^[[:space:]]*container_name:/d' \
   "$model" >"$exec_model" ||
   fail 'could not derive the local execution copy'
 
+# The model mounts its side files relative to its own directory, so the copy
+# must carry them too or the configurator reads empty mounts.
+find "$model_dir" -maxdepth 1 -type f ! -name docker-compose.yaml \
+  -exec cp -t "$scratch" {} + ||
+  fail 'could not copy the model side files into the execution copy'
+
 cleanup() {
   docker compose --progress quiet -f "$exec_model" down --volumes \
     --remove-orphans || true
