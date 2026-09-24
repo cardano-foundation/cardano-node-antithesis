@@ -186,3 +186,35 @@ Everything else from campaign 3 is retained: D-05 receipt value coverage
 rendered-model witness inventory, the guard-ablation sweep (33/33, zero
 survivors), determinism, and the R-02 image-repository default. None of it may
 regress.
+
+## Mandate v4 — product first (2026-09-24)
+
+Mandates v5–v13 (transport kernel, manifest dispatcher, process-isolated
+handlers) are withdrawn unpushed; they are preserved on the local ref
+`preserved/v13-mandate-6a5de58` and are not a base. S1's accepted boundary
+stands: the controller executes one transport process and sources nothing.
+
+The remaining work is one slice, S2 `local-then-hosted-candidate`, ordered so
+the product runs on a workstation before it runs in CI:
+
+1. **AL-1 local candidate.** The real transport runs the unchanged S1
+   controller end to end on a workstation: live `master` HEAD, exact-rev Nix
+   `dockerImage/node`, publication to the configured image repository (a local
+   registry locally, GHCR in CI), digest read-back, live binary revision,
+   rendered `cardano_node_master` census, Compose validation, fake
+   submission, receipt with `outcome=complete`.
+2. **AL-2 local cluster.** The rendered model runs as a Docker cluster on the
+   workstation and every producer and relay answers on the candidate image
+   while the chain advances (`scripts/smoke-test.sh` shape, against the
+   rendered model).
+3. **AL-3 hermetic suite in CI.** The S1 suite and the new transport's
+   hermetic tests run under `just ci`.
+4. **AL-4 manual entrypoint.** A `workflow_dispatch` workflow runs the same
+   controller with the real transport against GHCR and the fake submission,
+   and uploads the receipt. Hosted execution is proved after merge (a
+   dispatchable workflow must exist on the default branch).
+5. **AL-5 docs.** Operator documentation names the manual recovery command,
+   the local run, each fail-closed stop and the receipt fields.
+
+No containment, mutation or kernel work is added in this slice. Assurance
+beyond the gate is a separate ticket after the product runs.

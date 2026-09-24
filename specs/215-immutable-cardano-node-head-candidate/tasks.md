@@ -35,7 +35,15 @@ audited and accepted by the ticket owner.
 - [ ] T2166 Credential handling confined to the effecting command's environment
       (I215-10).
 
-## S3 — manual-entrypoint
+- [ ] T2167 Configurable image repository so the same transport publishes to
+      a local registry on a workstation and to GHCR in CI; one local command
+      runs the controller end to end (AL-1).
+- [ ] T2168 Local cluster proof: the rendered model starts, every producer and
+      relay answers on the candidate image, the chain advances (AL-2).
+
+## S3 — manual-entrypoint (folded into S2 by mandate v4)
+
+- [ ] T2174 `just ci` runs the candidate-path hermetic suite (AL-3).
 
 - [ ] T2171 Manual `workflow_dispatch` candidate job running the real path with
       the fake submission transport and publishing the receipt (R-07).
