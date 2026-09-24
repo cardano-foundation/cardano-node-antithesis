@@ -44,4 +44,4 @@ and publishes a receipt correlating every identity.
 
 ## Slices
 
-One slice: S1 `daily-run` — tasks T2161–T2169 below.
+One slice: S1 `daily-run` — tasks T216-01–T2169 below.
