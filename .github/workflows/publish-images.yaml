@@ -15,7 +15,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-image-provenance:
+    name: Check image provenance (daemon-free)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.ref_name || '' }}
+      - uses: paolino/dev-assets/setup-nix@v0.0.1
+        with:
+          cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Run provenance proof
+        run: nix develop --quiet -c just check-image-provenance
+
   publish-images:
+    needs: check-image-provenance
     runs-on: ubuntu-latest
 
     # required permissions to be able to push to registry

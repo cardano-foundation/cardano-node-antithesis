@@ -1,4 +1,4 @@
-{ pkgs, version, adversary-exe, cardano-cli, ... }:
+{ pkgs, version, adversary-exe, cardano-cli, imageMeta, ... }:
 let
   # Make sure /usr/bin/env is available in the image
   usrBinEnv = pkgs.runCommand "usr-bin-env" { } ''
@@ -10,7 +10,11 @@ let
 in pkgs.dockerTools.buildImage {
   name = "ghcr.io/cardano-foundation/cardano-node-antithesis/sidecar";
   tag = version;
-  config = { EntryPoint = [ "sidecar" ]; };
+  created = imageMeta.created;
+  config = {
+    EntryPoint = [ "sidecar" ];
+    Labels = imageMeta.labels;
+  };
   copyToRoot = pkgs.buildEnv {
     name = "image-root";
     paths = [

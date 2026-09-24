@@ -2120,12 +2120,25 @@
         "type": "github"
       }
     },
+    "image-meta": {
+      "flake": false,
+      "locked": {
+        "path": "../image-meta",
+        "type": "path"
+      },
+      "original": {
+        "path": "../image-meta",
+        "type": "path"
+      },
+      "parent": []
+    },
     "root": {
       "inputs": {
         "CHaP": "CHaP",
         "cardano-node-runtime": "cardano-node-runtime",
         "flake-parts": "flake-parts",
         "haskellNix": "haskellNix_2",
+        "image-meta": "image-meta",
         "iohkNix": "iohkNix_2",
         "nixpkgs": [
           "haskellNix",

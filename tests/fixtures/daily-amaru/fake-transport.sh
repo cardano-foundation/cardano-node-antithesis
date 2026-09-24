@@ -13,6 +13,9 @@ integrated_sha=4444444444444444444444444444444444444444
 image_ref="ghcr.io/lambdasistemi/amaru-bootstrap-producer:${bootstrap_sha}@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 mkdir -p "$state_dir"
+markers_file=$state_dir/markers
+receipt_history=$state_dir/receipt-history
+touch "$markers_file" "$receipt_history"
 
 log() {
   printf '%s' "$1" >>"$log_file"
@@ -32,18 +35,105 @@ increment() {
   printf '%s\n' "$((count + 1))" >"$file"
 }
 
+identity_marker() {
+  if [ -n "${DAILY_AMARU_IDENTITY:-}" ]; then
+    printf 'identity-present'
+  else
+    printf 'identity-absent'
+  fi
+}
+
+validate_head() {
+  [[ "$1" =~ ^[0-9a-f]{40}$ ]] || {
+    printf 'invalid workflow head: %s\n' "$1" >&2
+    return 1
+  }
+}
+
+claim_prelaunch_marker() {
+  local kind=$1 value=$2 head=$3 line marker legacy_marker current_prefix
+  local previous_head='' recorded_head='' found=0
+
+  if [ "$scenario" = census-failure ]; then
+    printf 'BLOCKED census-unreadable\n'
+    return 1
+  fi
+  if [ "$kind" = day ]; then
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^\<\!--\ daily-amaru\ day="$value"\ launch-consumed\ head=[0-9a-f]{40}\ --\>$ ]]; then
+        printf 'BLOCKED launch-consumed\n'
+        return 1
+      fi
+    done <"$markers_file"
+    legacy_marker="<!-- daily-amaru day=$value claim -->"
+    current_prefix="<!-- daily-amaru day=$value claim head="
+    marker="<!-- daily-amaru day=$value claim head=$head -->"
+  else
+    legacy_marker="<!-- daily-amaru attempted-sha=$value -->"
+    current_prefix="<!-- daily-amaru attempted-sha=$value head="
+    marker="<!-- daily-amaru attempted-sha=$value head=$head -->"
+  fi
+  while IFS= read -r line; do
+    if [ "$line" = "$legacy_marker" ]; then
+      found=1
+      previous_head=legacy
+      continue
+    fi
+    if [[ "$line" == "$current_prefix"*' -->' ]]; then
+      recorded_head=${line#"$current_prefix"}
+      recorded_head=${recorded_head%' -->'}
+      [[ "$recorded_head" =~ ^[0-9a-f]{40}$ ]] || continue
+      found=1
+      previous_head=$recorded_head
+      if [ "$recorded_head" = "$head" ]; then
+        printf 'BLOCKED unchanged-head\n'
+        return 1
+      fi
+    fi
+  done <"$markers_file"
+  printf '%s\n' "$marker" >>"$markers_file"
+  if [ "$kind" = day ]; then
+    printf '%s\n' "$value" >"$state_dir/day-claim"
+  else
+    printf '%s\n' "$value" >"$state_dir/attempted-sha"
+  fi
+  if [ "$found" -eq 0 ]; then
+    printf 'CLAIMED\n'
+  else
+    printf 'SUPERSEDED previous-head=%s\n' "$previous_head"
+  fi
+}
+
 operation=${1:?transport operation is required}
 shift
 
 case "$operation" in
+  preflight)
+    log preflight "$@"
+    case "$scenario" in
+      missing-tool)
+        printf 'MISSING-COMMAND rg\n'
+        printf 'daily-amaru-github: missing command: rg\n' >&2
+        exit 1
+        ;;
+      silent-preflight)
+        ;;
+      malformed-preflight)
+        printf 'dependencies look fine\n'
+        ;;
+      *)
+        printf 'OK: 15 scheduled dependencies present: %s\n' \
+          'gh git jq rg sed awk grep tail tr head seq sleep date docker nix'
+        ;;
+    esac
+    ;;
+
   claim-day)
     day=${1:?day is required}
-    log claim-day "$day"
-    if [ -e "$state_dir/day-claim" ]; then
-      printf 'day already claimed\n' >&2
-      exit 1
-    fi
-    printf '%s\n' "$day" >"$state_dir/day-claim"
+    head=${2:?head is required}
+    validate_head "$head"
+    log claim-day "$day" "$head"
+    claim_prelaunch_marker day "$day" "$head"
     ;;
 
   resolve-upstream)
@@ -80,18 +170,36 @@ case "$operation" in
 
   claim-sha-attempt)
     sha=${1:?upstream SHA is required}
-    log claim-sha-attempt "$sha"
-    if [ -e "$state_dir/attempted-sha" ]; then
-      printf 'SHA already attempted\n' >&2
-      exit 1
-    fi
-    printf '%s\n' "$sha" >"$state_dir/attempted-sha"
+    head=${2:?head is required}
+    validate_head "$head"
+    log claim-sha-attempt "$sha" "$head"
+    claim_prelaunch_marker sha "$sha" "$head"
+    ;;
+
+  claim-launch)
+    day=${1:?day is required}
+    head=${2:?head is required}
+    validate_head "$head"
+    log claim-launch "$day" "$head"
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^\<\!--\ daily-amaru\ day="$day"\ launch-consumed\ head=[0-9a-f]{40}\ --\>$ ]]; then
+        printf 'BLOCKED launch-consumed\n'
+        exit 1
+      fi
+    done <"$markers_file"
+    printf '<!-- daily-amaru day=%s launch-consumed head=%s -->\n' \
+      "$day" "$head" >>"$markers_file"
+    printf 'CLAIMED\n'
     ;;
 
   propose-bootstrap)
     sha=${1:?upstream SHA is required}
-    identity=${2:?identity is required}
-    log mutation:bootstrap "$sha" "$identity"
+    # Same expansion as production: observe the day, never synthesize one.
+    day=${DAILY_AMARU_DAY:?DAILY_AMARU_DAY is required}
+    # The minted bootstrap identity travels in the process environment only, so
+    # the log records its presence and never its value.
+    log mutation:bootstrap "$sha" "$(identity_marker)"
+    log observed-day propose-bootstrap "$day"
     if [ "$scenario" = failed-stage ]; then
       printf 'bootstrap proposal failed\n' >&2
       exit 1
@@ -113,8 +221,10 @@ case "$operation" in
 
   prepare-consumer-repin)
     image=${1:?image is required}
-    identity=${2:?identity is required}
-    log mutation:repin "$image" "$identity"
+    # Same expansion as production: observe the day, never synthesize one.
+    day=${DAILY_AMARU_DAY:?DAILY_AMARU_DAY is required}
+    log mutation:repin "$image"
+    log observed-day prepare-consumer-repin "$day"
     printf '%s\n' "$consumer_sha"
     ;;
 
@@ -168,7 +278,33 @@ case "$operation" in
   await-supervised-integration)
     head=${1:?consumer head is required}
     log await-supervised-integration "$head"
-    printf '%s\n' "$integrated_sha"
+    case "$scenario" in
+      awaiting-integration | awaiting-integration-threshold | awaiting-integration-stale)
+        printf 'daily-amaru-github: consumer repin is awaiting guarded integration\n' >&2
+        printf 'AWAITING https://example.invalid/pull/17\n'
+        exit 75
+        ;;
+      integration-head-mismatch)
+        printf 'daily-amaru-github: integrated PR head differs from the verified candidate\n' >&2
+        exit 1
+        ;;
+      integration-not-exact-main)
+        printf 'daily-amaru-github: merged consumer commit is not exact current main\n' >&2
+        exit 1
+        ;;
+      *) printf '%s\n' "$integrated_sha" ;;
+    esac
+    ;;
+
+  awaiting-integration-age)
+    sha=${1:?upstream SHA is required}
+    day=${2:?day is required}
+    log awaiting-integration-age "$sha" "$day"
+    case "$scenario" in
+      awaiting-integration-threshold) printf '3\n' ;;
+      awaiting-integration-stale) printf '4\n' ;;
+      *) printf '1\n' ;;
+    esac
     ;;
 
   fake-launch)
@@ -187,6 +323,8 @@ case "$operation" in
     log receipt "$@"
     : >"$receipt_file"
     printf '%s\n' "$@" >>"$receipt_file"
+    printf '%s\n' '--- receipt ---' >>"$receipt_history"
+    printf '%s\n' "$@" >>"$receipt_history"
     ;;
 
   *)

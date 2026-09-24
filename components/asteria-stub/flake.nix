@@ -19,17 +19,27 @@
     cardano-node-clients = {
       url = "github:lambdasistemi/cardano-node-clients/5707836b623918043a7f2fbdcc2ed499902ac082";
     };
+    image-meta = {
+      url = "path:../image-meta";
+      flake = false;
+    };
   };
 
-  outputs = inputs@{ self, nixpkgs, flake-parts, cardano-node-clients, ... }:
+  outputs = inputs@{ self, nixpkgs, flake-parts, cardano-node-clients
+    , image-meta, ... }:
     let
-      version = self.dirtyShortRev or self.shortRev or "dev";
+      imageMeta = import (image-meta + "/meta.nix") {
+        inherit self;
+        sourceUrl =
+          "https://github.com/cardano-foundation/cardano-node-antithesis";
+      };
+      version = imageMeta.version;
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "x86_64-linux" ];
       perSystem = { pkgs, system, ... }: {
         packages.docker-image = pkgs.callPackage ./nix/docker-image.nix {
-          inherit version;
+          inherit version imageMeta;
           utxo-indexer = cardano-node-clients.packages.${system}.utxo-indexer;
         };
         packages.default = self.packages.${system}.docker-image;

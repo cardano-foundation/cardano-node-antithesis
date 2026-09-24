@@ -6,6 +6,66 @@ It runs on one fixed UTC cron. Pull requests and manual dispatches execute the
 same state machine through the deterministic fake transport and cannot call
 the real launcher.
 
+## Scheduled runner contract
+
+The scheduled job provisions every non-shell command the controller and
+transport can reach: `ripgrep` and `nix` on top of the stock image. The
+controller checks the commands it needs to reach the transport at all using
+shell builtins, then has the transport preflight the full census — both before
+the UTC day is claimed. A missing command is a precondition failure, not a setup
+exception: exit non-zero at `stage=runner-preflight` with
+`error=missing-command-<name>`. A preflight reporting nothing or an unparsable
+success is `error=malformed-dependency-evidence`. Each transport operation
+declares only the commands it uses, so publishing a failure receipt never
+depends on the command whose absence it reports.
+
+## Runner allocation boundary
+
+`runner` values exist only after GitHub has allocated a runner for a job.
+GitHub evaluates a job's own `env:` mapping *before* that allocation, so
+`${{ runner.temp }}` written there is not merely empty — it is rejected, and
+the whole workflow file produces zero jobs. Nothing else in CI observes that:
+a run with no jobs has no failing job to report, so every other required
+context stays green while the schedule silently never ran.
+
+The scheduled job therefore binds `DAILY_AMARU_STATE_DIR` and
+`DAILY_AMARU_RECEIPT` on the step that uses them, not on the job. The values
+are unchanged — `$RUNNER_TEMP/daily-amaru` and its `receipt` child — and the
+receipt upload keeps its own step-scoped `${{ runner.temp }}` lookup.
+
+## Bootstrap App identity
+
+Production mints a short-lived token from a dedicated GitHub App, named by
+repository variable `DAILY_AMARU_APP_ID` and secret
+`DAILY_AMARU_APP_PRIVATE_KEY`, scoped to owner `lambdasistemi`, repository
+`amaru-bootstrap` alone, and exactly five permissions: actions read, checks
+read, contents write, pull requests write, metadata read.
+
+That token authorizes the bootstrap boundary only. Same-repository work — issue
+receipts, consumer repin, check observation, launch — uses the workflow's own
+repository token, granted exactly the permissions those operations declare. The
+two are never interchangeable, and neither the private key nor the minted token
+is printed, persisted, exported through `$GITHUB_ENV`, committed, or passed as a
+command-line argument; the token is a step-scoped environment binding only.
+
+If an input or the mint step is unavailable, the mint is allowed to fail and the
+controller still runs with an empty identity, exiting non-zero at
+`stage=identity` with `error=missing-credentials-<name>` before any bootstrap,
+image, repin, integration, or launch effect.
+
+Every receipt is written locally before external publication is requested, and
+the scheduled job uploads that file on every outcome, so a broken precondition
+leaves the day, stage, `outcome=FAILED`, and a specific error behind even when
+the transport cannot publish its issue receipt.
+
+## Operator setup gate
+
+Creating the App, installing it on `lambdasistemi/amaru-bootstrap`, approving
+its permissions, and placing the variable and secret are operator actions
+outside this repository. Until they are done the scheduled run is expected to
+fail at `stage=identity`; that is the contract working, not a regression. No
+secret value is recorded anywhere in this repository.
+
 ## Decision and durable guards
 
 The GitHub transport first claims the UTC day in issue #210, resolves exactly
@@ -16,10 +76,21 @@ any cross-repository mutation. Duplicate days, attempted SHAs, malformed or
 ambiguous observations, and every failed stage retain an honest `FAILED`
 receipt.
 
-Production requires `DAILY_AMARU_CROSS_REPO_TOKEN`, injected as both
-`DAILY_AMARU_IDENTITY` and `GH_TOKEN`. The repository neither creates nor
-defaults that credential. Without it, the controller fails before the
-bootstrap proposal, image publication, consumer repin, integration, or launch.
+An open consumer repin is the one expected non-launch outcome on the changed
+path. It records `stage=complete`, `outcome=AWAITING`, and
+`run_outcome=awaiting-integration`, exits zero, and prints
+`AWAITING <day> <upstream-sha> <consumer-pr-url>`. This classification applies
+only when the integration operation reports that the PR is awaiting guarded
+integration. A merged PR whose head differs from the verified candidate, or
+whose merge commit is not exact current `main`, remains a hard failure with its
+specific diagnostic.
+
+The controller counts the current day plus uninterrupted preceding UTC days
+whose durable receipt on issue #210 is terminal AWAITING for the same upstream
+SHA. More than `DAILY_AMARU_AWAITING_MAX_DAYS` consecutive days fails at
+`stage=supervised-integration`; the default is 3, so the fourth consecutive day
+is loud. A missing day breaks the sequence, and unrelated candidates or
+non-AWAITING receipts do not contribute.
 
 ## Supervised changed path
 
@@ -33,14 +104,46 @@ The provisional transport:
 4. requires the named workflow/job results on the exact consumer head and
    retains the positive, non-zero output from
    `scripts/check-amaru-producer-image-refs.sh`;
-5. waits for lane-supervised guarded integration and verifies the merge is
-   exact current `main`—the transport has no generated-PR self-merge command;
+5. checks lane-supervised guarded integration once; an open PR records the
+   bounded AWAITING outcome, while a merged PR must have the verified candidate
+   head and be exact current `main`—the transport has no generated-PR
+   self-merge command;
 6. invokes `cardano-node.yaml` once with `test=cardano_amaru`, `duration=1`,
    and `no-faults=false`, then waits for the run result before recording the
    upstream SHA as successful.
 
 There is no automatic retry. A failed partial receipt stays failed; it is not
 translated to `UNCHANGED`, launch success, or a findings verdict.
+
+## Observed bootstrap surface
+
+Step 2 above waits on a surface owned by `lambdasistemi/amaru-bootstrap`, not by
+this repository. The names must match what that repository actually publishes:
+
+| binding | default | provenance in `lambdasistemi/amaru-bootstrap` |
+|---|---|---|
+| `DAILY_AMARU_BOOTSTRAP_CHECK_WORKFLOW` | `CI` | `.github/workflows/ci.yml`, `name: CI` |
+| `DAILY_AMARU_BOOTSTRAP_CHECKS` | `Build Gate,Live Bootstrap Producer` | jobs `build-gate` and `live-bootstrap-producer` |
+
+The observation window is derived from how long completed runs of that workflow
+have actually taken, never from a constant. Two bindings bound that derivation
+so a single pathological historical run cannot describe a window this job could
+not survive:
+
+| binding | default | meaning |
+|---|---|---|
+| `DAILY_AMARU_BOOTSTRAP_CHECK_MAX_SECONDS` | `7200` | a historical run longer than this is discarded as a sample, not clamped |
+| `DAILY_AMARU_BOOTSTRAP_CHECK_POLL_SECONDS` | `60` | upper bound on the interval between observations |
+
+`DAILY_AMARU_BOOTSTRAP_CHECK_DURATION_SECONDS` still overrides the derivation
+outright and is what the local proof injects.
+
+If every sample is discarded, or the workflow publishes no completed run, the
+observation fails closed per D229-2 rather than selecting an unrelated
+constant — and the diagnostic names the workflow and repository it searched.
+`tests/test-daily-amaru.sh` pins these defaults and rejects a mutant that
+restores this repository's own check names, which is the failure that kept the
+nightly red from 2026-08-23 to 2026-09-01.
 
 ## Replacement owners
 
@@ -62,3 +165,32 @@ tests/test-daily-amaru.sh
 It exercises changed, unchanged, malformed observations, exact-head check
 failures, non-vacuous #202 evidence, duplicate/no-retry guards, failure
 ordering, receipt honesty, and the counted zero-real-launch invariant.
+
+It also reproduces the 2026-08-02 and 2026-08-03 missing-`rg` incidents against
+the real transport in a hermetic seeded PATH, checks the App scope, credential
+non-persistence, and the token grant/use seam, counts the effects both broken
+preconditions reach, and checks that CI executably calls this suite while the
+schedule calls the controller. Every instrument carries controls proving it can
+fail.
+
+Validate every tracked workflow in the repository, which is the same command
+the merge-required `Check code quality` context runs:
+
+```console
+nix develop --quiet -c just check-workflows
+```
+
+It enumerates every tracked `.github/workflows/*.yaml` and `*.yml` file, prints
+the census and its count, refuses an empty census, and validates the expression
+contexts with the `flake.lock`-pinned actionlint. Baselines in
+`.github/actionlint.yaml` are path-specific and quote the exact pre-existing
+diagnostic they accept; none of them can suppress the `runner`-at-job-level
+class.
+
+Run the complete local gate — workflow validation, shell analysis, formatting,
+and both focused proofs, none of which need Docker, network, or credentials —
+with:
+
+```console
+nix develop --quiet -c just ci
+```

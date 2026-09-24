@@ -2247,6 +2247,18 @@
         "type": "github"
       }
     },
+    "image-meta": {
+      "flake": false,
+      "locked": {
+        "path": "../image-meta",
+        "type": "path"
+      },
+      "original": {
+        "path": "../image-meta",
+        "type": "path"
+      },
+      "parent": []
+    },
     "root": {
       "inputs": {
         "CHaP": "CHaP",
@@ -2255,6 +2267,7 @@
         "flake-parts": "flake-parts_3",
         "hackageNix": "hackageNix_4",
         "haskellNix": "haskellNix_3",
+        "image-meta": "image-meta",
         "iohkNix": "iohkNix_3",
         "nixpkgs": [
           "haskellNix",

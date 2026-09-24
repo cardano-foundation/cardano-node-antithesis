@@ -52,12 +52,21 @@
       url = "path:../composer-sdk";
       flake = false;
     };
+    image-meta = {
+      url = "path:../image-meta";
+      flake = false;
+    };
   };
 
   outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, hackageNix, CHaP
-    , iohkNix, cardano-node-clients, composer-sdk, ... }:
+    , iohkNix, cardano-node-clients, composer-sdk, image-meta, ... }:
     let
-      version = self.dirtyShortRev or self.shortRev or "dev";
+      imageMeta = import (image-meta + "/meta.nix") {
+        inherit self;
+        sourceUrl =
+          "https://github.com/cardano-foundation/cardano-node-antithesis";
+      };
+      version = imageMeta.version;
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
         systems = [ "x86_64-linux" ];
         perSystem = { system, ... }:
@@ -76,7 +85,7 @@
               inherit CHaP pkgs;
             };
             docker-image = pkgs.callPackage ./nix/docker-image.nix {
-              inherit project version;
+              inherit project version imageMeta;
               utxo-indexer = cardano-node-clients.packages.${system}.utxo-indexer;
               composer-sdk-src = composer-sdk;
             };

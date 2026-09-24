@@ -638,11 +638,24 @@
         "type": "github"
       }
     },
+    "image-meta": {
+      "flake": false,
+      "locked": {
+        "path": "../image-meta",
+        "type": "path"
+      },
+      "original": {
+        "path": "../image-meta",
+        "type": "path"
+      },
+      "parent": []
+    },
     "root": {
       "inputs": {
         "flake-parts": "flake-parts",
         "flake-utils": "flake-utils",
         "haskellNix": "haskellNix",
+        "image-meta": "image-meta",
         "nixpkgs": [
           "haskellNix",
           "nixpkgs-unstable"

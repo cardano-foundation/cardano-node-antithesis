@@ -79,3 +79,75 @@ format:
     #!/usr/bin/env bash
     set -euo pipefail
     nixfmt *.nix
+
+# check nix formatting without rewriting sources
+format-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nixfmt --check *.nix
+
+### Verification Commands ###
+
+# validate the Actions expression contexts of every tracked workflow
+check-workflows:
+    ./scripts/check-github-actions.sh
+
+# shellcheck the maintained shell surface
+check-shell:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # `old-broken/` and `tools/` carry pre-existing diagnostics and are not
+    # part of this surface; the census is printed so it cannot shrink unnoticed.
+    mapfile -t sources < <(git ls-files 'scripts/*.sh' 'tests/*.sh' | sort -u)
+    if [ "${#sources[@]}" -eq 0 ]; then
+        echo 'SHELL-ANALYSIS-ERROR empty shell census' >&2
+        exit 1
+    fi
+    printf 'shell-census %s\n' "${sources[@]}"
+    shellcheck -x "${sources[@]}"
+    printf 'SHELL-ANALYSIS count=%d status=pass\n' "${#sources[@]}"
+
+# focused proof for the repository-wide workflow validation
+test-workflow-validation:
+    ./tests/test-workflow-validation.sh
+
+# focused proof for the Daily Amaru controller
+test-daily-amaru:
+    ./tests/test-daily-amaru.sh
+
+# focused proof plus representative tarball inspection (daemon-free)
+check-image-provenance:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source_url=https://github.com/cardano-foundation/cardano-node-antithesis
+    ./tests/test-image-provenance.sh
+    inspect_component() {
+        local comp=$1 out1 out2 rev created tag reuse
+        if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            rev=$(git rev-parse HEAD)-dirty
+        else
+            rev=$(git rev-parse HEAD)
+        fi
+        created=$(date -u -d "$(git log -1 --format=%cI)" +%Y-%m-%dT%H:%M:%SZ)
+        out1=$(cd "components/${comp}" && nix build .#docker-image --print-out-paths)
+        out2=$(cd "components/${comp}" && nix build .#docker-image --print-out-paths)
+        if [ "${out1}" = "${out2}" ]; then
+            reuse=true
+        else
+            reuse=false
+        fi
+        printf 'reuse=%s path=%s\n' "${reuse}" "${out1}"
+        [ "${reuse}" = true ]
+        tag=$(tar -xzOf "${out1}" manifest.json | jq -r '.[0].RepoTags[0]' | sed 's/.*://')
+        ./scripts/check-image-provenance.sh \
+            --image "${out1}" \
+            --expected-revision "${rev}" \
+            --expected-created "${created}" \
+            --expected-source "${source_url}" \
+            --expected-version "${tag}"
+    }
+    inspect_component asteria-stub
+    inspect_component tx-generator
+
+# complete local CI: no Docker, no network, no credentials
+ci: check-workflows check-shell format-check test-workflow-validation test-daily-amaru check-image-provenance

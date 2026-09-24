@@ -1,4 +1,4 @@
-{ pkgs, project, version, utxo-indexer, composer-sdk-src, ... }:
+{ pkgs, project, version, utxo-indexer, composer-sdk-src, imageMeta, ... }:
 let
   # Bake the antithesis composer scripts under the canonical
   # /opt/antithesis/test/v1/<template>/ path. The Antithesis composer
@@ -42,6 +42,7 @@ in
 pkgs.dockerTools.buildImage {
   name = "ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game";
   tag = version;
+  created = imageMeta.created;
   copyToRoot = pkgs.buildEnv {
     name = "image-root";
     paths = [
@@ -64,5 +65,6 @@ pkgs.dockerTools.buildImage {
     Entrypoint = [ "${utxo-indexer}/bin/utxo-indexer" ];
     Cmd = defaultIndexerArgs;
     WorkingDir = "/";
+    Labels = imageMeta.labels;
   };
 }
