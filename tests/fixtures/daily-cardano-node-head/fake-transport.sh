@@ -372,6 +372,12 @@ case "$operation" in
       daily-report-url-malformed)
         printf '%s|ftp://report.example/report|success|finished\n' "$moog_test_id"
         ;;
+      daily-moog-id-empty)
+        printf '|%s|success|finished\n' "$daily_report_url"
+        ;;
+      daily-moog-id-garbage)
+        printf 'bad id|%s|success|finished\n' "$daily_report_url"
+        ;;
       daily-await-not-terminal)
         printf '%s|-|unknown|accepted\n' "$moog_test_id"
         ;;

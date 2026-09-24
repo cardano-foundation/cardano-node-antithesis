@@ -401,6 +401,8 @@ moog_test_id=${correlation_fields[0]}
 report_url=${correlation_fields[1]}
 terminal_outcome=${correlation_fields[2]}
 terminal_phase=${correlation_fields[3]}
+[[ "$moog_test_id" =~ ^[^[:space:]]+$ ]] ||
+  fail_stage await-run malformed-moog-id
 [ "$terminal_phase" = finished ] ||
   fail_stage await-run run-not-terminal
 case "$terminal_outcome" in

@@ -898,6 +898,18 @@ assert_daily_failure_receipt await-run malformed-report-url
 assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
 pass daily-report-url-malformed
 
+run_daily daily-moog-id-empty daily-moog-id-empty daily
+require_daily_failure daily-moog-id-empty
+assert_daily_failure_receipt await-run malformed-moog-id
+assert_last_receipt_lacks '^moog_test_id='
+pass daily-moog-id-empty
+
+run_daily daily-moog-id-garbage daily-moog-id-garbage daily
+require_daily_failure daily-moog-id-garbage
+assert_daily_failure_receipt await-run malformed-moog-id
+assert_last_receipt_lacks '^moog_test_id='
+pass daily-moog-id-garbage
+
 run_daily daily-await-not-terminal daily-await-not-terminal daily
 require_daily_failure daily-await-not-terminal
 assert_daily_failure_receipt await-run run-not-terminal
