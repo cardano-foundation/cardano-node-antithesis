@@ -59,6 +59,7 @@ cleanup() {
   rm -rf -- "$scratch"
 }
 trap cleanup EXIT
+trap 'cleanup; exit 143' TERM INT
 
 compose() {
   docker compose --progress quiet -f "$exec_model" "$@"
@@ -139,9 +140,11 @@ wait_for_ping() {
       compose logs --tail 30 "$service" >&2 || true
       exit 1
     fi
+    # The candidate image's cardano-cli speaks the current ping surface:
+    # a positional address, -m for the network magic, --mode tip.
     if tip=$(compose exec -T "$service" \
-      cardano-cli ping --magic "$MAGIC" --host 127.0.0.1 --port 3001 \
-      --tip --quiet -c1 2>/dev/null); then
+      cardano-cli ping 127.0.0.1:3001 -m "$MAGIC" --mode tip --quiet \
+      -c1 2>/dev/null); then
       printf 'OK: %s — %s\n' "$service" "$tip"
       return 0
     fi
