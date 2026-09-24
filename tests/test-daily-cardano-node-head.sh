@@ -503,6 +503,9 @@ assert_daily_failure_receipt() {
     prepare-consumer)
       forbidden='^(consumer_sha|workflow_run|moog_test_id|report_url|terminal_outcome)='
       ;;
+    publish-candidate | prove-revision | render-topology | verify-topology | validate-compose | submit-candidate)
+      forbidden='^(consumer_sha|workflow_run|moog_test_id|report_url|terminal_outcome)='
+      ;;
     claim-day | submit-run)
       forbidden='^(workflow_run|moog_test_id|report_url|terminal_outcome)='
       ;;
@@ -556,6 +559,7 @@ run_daily() {
   local mode=${3:-daily}
   local shared_state=${4:-}
   local day=${5:-$daily_day}
+  case_name=$label
   case_dir="$tmp_root/$daily_case_number-$label"
   mkdir -p "$case_dir"
   if [ -n "$shared_state" ]; then
@@ -664,7 +668,7 @@ pass validation-cannot-consume-day
 # --- duplicate day ----------------------------------------------------------
 duplicate_state=$tmp_root/duplicate-state
 mkdir -p "$duplicate_state/state"
-mkdir "$(claim_marker_path "$duplicate_state/state" "$production_claim_ref")"
+mkdir -p "$(claim_marker_path "$duplicate_state/state" "$production_claim_ref")"
 run_daily duplicate-day-claim duplicate-day-claim daily "$duplicate_state"
 require_daily_failure duplicate-day-claim
 assert_daily_failure_receipt claim-day day-already-claimed
@@ -796,7 +800,7 @@ pass prerequisite-claim-blocks-submission
 run_daily prerequisite-request daily-request-failure daily
 require_daily_failure prerequisite-request
 assert_daily_failure_receipt submit-run request-failed
-assert_no_real_submission
+assert_log_count 0 '^await-run '
 pass prerequisite-request-blocks-submission
 
 # --- daily stage guards ------------------------------------------------------
@@ -829,12 +833,14 @@ require_daily_failure daily-run-url-multiline
 assert_daily_failure_receipt submit-run multi-line-run-url
 assert_file_contains "$case_receipt" "consumer_sha=$daily_consumer_sha"
 assert_log_count 1 '^submit-run '
+assert_log_count 0 '^await-run '
 pass daily-run-url-multiline
 
 run_daily daily-run-url-malformed daily-run-url-malformed daily
 require_daily_failure daily-run-url-malformed
 assert_daily_failure_receipt submit-run malformed-run-url
 assert_log_count 1 '^submit-run '
+assert_log_count 0 '^await-run '
 pass daily-run-url-malformed
 
 run_daily daily-await-failure daily-await-failure daily
@@ -868,7 +874,7 @@ assert_daily_failure_receipt await-run run-not-terminal
 assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
 pass daily-await-not-terminal
 
-run_daily daily-invalid-day prepared daily '' 2026-13-99
+run_daily daily-invalid-day prepared daily '' 20260924
 require_daily_failure daily-invalid-day
 grep -Fq 'invalid UTC day' "$case_stderr" ||
   fail 'daily-invalid-day stderr lacks the preflight rejection token'
