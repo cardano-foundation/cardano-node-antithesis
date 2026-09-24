@@ -60,8 +60,11 @@ idempotent for an unchanged `master`.
 
 ## Fail-closed stops
 
-Every stop is a durable receipt record with `outcome=FAILED`, the failing
-stage, and a stable error token; no later stage runs after a stop.
+Two preflight rejections exit non-zero with a stderr token before any
+receipt exists: an unsupported mode (`unsupported mode: …`) and a
+non-executable transport (`transport is not executable: …`). Every later
+stop is a durable receipt record with `outcome=FAILED`, the failing stage,
+and a stable error token; no later stage runs after a stop.
 
 | Stage | Stops when | Error token |
 |---|---|---|
@@ -105,5 +108,6 @@ The receipt is an append-only file of `CandidateReceiptV1` records, one
 
 A successful run ends with the `submit-candidate` record, `outcome=PREPARED`,
 carrying all four agreeing identities. Credentials never appear in a receipt,
-log, or document: registry credentials reach only the effecting command's
-process environment (docker login).
+log, or document: the hosted run binds its registry token as step-level
+environment and feeds it to `docker login` on stdin, and the controller,
+transport and receipt never see a credential value.
