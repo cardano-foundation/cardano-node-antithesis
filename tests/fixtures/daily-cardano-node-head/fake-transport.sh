@@ -337,8 +337,8 @@ case "$operation" in
     log submit-run "$submitted_consumer" "$claim_ref" "$testnet" \
       "$duration" "$no_faults"
     case "$scenario" in
-      daily-request-failure)
-        printf 'request construction failed\n' >&2
+      daily-dispatch-failure)
+        printf 'dispatch rejected\n' >&2
         exit 1
         ;;
       daily-run-url-multiline)

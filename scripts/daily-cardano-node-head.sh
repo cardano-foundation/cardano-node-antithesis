@@ -42,6 +42,7 @@ receipt[upstream_ref]=$ref
 # Daily run identity (daily/validation modes only; #215 receipts unchanged)
 # ---------------------------------------------------------------------------
 consumer_testnet=cardano_node_head
+consumer_repository=${HEAD_CANDIDATE_REPOSITORY:-${GITHUB_REPOSITORY:-cardano-foundation/cardano-node-antithesis}}
 day=''
 claim_ref=''
 duration=''
@@ -63,7 +64,7 @@ if [ "$mode" = daily ] || [ "$mode" = validation ]; then
   receipt[claim_ref]=$claim_ref
   receipt[duration]=$duration
   receipt[faults]=enabled
-  receipt[consumer_repository]=${HEAD_CANDIDATE_REPOSITORY:-${GITHUB_REPOSITORY:-cardano-foundation/cardano-node-antithesis}}
+  receipt[consumer_repository]=$consumer_repository
 fi
 
 receipt_keys=(
@@ -72,7 +73,7 @@ receipt_keys=(
   candidate_ref binary_revision
   rendered_model topology_services topology_image
   submission
-  day claim_ref duration faults consumer_repository
+  day claim_ref duration faults consumer_repository request
   consumer_sha workflow_run moog_test_id report_url terminal_outcome
 )
 
@@ -353,13 +354,23 @@ fi
 write_receipt claim-day CLAIMED
 
 # ---------------------------------------------------------------------------
+# construct-request: validate and render the exact dispatch identity before
+# any submission operation is invoked (I216-05 request construction)
+# ---------------------------------------------------------------------------
+[[ "$consumer_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+  fail_stage construct-request malformed-repository
+request="cardano-node.yaml|${claim_ref#refs/tags/}|$consumer_testnet|$duration|no-faults=false"
+receipt[request]=$request
+write_receipt construct-request RENDERED
+
+# ---------------------------------------------------------------------------
 # submit-run: dispatch the existing MOOG workflow at the immutable claim ref
 # (3 h, fault injection on; I216-03)
 # ---------------------------------------------------------------------------
 run_output=''
 if ! run_output=$(transport_call submit-run \
   "$consumer_sha" "$claim_ref" "$consumer_testnet" "$duration" false); then
-  fail_stage submit-run request-failed
+  fail_stage submit-run dispatch-failed
 fi
 workflow_run=''
 if ! require_single_line "$run_output" workflow_run; then

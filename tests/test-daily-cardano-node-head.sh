@@ -506,7 +506,7 @@ assert_daily_failure_receipt() {
     publish-candidate | prove-revision | render-topology | verify-topology | validate-compose | submit-candidate)
       forbidden='^(consumer_sha|workflow_run|moog_test_id|report_url|terminal_outcome)='
       ;;
-    claim-day | submit-run)
+    claim-day | submit-run | construct-request)
       forbidden='^(workflow_run|moog_test_id|report_url|terminal_outcome)='
       ;;
     await-run)
@@ -519,10 +519,17 @@ assert_daily_failure_receipt() {
 }
 
 # A complete daily receipt carries every identity the operator correlates.
+# The submission identity is obtained from the producer's own PREPARED
+# record at run time, never typed as an expected value.
 assert_daily_complete_receipt() {
   local expected_mode=$1
   local expected_claim_ref=$2
   local expected_duration=$3
+  local prepared_submission=''
+  prepared_submission=$(awk '
+    /^stage=submit-candidate$/ { in_prepared = 1 }
+    in_prepared && /^submission=/ { sub(/^submission=/, ""); print; exit }
+  ' "$case_receipt")
   assert_last_receipt_contains 'stage=await-run'
   assert_last_receipt_contains 'outcome=TERMINAL'
   assert_last_receipt_contains "mode=$expected_mode"
@@ -531,11 +538,14 @@ assert_daily_complete_receipt() {
   assert_last_receipt_contains "duration=$expected_duration"
   assert_last_receipt_contains 'faults=enabled'
   assert_last_receipt_contains "consumer_repository=$daily_repository"
+  assert_last_receipt_contains "request=cardano-node.yaml|${expected_claim_ref#refs/tags/}|cardano_node_head|$expected_duration|no-faults=false"
   assert_last_receipt_contains "upstream_sha=$upstream_sha"
   assert_last_receipt_contains "candidate_ref=$candidate_ref"
   assert_last_receipt_contains "binary_revision=$upstream_sha"
   assert_last_receipt_contains "topology_image=$candidate_ref"
-  assert_last_receipt_contains "submission=fake://$upstream_sha"
+  [ -n "$prepared_submission" ] ||
+    fail 'no PREPARED submission record to correlate against'
+  assert_last_receipt_contains "submission=$prepared_submission"
   assert_last_receipt_contains "consumer_sha=$daily_consumer_sha"
   assert_last_receipt_contains "workflow_run=$daily_run_url"
   assert_last_receipt_contains "moog_test_id=$daily_moog_id"
@@ -552,6 +562,7 @@ assert_daily_complete_receipt() {
 # transport log, stdout, stderr and receipt so per-invocation refusal is
 # attributable. An empty day lets the controller derive the UTC day itself.
 daily_case_number=1000
+daily_extra_env=()
 run_daily() {
   daily_case_number=$((daily_case_number + 1))
   local label=$1
@@ -582,11 +593,15 @@ run_daily() {
     "HEAD_CANDIDATE_STATE_DIR=$case_state"
     "HEAD_CANDIDATE_RECEIPT=$case_receipt"
   )
+  if [ "${#daily_extra_env[@]}" -gt 0 ]; then
+    controller_env+=("${daily_extra_env[@]}")
+  fi
   if [ -n "$day" ]; then
     controller_env+=("HEAD_CANDIDATE_DAY=$day")
   fi
   case_rc=0
   env -u HEAD_CANDIDATE_IMAGE_REPOSITORY -u HEAD_CANDIDATE_DAY \
+    -u HEAD_CANDIDATE_REPOSITORY \
     "${controller_env[@]}" \
     "$controller" >"$case_stdout" 2>"$case_stderr" || case_rc=$?
 }
@@ -611,8 +626,8 @@ assert_log_count 1 '^claim-day '
 assert_log_count 1 '^submit-run '
 assert_log_count 1 '^await-run '
 stage_records=$(grep -c '^stage=' "$case_receipt" || true)
-[ "$stage_records" -eq 11 ] ||
-  fail "daily-prepared expected 11 stage records, found $stage_records"
+[ "$stage_records" -eq 12 ] ||
+  fail "daily-prepared expected 12 stage records, found $stage_records"
 pass daily-prepared
 
 # The exact real request: 3 hours, faults on, exact consumer commit, at the
@@ -730,9 +745,9 @@ pass concurrent-day-claim
 # --- no retry after a failed attempt ----------------------------------------
 retry_state=$tmp_root/retry-state
 mkdir -p "$retry_state/state"
-run_daily no-retry-first daily-request-failure daily "$retry_state"
+run_daily no-retry-first daily-dispatch-failure daily "$retry_state"
 require_daily_failure no-retry-first
-assert_daily_failure_receipt submit-run request-failed
+assert_daily_failure_receipt submit-run dispatch-failed
 assert_file_contains "$case_receipt" 'stage=claim-day'
 assert_file_contains "$case_receipt" 'outcome=CLAIMED'
 assert_log_count 1 '^submit-run '
@@ -797,11 +812,26 @@ assert_file_contains "$case_receipt" "consumer_sha=$daily_consumer_sha"
 assert_no_real_submission
 pass prerequisite-claim-blocks-submission
 
-run_daily prerequisite-request daily-request-failure daily
+# A request that cannot be constructed stops before the submission operation
+# is invoked at all: zero submit calls, a stable token, the day still claimed.
+daily_extra_env=("HEAD_CANDIDATE_REPOSITORY=not-a-repo")
+run_daily prerequisite-request prepared daily
+daily_extra_env=()
 require_daily_failure prerequisite-request
-assert_daily_failure_receipt submit-run request-failed
-assert_log_count 0 '^await-run '
+assert_daily_failure_receipt construct-request malformed-repository
+assert_file_contains "$case_receipt" 'stage=claim-day'
+assert_file_contains "$case_receipt" 'outcome=CLAIMED'
+assert_no_real_submission
 pass prerequisite-request-blocks-submission
+
+# A dispatch the remote refuses is an attempt: it consumes the day and never
+# reaches a run to await.
+run_daily daily-dispatch-failure daily-dispatch-failure daily
+require_daily_failure daily-dispatch-failure
+assert_daily_failure_receipt submit-run dispatch-failed
+assert_log_count 1 '^submit-run '
+assert_log_count 0 '^await-run '
+pass daily-dispatch-failure
 
 # --- daily stage guards ------------------------------------------------------
 run_daily daily-consumer-failure daily-consumer-failure daily
