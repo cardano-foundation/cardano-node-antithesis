@@ -123,6 +123,11 @@ test-daily-cardano-node-head:
 test-daily-cardano-node-head-github:
     ./tests/test-daily-cardano-node-head-github.sh
 
+# focused hermetic proof for the HEAD candidate cluster command's teardown
+# contract
+test-head-candidate-cluster:
+    ./tests/test-head-candidate-cluster.sh
+
 # run the immutable cardano-node HEAD candidate controller end to end
 # against a throwaway local registry (workstation entrypoint; the hosted
 # entrypoint is the daily-cardano-node-head workflow)
@@ -173,4 +178,4 @@ check-image-provenance:
     inspect_component tx-generator
 
 # complete local CI: no Docker, no network, no credentials
-ci: check-workflows check-shell format-check test-workflow-validation test-daily-amaru check-image-provenance test-daily-cardano-node-head test-daily-cardano-node-head-github
+ci: check-workflows check-shell format-check test-workflow-validation test-daily-amaru check-image-provenance test-daily-cardano-node-head test-daily-cardano-node-head-github test-head-candidate-cluster

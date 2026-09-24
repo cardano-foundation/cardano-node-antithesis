@@ -29,12 +29,17 @@ images_file=${3:-}
 }
 model_dir=$(cd "$(dirname "$model")" && pwd)
 MAGIC=42
+tip_sample_seconds=${HEAD_CANDIDATE_TIP_SAMPLE_SECONDS:-30}
 export INTERNAL_NETWORK=true
 
 fail() {
   printf 'head-candidate-cluster: %s\n' "$*" >&2
   exit 1
 }
+
+# Failure paths clean up best-effort (cleanup, below); the success path
+# tears down strictly (teardown failure fails the command) and censuses its
+# own project before claiming anything.
 
 scratch=$(mktemp -d /tmp/head-candidate-cluster.XXXXXX) ||
   fail 'could not create the local execution scratch directory'
@@ -165,7 +170,7 @@ tip_block() {
 printf 'Sampling chain tip on relay1...\n'
 first_tip=$(tip_block)
 [ -n "$first_tip" ] || fail 'could not read a chain tip from relay1'
-sleep 30
+sleep "$tip_sample_seconds"
 second_tip=$(tip_block)
 [ -n "$second_tip" ] || fail 'could not read a second chain tip from relay1'
 printf 'chain-tip first-block=%s second-block=%s\n' "$first_tip" "$second_tip"
@@ -192,6 +197,17 @@ record_node_image() {
 for service in "${node_services[@]}"; do
   record_node_image "$service"
 done | tee "${images_file:-/dev/null}"
+
+printf 'Tearing down the cluster...\n'
+if ! docker compose --progress quiet -f "$exec_model" down --volumes \
+  --remove-orphans; then
+  fail 'cluster teardown failed'
+fi
+leftovers=$(docker compose --progress quiet -f "$exec_model" ps -aq | wc -l)
+[ "$leftovers" -eq 0 ] ||
+  fail "teardown-census containers=$leftovers"
+printf 'teardown-census containers=%d\n' "$leftovers"
+rm -rf -- "$scratch"
 
 printf 'PASS: %d node services answering on the candidate image; chain advancing\n' \
   "${#node_services[@]}"
