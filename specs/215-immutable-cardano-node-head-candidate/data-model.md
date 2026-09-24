@@ -21,7 +21,7 @@ The immutable candidate image identity.
 
 | Field | Type | Validation |
 |---|---|---|
-| `repository` | string | non-empty, no whitespace, no `@` or `:` |
+| `repository` | string | non-empty, no whitespace, no `@`; may include a registry host:port |
 | `tag` | string | must match `^[0-9a-f]{40}$` and equal the D-01 `sha` |
 | `digest` | string | must match `^sha256:[0-9a-f]{64}$` |
 

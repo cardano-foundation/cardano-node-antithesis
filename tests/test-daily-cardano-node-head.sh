@@ -313,6 +313,21 @@ require_success
 assert_log_count 1 "^publish-candidate $upstream_sha $image_repository\$"
 pass default-image-repository
 
+# A repository may carry a registry host:port (A-001); the candidate form is
+# still repository:40hex-tag@sha256:digest and the whole path completes.
+port_repository=localhost:5000/cardano-node-head
+run_case prepared test "$fake_transport" "$port_repository"
+require_success
+assert_log_count 1 "^publish-candidate $upstream_sha $port_repository\$"
+assert_file_contains "$case_receipt" \
+  "candidate_ref=$port_repository:$upstream_sha@sha256:$digest_hex"
+assert_file_contains "$case_receipt" 'topology_image='"$port_repository:$upstream_sha@sha256:$digest_hex"
+pass port-bearing-repository-accepted
+
+# The tag discipline does not relax with the port: a short tag after a
+# port-bearing repository is still a malformed candidate form.
+run_rejection short-tag-with-port publish-candidate malformed-candidate-form prove-revision
+
 run_case prepared test
 require_success
 test_interactions=$(normalized_interaction_log "$case_log" "$case_state")

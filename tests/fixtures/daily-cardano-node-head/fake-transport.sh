@@ -117,6 +117,9 @@ case "$operation" in
       tag-sha-mismatch)
         candidate_ref_for "$repository" "$other_sha"
         ;;
+      short-tag-with-port)
+        printf 'localhost:5000/cardano-node-head:abc123@%s\n' "$digest"
+        ;;
       *)
         candidate_ref_for "$repository" "$sha"
         ;;

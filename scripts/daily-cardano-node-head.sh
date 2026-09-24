@@ -145,9 +145,11 @@ if ! require_single_line "$publish_output" candidate_ref; then
   fail_stage publish-candidate multi-line-candidate
 fi
 
-# D-02: repository:tag@digest with tag == resolved SHA.
+# D-02: repository:tag@digest with tag == resolved SHA. The repository may
+# carry a registry host:port (A-001); the tag stays exactly 40-hex anchored
+# against the digest at end of line, so the split stays unique.
 tag_part=''
-if [[ "$candidate_ref" =~ ^([^[:space:]@:]+):([0-9a-f]{40})@(sha256:[0-9a-f]{64})$ ]]; then
+if [[ "$candidate_ref" =~ ^([^[:space:]@]+):([0-9a-f]{40})@(sha256:[0-9a-f]{64})$ ]]; then
   tag_part=${BASH_REMATCH[2]}
 else
   fail_stage publish-candidate malformed-candidate-form
