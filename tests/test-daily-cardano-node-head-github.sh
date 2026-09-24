@@ -485,10 +485,10 @@ run_transport receipt-nonterminal env \
   "$transport" receipt "${receipt_fields[@]}"
 require_success
 assert_file_contains "$case_receipt" 'outcome=VALIDATED'
-if grep -q '^outcome=complete$' "$case_receipt"; then
-  fail 'non-terminal receipt record synthesized a completion summary'
-fi
-pass receipt-appends-nonterminal-record-verbatim
+record_count=$(grep -c '^schema=CandidateReceiptV1$' "$case_receipt" || true)
+[ "$record_count" -eq 1 ] ||
+  fail "expected exactly one persisted record, found $record_count"
+pass receipt-persists-record-verbatim
 
 terminal_fields=(
   schema=CandidateReceiptV1
@@ -509,17 +509,20 @@ terminal_fields=(
 run_transport receipt-terminal env \
   "$transport" receipt "${terminal_fields[@]}"
 require_success
-assert_file_contains "$case_receipt" 'stage=complete'
-assert_file_contains "$case_receipt" 'outcome=complete'
+assert_file_contains "$case_receipt" 'stage=submit-candidate'
+assert_file_contains "$case_receipt" 'outcome=PREPARED'
 assert_file_contains "$case_receipt" "upstream_sha=$upstream_sha"
 assert_file_contains "$case_receipt" "candidate_ref=$candidate_ref"
 assert_file_contains "$case_receipt" "binary_revision=$upstream_sha"
 assert_file_contains "$case_receipt" "topology_image=$candidate_ref"
 assert_file_contains "$case_receipt" "submission=fake://$upstream_sha"
-complete_records=$(grep -c '^stage=complete$' "$case_receipt" || true)
-[ "$complete_records" -eq 1 ] ||
-  fail "expected exactly one synthesized complete record, found $complete_records"
-pass receipt-terminal-record-synthesizes-complete-summary
+record_count=$(grep -c '^schema=CandidateReceiptV1$' "$case_receipt" || true)
+[ "$record_count" -eq 1 ] ||
+  fail "terminal record persisted with extra records: $record_count"
+if grep -Eq '^stage=complete$' "$case_receipt"; then
+  fail 'receipt persistence invented a stage the controller never wrote'
+fi
+pass receipt-terminal-record-persists-verbatim
 
 failed_fields=(
   schema=CandidateReceiptV1
@@ -535,28 +538,12 @@ failed_fields=(
 run_transport receipt-failed env \
   "$transport" receipt "${failed_fields[@]}"
 require_success
-if grep -q '^outcome=complete$' "$case_receipt"; then
-  fail 'failed receipt record synthesized a completion summary'
-fi
 assert_file_contains "$case_receipt" 'error=submission-failed'
-pass receipt-failed-record-never-synthesizes
-
-incomplete_terminal_fields=(
-  schema=CandidateReceiptV1
-  stage=submit-candidate
-  outcome=PREPARED
-  mode=manual
-  "upstream_origin=$upstream_origin"
-  "upstream_ref=$upstream_ref"
-)
-
-run_transport receipt-incomplete-terminal env \
-  "$transport" receipt "${incomplete_terminal_fields[@]}"
-require_success
-if grep -q '^outcome=complete$' "$case_receipt"; then
-  fail 'receipt synthesized a completion summary without complete identities'
-fi
-pass receipt-incomplete-identities-never-synthesize
+assert_file_contains "$case_receipt" 'outcome=FAILED'
+record_count=$(grep -c '^schema=CandidateReceiptV1$' "$case_receipt" || true)
+[ "$record_count" -eq 1 ] ||
+  fail "failed record persisted with extra records: $record_count"
+pass receipt-failed-record-persists-verbatim
 
 # ---------------------------------------------------------------------------
 # Operation surface parity with the frozen fake transport.
@@ -629,10 +616,17 @@ env -i \
 grep -Fqx -- "PREPARED $upstream_sha $candidate_ref fake://$upstream_sha" \
   "$path_stdout" ||
   fail "full candidate path stdout lacks PREPARED summary: $(cat "$path_stdout")"
-assert_file_contains "$path_receipt" 'outcome=complete'
+assert_file_contains "$path_receipt" 'stage=submit-candidate'
+assert_file_contains "$path_receipt" 'outcome=PREPARED'
 assert_file_contains "$path_receipt" "candidate_ref=$candidate_ref"
 assert_file_contains "$path_receipt" "binary_revision=$upstream_sha"
 assert_file_contains "$path_receipt" 'topology_services=7'
+receipt_records=$(grep -c '^schema=CandidateReceiptV1$' "$path_receipt" || true)
+[ "$receipt_records" -eq 7 ] ||
+  fail "full candidate path expected 7 receipt records, found $receipt_records"
+if grep -Eq '^stage=complete$' "$path_receipt"; then
+  fail 'receipt persistence invented a record the controller never wrote'
+fi
 submit_calls=$(grep -c '^docker push ' "$stub_log" || true)
 [ "$submit_calls" -eq 1 ] ||
   fail "full candidate path expected exactly one push, found $submit_calls"
