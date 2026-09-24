@@ -39,10 +39,14 @@ the receipt. The state directory defaults to
 `HEAD_CANDIDATE_IMAGE_REPOSITORY` (the hosted run publishes to GHCR).
 
 The rendered cluster can then be started and proven with
-`scripts/head-candidate-cluster.sh <rendered-model>`, which waits for every
-producer and relay to answer a `cardano-cli ping`, samples the chain tip
-twice to show blocks advancing, records the image of each node container, and
-tears the cluster down.
+`scripts/head-candidate-cluster.sh <rendered-model>`. The command derives a
+throwaway execution copy of the rendered model — container names and the
+fixed network name removed, its own compose project — so it coexists with
+any other cluster on a shared Docker daemon; the copy is never the receipt's
+`rendered_model` and is deleted with the cluster. It waits for every producer
+and relay to answer a `cardano-cli ping`, samples the chain tip twice to show
+blocks advancing, records the image of each node container, and tears the
+cluster down.
 
 ## The manual recovery entrypoint (hosted)
 

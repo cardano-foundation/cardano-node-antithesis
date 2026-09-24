@@ -4,11 +4,19 @@
 #
 # Usage: scripts/head-candidate-cluster.sh <rendered-model> [timeout_seconds] [images-file]
 #
-# Starts the rendered model as a Docker cluster, waits for every producer and
-# relay to answer a cardano-cli ping, samples the chain tip twice to show
-# blocks advancing, records one `node-image <service> <ref>` line per node
-# container (docker inspect, while running), then tears the cluster down.
-# Exits non-zero if any node fails to answer or the chain does not advance.
+# The testnet pins a container name for every service and a fixed network
+# name, so two clusters of this family cannot share a daemon. This command
+# therefore derives a THROWAWAY EXECUTION COPY of the rendered model —
+# container_name entries and the fixed network name removed, its own compose
+# project — and runs the cluster from the copy only. Service names,
+# hostnames, images and the census are identical to the rendered model; the
+# copy is never the receipt's rendered_model and is deleted with the cluster.
+#
+# It waits for every producer and relay to answer a cardano-cli ping, samples
+# the chain tip twice to show blocks advancing, records one
+# `node-image <service> <ref>` line per node container (docker inspect, while
+# running), then tears the cluster down. Exits non-zero if any node fails to
+# answer or the chain does not advance.
 set -euo pipefail
 
 model=${1:?rendered model path is required}
@@ -28,15 +36,30 @@ fail() {
   exit 1
 }
 
+scratch=$(mktemp -d /tmp/head-candidate-cluster.XXXXXX) ||
+  fail 'could not create the local execution scratch directory'
+exec_model=$scratch/docker-compose.yaml
+
+# The execution copy differs from the rendered model only by the two
+# coexistence edits: no pinned container names, no fixed network name.
+sed -e '/^[[:space:]]*container_name:/d' \
+  -e '/^[[:space:]]*name: cardano-node-testnet$/d' \
+  "$model" >"$exec_model" ||
+  fail 'could not derive the local execution copy'
+
 cleanup() {
-  docker compose --progress quiet -f "$model" down --volumes --remove-orphans ||
-    true
+  docker compose --progress quiet -f "$exec_model" down --volumes \
+    --remove-orphans || true
+  rm -rf -- "$scratch"
 }
 trap cleanup EXIT
 
 compose() {
-  docker compose --progress quiet -f "$model" "$@"
+  docker compose --progress quiet -f "$exec_model" "$@"
 }
+
+printf 'local-execution-copy %s (container names and fixed network name removed; not the receipt rendered_model %s)\n' \
+  "$exec_model" "$model"
 
 resolved_config=$(compose config)
 
@@ -81,6 +104,10 @@ node_images=$(printf '%s\n' "${node_services[@]}" |
   fail "node services do not resolve to one image:
 $node_images"
 candidate_ref=$node_images
+case "$candidate_ref" in
+  *:????????????????????????????????????????@sha256:*) ;;
+  *) fail "candidate image is not a tagged digest reference: $candidate_ref" ;;
+esac
 
 pools=$(awk '/poolCount: /{ print $2 }' "$model_dir/testnet.yaml")
 [ "${pools:-0}" -ge 1 ] || fail "poolCount is unreadable from $model_dir/testnet.yaml"
@@ -88,7 +115,7 @@ producers=$(printf '%s\n' "${node_services[@]}" | grep -cE '^p[0-9]+$')
 [ "$producers" -eq "$pools" ] ||
   fail "producer census $producers differs from poolCount $pools"
 
-printf 'Starting rendered model %s (candidate %s)...\n' "$model" "$candidate_ref"
+printf 'Starting rendered model %s (candidate %s)...\n' "$exec_model" "$candidate_ref"
 compose up -d
 
 deadline=$((SECONDS + timeout))
