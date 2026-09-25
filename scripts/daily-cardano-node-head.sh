@@ -18,7 +18,7 @@ die() {
 }
 
 case "$mode" in
-  test | manual) ;;
+  test | manual | daily | validation) ;;
   *) die "unsupported mode: $mode" ;;
 esac
 
@@ -38,12 +38,50 @@ receipt[mode]=$mode
 receipt[upstream_origin]=$origin
 receipt[upstream_ref]=$ref
 
+# ---------------------------------------------------------------------------
+# Daily run identity (daily/validation modes only; #215 receipts unchanged)
+# ---------------------------------------------------------------------------
+consumer_testnet=cardano_node_head
+consumer_repository=${HEAD_CANDIDATE_REPOSITORY:-${GITHUB_REPOSITORY:-cardano-foundation/cardano-node-antithesis}}
+day=''
+claim_ref=''
+duration=''
+run_base=''
+if [ "$mode" = daily ] || [ "$mode" = validation ]; then
+  day=${HEAD_CANDIDATE_DAY:-$(TZ=UTC0 printf '%(%Y-%m-%d)T' -1)}
+  [[ "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] ||
+    die "invalid UTC day: $day"
+  receipt[day]=$day
+  case "$mode" in
+    daily)
+      claim_ref="refs/tags/daily-cardano-node-head/$day"
+      duration=3
+      ;;
+    validation)
+      claim_ref="refs/tags/daily-cardano-node-head/validation/$day"
+      duration=1
+      ;;
+  esac
+  receipt[claim_ref]=$claim_ref
+  receipt[duration]=$duration
+  receipt[faults]=enabled
+  receipt[consumer_repository]=$consumer_repository
+  # The consumer commit is pinned to the exact commit this run started
+  # from, never to whatever the default branch points at later.
+  run_base=${HEAD_CANDIDATE_RUN_BASE:-${GITHUB_SHA:-}}
+  [[ "$run_base" =~ ^[0-9a-f]{40}$ ]] ||
+    die "unresolved run base: ${run_base:-absent}"
+  receipt[run_base]=$run_base
+fi
+
 receipt_keys=(
   schema stage outcome error mode
   upstream_origin upstream_ref upstream_sha
   candidate_ref binary_revision
   rendered_model topology_services topology_image
   submission
+  day claim_ref duration faults consumer_repository run_base request
+  consumer_sha workflow_run moog_test_id report_url terminal_outcome
 )
 
 write_receipt() {
@@ -280,4 +318,110 @@ esac
 receipt[submission]=$submission
 write_receipt submit-candidate PREPARED
 
-printf 'PREPARED %s %s %s\n' "$observed_sha" "$candidate_ref" "$submission"
+if [ "$mode" != daily ] && [ "$mode" != validation ]; then
+  printf 'PREPARED %s %s %s\n' "$observed_sha" "$candidate_ref" "$submission"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# prepare-consumer: the rendered topology becomes its own testnet directory
+# on top of the exact consumer repository main (#216 daily modes only)
+# ---------------------------------------------------------------------------
+consumer_output=''
+if ! consumer_output=$(transport_call prepare-consumer \
+  "$day" "$run_base" "$mode" "$rendered_model" "$candidate_ref" "$consumer_testnet"); then
+  fail_stage prepare-consumer consumer-failed
+fi
+consumer_sha=''
+if ! require_single_line "$consumer_output" consumer_sha; then
+  fail_stage prepare-consumer multi-line-consumer
+fi
+[[ "$consumer_sha" =~ ^[0-9a-f]{40}$ ]] ||
+  fail_stage prepare-consumer malformed-consumer-sha
+receipt[consumer_sha]=$consumer_sha
+write_receipt prepare-consumer CONSUMED
+
+# ---------------------------------------------------------------------------
+# construct-request: validate and render the exact dispatch identity BEFORE
+# the day is claimed, so a request that cannot be constructed never burns
+# the day (I216-05 request construction)
+# ---------------------------------------------------------------------------
+[[ "$consumer_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+  fail_stage construct-request malformed-repository
+request="cardano-node.yaml|${claim_ref#refs/tags/}|$consumer_testnet|$duration|no-faults=false"
+receipt[request]=$request
+write_receipt construct-request RENDERED
+
+# ---------------------------------------------------------------------------
+# claim-day: atomic creation of the day ref; at most one attempt per UTC day
+# is possible even after a failed or incomplete attempt (I216-02, I216-06)
+# ---------------------------------------------------------------------------
+claim_verdict=''
+if ! claim_verdict=$(transport_call claim-day "$claim_ref" "$consumer_sha"); then
+  if [[ "$claim_verdict" =~ ^BLOCKED\ ([a-z-]+)$ ]]; then
+    claim_reason=${BASH_REMATCH[1]}
+  elif [ -z "$claim_verdict" ]; then
+    claim_reason=claim-failed
+  else
+    claim_reason=malformed-claim-verdict
+  fi
+  fail_stage claim-day "$claim_reason"
+fi
+[ "$claim_verdict" = CLAIMED ] ||
+  fail_stage claim-day malformed-claim-verdict
+write_receipt claim-day CLAIMED
+
+# ---------------------------------------------------------------------------
+# submit-run: dispatch the existing MOOG workflow at the immutable claim ref
+# (3 h, fault injection on; I216-03)
+# ---------------------------------------------------------------------------
+run_output=''
+if ! run_output=$(transport_call submit-run \
+  "$consumer_sha" "$claim_ref" "$consumer_testnet" "$duration" false); then
+  fail_stage submit-run dispatch-failed
+fi
+workflow_run=''
+if ! require_single_line "$run_output" workflow_run; then
+  fail_stage submit-run multi-line-run-url
+fi
+[[ "$workflow_run" =~ ^https://github\.com/[^/[:space:]]+/[^/[:space:]]+/actions/runs/[0-9]+$ ]] ||
+  fail_stage submit-run malformed-run-url
+receipt[workflow_run]=$workflow_run
+write_receipt submit-run SUBMITTED
+
+# ---------------------------------------------------------------------------
+# await-run: terminal correlation of the MOOG test identity (I216-07)
+# ---------------------------------------------------------------------------
+correlation_output=''
+if ! correlation_output=$(transport_call await-run \
+  "$consumer_sha" "$workflow_run"); then
+  fail_stage await-run await-failed
+fi
+correlation=''
+if ! require_single_line "$correlation_output" correlation; then
+  fail_stage await-run multi-line-correlation
+fi
+declare -a correlation_fields=()
+if ! require_pipe_fields "$correlation" 4 correlation_fields; then
+  fail_stage await-run malformed-correlation
+fi
+moog_test_id=${correlation_fields[0]}
+report_url=${correlation_fields[1]}
+terminal_outcome=${correlation_fields[2]}
+terminal_phase=${correlation_fields[3]}
+[[ "$moog_test_id" =~ ^[^[:space:]]+$ ]] ||
+  fail_stage await-run malformed-moog-id
+[ "$terminal_phase" = finished ] ||
+  fail_stage await-run run-not-terminal
+case "$terminal_outcome" in
+  success | failure) ;;
+  *) fail_stage await-run outcome-nonterminal ;;
+esac
+[[ "$report_url" =~ ^https://[^/[:space:]]+/.+$|^antithesis://[^[:space:]]+/.+$ ]] ||
+  fail_stage await-run malformed-report-url
+receipt[moog_test_id]=$moog_test_id
+receipt[report_url]=$report_url
+receipt[terminal_outcome]=$terminal_outcome
+write_receipt await-run TERMINAL
+
+printf 'RUN %s %s %s %s\n' "$day" "$observed_sha" "$consumer_sha" "$terminal_outcome"

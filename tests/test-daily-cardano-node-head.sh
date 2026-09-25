@@ -432,8 +432,11 @@ grep -Fq 'transport is not executable' "$case_stderr" ||
 assert_no_submit
 pass missing-transport
 
+# Daily-run operations added by #216 on top of the frozen #215 surface.
+daily_transport_operations=(prepare-consumer claim-day submit-run await-run)
+
 actual_ops=$(transport_operation_surface)
-expected_ops=$(modeled_transport_operations)
+expected_ops=$({ modeled_transport_operations; printf '%s\n' "${daily_transport_operations[@]}"; } | sort)
 [ "$actual_ops" = "$expected_ops" ] ||
   fail "transport operation surface mismatch
 expected:
@@ -462,3 +465,545 @@ assert_file_contains "$case_receipt" 'stage=publish-candidate'
 assert_file_contains "$case_receipt" 'outcome=PUBLISHED'
 assert_no_submit
 pass receipt-honesty
+
+# ---------------------------------------------------------------------------
+# Daily run modes (#216): one real submission attempt per UTC day.
+# ---------------------------------------------------------------------------
+daily_day=2026-09-24
+production_claim_ref="refs/tags/daily-cardano-node-head/$daily_day"
+validation_claim_ref="refs/tags/daily-cardano-node-head/validation/$daily_day"
+daily_consumer_sha=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+validation_consumer_sha=cececececececececececececececececececece
+daily_run_url=https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/424242
+daily_moog_id=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+daily_report_url=https://amaru-cardano.antithesis.com/report/00000000-0000-0000-0000-000000000000
+daily_repository=cardano-foundation/cardano-node-antithesis
+daily_run_base=5555555555555555555555555555555555555555
+
+claim_marker_path() {
+  printf '%s/claims/%s\n' "$1" "${2//\//_}"
+}
+
+count_log() {
+  grep -Ec -- "$2" "$1" || true
+}
+
+assert_no_real_submission() {
+  [ "$(count_log "$case_log" '^submit-run ')" -eq 0 ] ||
+    fail "scenario=$case_name reached real submission: $(cat "$case_log")"
+}
+
+assert_daily_failure_receipt() {
+  local stage=$1
+  local reason=$2
+  local forbidden=''
+  assert_last_receipt_contains "stage=$stage"
+  assert_last_receipt_contains 'outcome=FAILED'
+  assert_last_receipt_contains "error=$reason"
+  assert_last_receipt_contains 'schema=CandidateReceiptV1'
+  case "$stage" in
+    prepare-consumer)
+      forbidden='^(consumer_sha|workflow_run|moog_test_id|report_url|terminal_outcome)='
+      ;;
+    publish-candidate | prove-revision | render-topology | verify-topology | validate-compose | submit-candidate)
+      forbidden='^(consumer_sha|workflow_run|moog_test_id|report_url|terminal_outcome)='
+      ;;
+    claim-day | submit-run | construct-request)
+      forbidden='^(workflow_run|moog_test_id|report_url|terminal_outcome)='
+      ;;
+    await-run)
+      forbidden='^(moog_test_id|report_url|terminal_outcome)='
+      ;;
+    *) fail "unknown daily failing receipt stage: $stage" ;;
+  esac
+  assert_last_receipt_lacks "$forbidden"
+  assert_last_receipt_lacks 'outcome=TERMINAL'
+}
+
+# A complete daily receipt carries every identity the operator correlates.
+# The submission identity is obtained from the producer's own PREPARED
+# record at run time, never typed as an expected value.
+assert_daily_complete_receipt() {
+  local expected_mode=$1
+  local expected_claim_ref=$2
+  local expected_duration=$3
+  local expected_consumer_sha=$4
+  local prepared_submission=''
+  prepared_submission=$(awk '
+    /^stage=submit-candidate$/ { in_prepared = 1 }
+    in_prepared && /^submission=/ { sub(/^submission=/, ""); print; exit }
+  ' "$case_receipt")
+  assert_last_receipt_contains 'stage=await-run'
+  assert_last_receipt_contains 'outcome=TERMINAL'
+  assert_last_receipt_contains "mode=$expected_mode"
+  assert_last_receipt_contains "day=$daily_day"
+  assert_last_receipt_contains "claim_ref=$expected_claim_ref"
+  assert_last_receipt_contains "duration=$expected_duration"
+  assert_last_receipt_contains 'faults=enabled'
+  assert_last_receipt_contains "consumer_repository=$daily_repository"
+  assert_last_receipt_contains "run_base=$daily_run_base"
+  assert_last_receipt_contains "request=cardano-node.yaml|${expected_claim_ref#refs/tags/}|cardano_node_head|$expected_duration|no-faults=false"
+  assert_last_receipt_contains "upstream_sha=$upstream_sha"
+  assert_last_receipt_contains "candidate_ref=$candidate_ref"
+  assert_last_receipt_contains "binary_revision=$upstream_sha"
+  assert_last_receipt_contains "topology_image=$candidate_ref"
+  [ -n "$prepared_submission" ] ||
+    fail 'no PREPARED submission record to correlate against'
+  assert_last_receipt_contains "submission=$prepared_submission"
+  assert_last_receipt_contains "consumer_sha=$expected_consumer_sha"
+  assert_last_receipt_contains "workflow_run=$daily_run_url"
+  assert_last_receipt_contains "moog_test_id=$daily_moog_id"
+  assert_last_receipt_contains "report_url=$daily_report_url"
+  assert_last_receipt_contains 'terminal_outcome=success'
+  assert_last_receipt_lacks '^error='
+  if grep -Eiq 'ghs_|gho_|token=' "$case_receipt"; then
+    fail 'daily receipt leaked credential-shaped text'
+  fi
+}
+
+# One daily controller invocation. A shared state directory carries the fake
+# transport's claim ledger across invocations; each invocation keeps its own
+# transport log, stdout, stderr and receipt so per-invocation refusal is
+# attributable. An empty day lets the controller derive the UTC day itself.
+daily_case_number=1000
+daily_extra_env=()
+run_daily() {
+  daily_case_number=$((daily_case_number + 1))
+  local label=$1
+  local scenario=$2
+  local mode=${3:-daily}
+  local shared_state=${4:-}
+  local day=${5-$daily_day}
+  local run_base=${6-$daily_run_base}
+  case_name=$label
+  case_dir="$tmp_root/$daily_case_number-$label"
+  mkdir -p "$case_dir"
+  if [ -n "$shared_state" ]; then
+    case_state=$shared_state/state
+    case_receipt="$shared_state/receipt-$label"
+  else
+    case_state=$case_dir/state
+    case_receipt=$case_dir/receipt
+    mkdir -p "$case_state"
+  fi
+  case_log=$case_dir/transport.log
+  case_stdout=$case_dir/stdout
+  case_stderr=$case_dir/stderr
+  : >"$case_log"
+  local -a controller_env=(
+    "FAKE_SCENARIO=$scenario"
+    "FAKE_LOG=$case_log"
+    "HEAD_CANDIDATE_TRANSPORT=$fake_transport"
+    "HEAD_CANDIDATE_MODE=$mode"
+    "HEAD_CANDIDATE_STATE_DIR=$case_state"
+    "HEAD_CANDIDATE_RECEIPT=$case_receipt"
+  )
+  if [ "${#daily_extra_env[@]}" -gt 0 ]; then
+    controller_env+=("${daily_extra_env[@]}")
+  fi
+  if [ -n "$day" ]; then
+    controller_env+=("HEAD_CANDIDATE_DAY=$day")
+  fi
+  if [ -n "$run_base" ]; then
+    controller_env+=("HEAD_CANDIDATE_RUN_BASE=$run_base")
+  fi
+  case_rc=0
+  env -u HEAD_CANDIDATE_IMAGE_REPOSITORY -u HEAD_CANDIDATE_DAY \
+    -u HEAD_CANDIDATE_REPOSITORY -u HEAD_CANDIDATE_RUN_BASE -u GITHUB_SHA \
+    "${controller_env[@]}" \
+    "$controller" >"$case_stdout" 2>"$case_stderr" || case_rc=$?
+}
+
+require_daily_success() {
+  [ "$case_rc" -eq 0 ] ||
+    fail "scenario=$1 expected success, exit=$case_rc: $(tr '\n' ' ' <"$case_stderr")"
+}
+
+require_daily_failure() {
+  [ "$case_rc" -ne 0 ] || fail "scenario=$1 expected failure"
+}
+
+# --- happy paths -----------------------------------------------------------
+run_daily daily-prepared prepared daily
+require_daily_success daily-prepared
+assert_file_contains "$case_stdout" \
+  "RUN $daily_day $upstream_sha $daily_consumer_sha success"
+assert_daily_complete_receipt daily "$production_claim_ref" 3 "$daily_consumer_sha"
+assert_log_count 1 '^prepare-consumer '
+assert_log_count 1 '^claim-day '
+assert_log_count 1 '^submit-run '
+assert_log_count 1 '^await-run '
+stage_records=$(grep -c '^stage=' "$case_receipt" || true)
+[ "$stage_records" -eq 12 ] ||
+  fail "daily-prepared expected 12 stage records, found $stage_records"
+# The request is constructed and validated before the day is claimed.
+construct_line=$(grep -n '^stage=construct-request$' "$case_receipt" | cut -d: -f1)
+claim_line=$(grep -n '^stage=claim-day$' "$case_receipt" | cut -d: -f1)
+[ -n "$construct_line" ] && [ -n "$claim_line" ] &&
+  [ "$construct_line" -lt "$claim_line" ] ||
+  fail 'construct-request must precede claim-day in the receipt'
+pass daily-prepared
+
+# The exact real request: 3 hours, faults on, exact consumer commit, at the
+# claim ref, in the HEAD testnet directory.
+assert_file_contains "$case_log" \
+  "submit-run $daily_consumer_sha $production_claim_ref cardano_node_head 3 false"
+assert_file_contains "$case_log" "await-run $daily_consumer_sha $daily_run_url"
+assert_file_contains "$case_log" \
+  "prepare-consumer $daily_day $daily_run_base daily $case_state/rendered-model $candidate_ref cardano_node_head"
+assert_file_contains "$case_log" "claim-day $production_claim_ref $daily_consumer_sha"
+pass request-3h-faults-exact-consumer
+
+# Every identity in one terminal record, agreeing with the observed request.
+assert_daily_complete_receipt daily "$production_claim_ref" 3 "$daily_consumer_sha"
+pass receipt-correlation
+
+# The day is derived from the clock when the workflow supplies no day. The
+# expected value is computed on both sides of the invocation so a UTC
+# midnight rollover mid-scenario cannot fail an otherwise correct run.
+expected_today_before=$(TZ=UTC0 printf '%(%Y-%m-%d)T' -1)
+run_daily daily-clock-derived prepared daily '' ''
+expected_today_after=$(TZ=UTC0 printf '%(%Y-%m-%d)T' -1)
+require_daily_success daily-clock-derived
+if grep -Fqx "day=$expected_today_before" "$case_receipt" ||
+  grep -Fqx "day=$expected_today_after" "$case_receipt"; then
+  :
+else
+  fail "daily-clock-derived receipt day matches neither $expected_today_before nor $expected_today_after"
+fi
+pass daily-clock-derived
+
+# A terminal failure outcome is an honest terminal run, not a controller error.
+run_daily daily-terminal-failure daily-terminal-failure daily
+require_daily_success daily-terminal-failure
+assert_last_receipt_contains 'stage=await-run'
+assert_last_receipt_contains 'outcome=TERMINAL'
+assert_last_receipt_contains 'terminal_outcome=failure'
+assert_log_count 1 '^submit-run '
+pass daily-terminal-failure
+
+# Validation mode: 1 hour, own claim namespace, production day untouched.
+validation_state=$tmp_root/validation-state
+mkdir -p "$validation_state/state"
+run_daily validation-prepared prepared validation "$validation_state"
+require_daily_success validation-prepared
+assert_daily_complete_receipt validation "$validation_claim_ref" 1 "$validation_consumer_sha"
+assert_file_contains "$case_log" \
+  "submit-run $validation_consumer_sha $validation_claim_ref cardano_node_head 1 false"
+[ -d "$(claim_marker_path "$validation_state/state" "$validation_claim_ref")" ] ||
+  fail 'validation run left no validation claim marker'
+[ ! -d "$(claim_marker_path "$validation_state/state" "$production_claim_ref")" ] ||
+  fail 'validation run consumed the production day claim'
+# Same day, same start SHA: the two consumer commits differ by construction
+# (the commit carries its mode), so their locks can never collide.
+[ "$validation_consumer_sha" != "$daily_consumer_sha" ] ||
+  fail 'validation and production consumer SHAs are not distinct by construction'
+# The same UTC day still allows a fresh production claim afterwards.
+run_daily daily-after-validation prepared daily "$validation_state"
+require_daily_success daily-after-validation
+assert_file_contains "$case_receipt" "claim_ref=$production_claim_ref"
+assert_file_contains "$case_receipt" "consumer_sha=$daily_consumer_sha"
+assert_file_contains "$case_receipt" 'stage=claim-day'
+assert_file_contains "$case_receipt" 'outcome=CLAIMED'
+assert_log_count 1 '^submit-run '
+pass validation-cannot-consume-day
+
+# --- duplicate day ----------------------------------------------------------
+duplicate_state=$tmp_root/duplicate-state
+mkdir -p "$duplicate_state/state"
+mkdir -p "$(claim_marker_path "$duplicate_state/state" "$production_claim_ref")"
+run_daily duplicate-day-claim duplicate-day-claim daily "$duplicate_state"
+require_daily_failure duplicate-day-claim
+assert_daily_failure_receipt claim-day day-already-claimed
+assert_file_contains "$case_receipt" "consumer_sha=$daily_consumer_sha"
+assert_no_real_submission
+pass duplicate-day-claim
+
+# --- concurrent invocations: exactly one attempt wins -----------------------
+# Each invocation keeps its own transport log, so every fake-transport call
+# is attributable to the invocation that made it; the claim ledger in the
+# shared state directory is the only shared effect.
+concurrent_state=$tmp_root/concurrent-state
+mkdir -p "$concurrent_state/state"
+daily_pids=()
+run_daily_concurrent() {
+  local slot=$1
+  local dir=$tmp_root/concurrent-$slot
+  mkdir -p "$dir"
+  env -u HEAD_CANDIDATE_IMAGE_REPOSITORY -u HEAD_CANDIDATE_DAY \
+    FAKE_SCENARIO=prepared \
+    FAKE_LOG="$dir/transport.log" \
+    HEAD_CANDIDATE_TRANSPORT="$fake_transport" \
+    HEAD_CANDIDATE_MODE=daily \
+    HEAD_CANDIDATE_DAY="$daily_day" \
+    HEAD_CANDIDATE_RUN_BASE="$daily_run_base" \
+    HEAD_CANDIDATE_STATE_DIR="$concurrent_state/state" \
+    HEAD_CANDIDATE_RECEIPT="$dir/receipt" \
+    "$controller" >"$dir/stdout" 2>"$dir/stderr" &
+  daily_pids+=("$!")
+}
+run_daily_concurrent one
+run_daily_concurrent two
+concurrent_ok=0
+concurrent_fail=0
+for pid in "${daily_pids[@]}"; do
+  if wait "$pid"; then
+    concurrent_ok=$((concurrent_ok + 1))
+  else
+    concurrent_fail=$((concurrent_fail + 1))
+  fi
+done
+[ "$concurrent_ok" -eq 1 ] && [ "$concurrent_fail" -eq 1 ] ||
+  fail "concurrent-day-claim expected one winner and one refusal, got ok=$concurrent_ok fail=$concurrent_fail"
+concurrent_winner=''
+concurrent_loser=''
+for slot in one two; do
+  concurrent_dir=$tmp_root/concurrent-$slot
+  concurrent_log=$concurrent_dir/transport.log
+  claim_attempts=$(count_log "$concurrent_log" '^claim-day ')
+  [ "$claim_attempts" -eq 1 ] ||
+    fail "concurrent-day-claim slot=$slot expected exactly one claim attempt, found $claim_attempts"
+  if grep -Fqx 'error=day-already-claimed' "$concurrent_dir/receipt"; then
+    [ -n "$concurrent_loser" ] &&
+      fail 'concurrent-day-claim produced two losing invocations'
+    concurrent_loser=$slot
+    # The losing invocation never reached submission at all.
+    [ "$(count_log "$concurrent_log" '^submit-run ')" -eq 0 ] ||
+      fail "concurrent-day-claim loser slot=$slot reached submission"
+    [ "$(count_log "$concurrent_log" '^await-run ')" -eq 0 ] ||
+      fail "concurrent-day-claim loser slot=$slot awaited a run"
+    grep -Fqx 'stage=claim-day' "$concurrent_dir/receipt" ||
+      fail "concurrent-day-claim loser slot=$slot lacks the claim-day receipt"
+  elif grep -Fqx 'outcome=TERMINAL' "$concurrent_dir/receipt"; then
+    [ -n "$concurrent_winner" ] &&
+      fail 'concurrent-day-claim produced two winning invocations'
+    concurrent_winner=$slot
+    # The winning invocation submitted exactly once.
+    [ "$(count_log "$concurrent_log" '^submit-run ')" -eq 1 ] ||
+      fail "concurrent-day-claim winner slot=$slot did not submit exactly once"
+    [ "$(count_log "$concurrent_log" '^await-run ')" -eq 1 ] ||
+      fail "concurrent-day-claim winner slot=$slot did not await its run"
+  else
+    fail "concurrent-day-claim slot=$slot produced neither a refusal nor a terminal receipt"
+  fi
+done
+[ -n "$concurrent_winner" ] && [ -n "$concurrent_loser" ] ||
+  fail 'concurrent-day-claim could not attribute winner and loser'
+pass concurrent-day-claim
+
+# --- no retry after a failed attempt ----------------------------------------
+retry_state=$tmp_root/retry-state
+mkdir -p "$retry_state/state"
+run_daily no-retry-first daily-dispatch-failure daily "$retry_state"
+require_daily_failure no-retry-first
+assert_daily_failure_receipt submit-run dispatch-failed
+assert_file_contains "$case_receipt" 'stage=claim-day'
+assert_file_contains "$case_receipt" 'outcome=CLAIMED'
+assert_log_count 1 '^submit-run '
+run_daily no-retry-second prepared daily "$retry_state"
+require_daily_failure no-retry-second
+assert_daily_failure_receipt claim-day day-already-claimed
+assert_no_real_submission
+pass no-retry-after-failed-attempt
+
+# --- the consumer ref is immutable once claimed ------------------------------
+run_daily consumer-ref-immutable prepared daily
+require_daily_success consumer-ref-immutable
+immutable_state=$case_state
+[ -d "$(claim_marker_path "$immutable_state" "$production_claim_ref")" ] ||
+  fail 'happy daily run created no claim marker'
+other_consumer=dddddddddddddddddddddddddddddddddddddddd
+immutable_log=$case_dir/direct-claim.log
+: >"$immutable_log"
+immutable_rc=0
+env FAKE_SCENARIO=prepared FAKE_LOG="$immutable_log" \
+  HEAD_CANDIDATE_STATE_DIR="$immutable_state" \
+  HEAD_CANDIDATE_RECEIPT="$case_dir/direct-receipt" \
+  "$fake_transport" claim-day "$production_claim_ref" "$other_consumer" \
+  >"$case_dir/direct-stdout" 2>"$case_dir/direct-stderr" || immutable_rc=$?
+[ "$immutable_rc" -ne 0 ] ||
+  fail 'consumer-ref-immutable: re-claim at a different commit succeeded'
+assert_file_contains "$case_dir/direct-stdout" 'BLOCKED day-already-claimed'
+assert_file_contains "$immutable_log" \
+  "claim-day $production_claim_ref $other_consumer"
+pass consumer-ref-immutable
+
+# --- prerequisites: every failed stage stops before submission ---------------
+run_daily prerequisite-publication publish-failure daily
+require_daily_failure prerequisite-publication
+assert_daily_failure_receipt publish-candidate publish-failed
+assert_no_real_submission
+pass prerequisite-publication-blocks-submission
+
+run_daily prerequisite-provenance revision-mismatch daily
+require_daily_failure prerequisite-provenance
+assert_daily_failure_receipt prove-revision revision-mismatch
+assert_no_real_submission
+pass prerequisite-provenance-blocks-submission
+
+run_daily prerequisite-compose compose-failure daily
+require_daily_failure prerequisite-compose
+assert_daily_failure_receipt validate-compose compose-failed
+assert_no_real_submission
+pass prerequisite-compose-blocks-submission
+
+run_daily prerequisite-smoke submission-failure daily
+require_daily_failure prerequisite-smoke
+assert_daily_failure_receipt submit-candidate submission-failed
+assert_no_real_submission
+assert_log_count 0 '^prepare-consumer '
+pass prerequisite-smoke-blocks-submission
+
+run_daily prerequisite-claim daily-claim-failure daily
+require_daily_failure prerequisite-claim
+assert_daily_failure_receipt claim-day claim-failed
+assert_file_contains "$case_receipt" "consumer_sha=$daily_consumer_sha"
+assert_no_real_submission
+pass prerequisite-claim-blocks-submission
+
+# A request that cannot be constructed stops before the day is claimed:
+# zero submit calls, a stable token, and the day is NOT burned.
+daily_extra_env=("HEAD_CANDIDATE_REPOSITORY=not-a-repo")
+run_daily prerequisite-request prepared daily
+daily_extra_env=()
+require_daily_failure prerequisite-request
+assert_daily_failure_receipt construct-request malformed-repository
+assert_file_contains "$case_receipt" 'stage=prepare-consumer'
+if grep -Fqx 'outcome=CLAIMED' "$case_receipt"; then
+  fail 'a request-construction failure burned the day claim'
+fi
+assert_no_real_submission
+pass prerequisite-request-blocks-submission
+
+# A dispatch the remote refuses is an attempt: it consumes the day and never
+# reaches a run to await.
+run_daily daily-dispatch-failure daily-dispatch-failure daily
+require_daily_failure daily-dispatch-failure
+assert_daily_failure_receipt submit-run dispatch-failed
+assert_log_count 1 '^submit-run '
+assert_log_count 0 '^await-run '
+pass daily-dispatch-failure
+
+# --- daily stage guards ------------------------------------------------------
+run_daily daily-consumer-failure daily-consumer-failure daily
+require_daily_failure daily-consumer-failure
+assert_daily_failure_receipt prepare-consumer consumer-failed
+assert_no_real_submission
+pass daily-consumer-failure
+
+run_daily daily-consumer-multiline daily-consumer-multiline daily
+require_daily_failure daily-consumer-multiline
+assert_daily_failure_receipt prepare-consumer multi-line-consumer
+assert_no_real_submission
+pass daily-consumer-multiline
+
+run_daily daily-consumer-malformed-sha daily-consumer-malformed-sha daily
+require_daily_failure daily-consumer-malformed-sha
+assert_daily_failure_receipt prepare-consumer malformed-consumer-sha
+assert_no_real_submission
+pass daily-consumer-malformed-sha
+
+run_daily daily-claim-malformed-verdict daily-claim-malformed-verdict daily
+require_daily_failure daily-claim-malformed-verdict
+assert_daily_failure_receipt claim-day malformed-claim-verdict
+assert_no_real_submission
+pass daily-claim-malformed-verdict
+
+run_daily daily-run-url-multiline daily-run-url-multiline daily
+require_daily_failure daily-run-url-multiline
+assert_daily_failure_receipt submit-run multi-line-run-url
+assert_file_contains "$case_receipt" "consumer_sha=$daily_consumer_sha"
+assert_log_count 1 '^submit-run '
+assert_log_count 0 '^await-run '
+pass daily-run-url-multiline
+
+run_daily daily-run-url-malformed daily-run-url-malformed daily
+require_daily_failure daily-run-url-malformed
+assert_daily_failure_receipt submit-run malformed-run-url
+assert_log_count 1 '^submit-run '
+assert_log_count 0 '^await-run '
+pass daily-run-url-malformed
+
+run_daily daily-await-failure daily-await-failure daily
+require_daily_failure daily-await-failure
+assert_daily_failure_receipt await-run await-failed
+assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
+assert_log_count 1 '^submit-run '
+pass daily-await-failure
+
+run_daily daily-correlation-multiline daily-correlation-multiline daily
+require_daily_failure daily-correlation-multiline
+assert_daily_failure_receipt await-run multi-line-correlation
+assert_log_count 1 '^submit-run '
+pass daily-correlation-multiline
+
+run_daily daily-correlation-malformed daily-correlation-malformed daily
+require_daily_failure daily-correlation-malformed
+assert_daily_failure_receipt await-run malformed-correlation
+assert_log_count 1 '^submit-run '
+pass daily-correlation-malformed
+
+run_daily daily-report-url-malformed daily-report-url-malformed daily
+require_daily_failure daily-report-url-malformed
+assert_daily_failure_receipt await-run malformed-report-url
+assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
+pass daily-report-url-malformed
+
+run_daily daily-report-url-bare daily-report-url-bare daily
+require_daily_failure daily-report-url-bare
+assert_daily_failure_receipt await-run malformed-report-url
+assert_last_receipt_lacks '^report_url='
+pass daily-report-url-bare
+
+run_daily daily-report-url-no-path daily-report-url-no-path daily
+require_daily_failure daily-report-url-no-path
+assert_daily_failure_receipt await-run malformed-report-url
+assert_last_receipt_lacks '^report_url='
+pass daily-report-url-no-path
+
+run_daily daily-report-url-scheme-only daily-report-url-scheme-only daily
+require_daily_failure daily-report-url-scheme-only
+assert_daily_failure_receipt await-run malformed-report-url
+assert_last_receipt_lacks '^report_url='
+pass daily-report-url-scheme-only
+
+run_daily daily-moog-id-empty daily-moog-id-empty daily
+require_daily_failure daily-moog-id-empty
+assert_daily_failure_receipt await-run malformed-moog-id
+assert_last_receipt_lacks '^moog_test_id='
+pass daily-moog-id-empty
+
+run_daily daily-moog-id-garbage daily-moog-id-garbage daily
+require_daily_failure daily-moog-id-garbage
+assert_daily_failure_receipt await-run malformed-moog-id
+assert_last_receipt_lacks '^moog_test_id='
+pass daily-moog-id-garbage
+
+run_daily daily-await-not-terminal daily-await-not-terminal daily
+require_daily_failure daily-await-not-terminal
+assert_daily_failure_receipt await-run run-not-terminal
+assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
+pass daily-await-not-terminal
+
+run_daily daily-outcome-unknown daily-outcome-unknown daily
+require_daily_failure daily-outcome-unknown
+assert_daily_failure_receipt await-run outcome-nonterminal
+assert_file_contains "$case_receipt" "workflow_run=$daily_run_url"
+assert_log_count 1 '^submit-run '
+pass daily-outcome-unknown
+
+run_daily daily-invalid-day prepared daily '' 20260924
+require_daily_failure daily-invalid-day
+grep -Fq 'invalid UTC day' "$case_stderr" ||
+  fail 'daily-invalid-day stderr lacks the preflight rejection token'
+assert_log_count 0 '.'
+assert_no_real_submission
+pass daily-invalid-day
+
+run_daily daily-unresolved-run-base prepared daily '' "$daily_day" ''
+require_daily_failure daily-unresolved-run-base
+grep -Fq 'unresolved run base' "$case_stderr" ||
+  fail 'daily-unresolved-run-base stderr lacks the preflight rejection token'
+assert_log_count 0 '.'
+assert_no_real_submission
+pass daily-unresolved-run-base

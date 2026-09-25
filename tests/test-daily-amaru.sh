@@ -1758,6 +1758,9 @@ issue_225_allowed_paths=(
   specs/215-immutable-cardano-node-head-candidate/tasks.md
   .github/workflows/daily-cardano-node-head.yaml
   docs/daily-cardano-node-head.md
+  .github/workflows/cardano-node.yaml
+  specs/216-daily-cardano-node-head-run/plan.md
+  specs/216-daily-cardano-node-head-run/tasks.md
   scripts/head-candidate-cluster.sh
   tests/test-head-candidate-cluster.sh
   .gitignore
