@@ -80,11 +80,12 @@ After the unchanged #215 candidate stages end at `submit-candidate PREPARED`,
 the daily stages run:
 
 1. **prepare-consumer** — the rendered all-HEAD topology is committed as its
-   own testnet directory `testnets/cardano_node_head/` on top of the exact
-   run base, never on top of whatever `main` points at later: if the default
-   branch moved since the run started, the stage fails closed with
-   `start-sha-moved` instead of pinning the moved main. The mixed-version
-   `cardano_node_master` profile is untouched.
+   own testnet directory `testnets/cardano_node_head/` **on the exact run-base
+   commit itself**: that SHA is fetched and checked out directly, so a
+   `main` that moved mid-run (the normal case on an active repository)
+   changes nothing. A run base that can no longer be fetched — history
+   rewritten away — fails closed with `run base is unfetchable`. The
+   mixed-version `cardano_node_master` profile is untouched.
 2. **construct-request** — the exact dispatch identity (workflow file, claim
    tag, testnet directory, duration, fault setting) is validated and recorded
    before anything is submitted. A request that cannot be constructed stops
@@ -146,11 +147,10 @@ stopped it (see *Receipt lookup* below). Recovery is manual, and follows the
 ref-state table above:
 
 - a failure **before the claim** (candidate stages, prepare-consumer,
-  construct-request, including a moved main) can be retried the same day by
+  construct-request — a moved main is *not* one of them, the consumer is
+  built on the exact run-base commit) can be retried the same day by
   dispatching the workflow with the **production** input — the day is still
-  unclaimed, and the retry starts from the new main; a moved main is the one
-  failure class that is *expected* on an active repository and simply needs
-  the re-dispatch;
+  unclaimed;
 - a **claim push error** left no ref this run could confirm: check
   `git ls-remote origin refs/tags/daily-cardano-node-head/<YYYY-MM-DD>` — if
   a concurrent invocation won it the receipt already says `day-already-claimed`,
@@ -185,7 +185,7 @@ and a stable error token; no later stage runs after a stop.
 | `verify-topology` | the census is empty, a node service is missing or duplicated, or any image differs from the candidate | `zero-topology-census`, `missing-node-service-<name>`, `census-count-<n>`, `image-mismatch`, `stale-topology-override`, `malformed-topology-row`, `empty-service`, `empty-image`, `whitespace-image` |
 | `validate-compose` | Compose rejects the rendered model | `compose-failed` |
 | `submit-candidate` | the fake submission fails or is malformed | `submission-failed`, `multi-line-submission`, `malformed-submission` |
-| `prepare-consumer` | the base moved, or the consumer commit cannot be created or is malformed | `consumer-failed`, `multi-line-consumer`, `malformed-consumer-sha`, plus the transport's `start-sha-moved` and `invalid run base` |
+| `prepare-consumer` | the consumer commit cannot be created or is malformed | `consumer-failed`, `multi-line-consumer`, `malformed-consumer-sha`, plus the transport's `run base is unfetchable`, `run base checkout diverged` and `invalid run base` |
 | `construct-request` | the dispatch identity cannot be constructed | `malformed-repository` |
 | `claim-day` | the day is already claimed, the push fails, or the verdict is malformed | `day-already-claimed`, `claim-failed`, `malformed-claim-verdict` |
 | `submit-run` | the dispatch is rejected or its run cannot be identified | `dispatch-failed`, `correlation marker is absent or unusable`, `dispatched run was not identifiable`, `dispatched run selection is ambiguous`, `multi-line-run-url`, `malformed-run-url` |

@@ -215,13 +215,18 @@ case "$operation" in
       die 'rendered model does not carry the candidate image'
     directory=$state_dir/consumer
     [ ! -e "$directory" ] || die "consumer workspace already exists: $directory"
-    git clone --quiet --filter=blob:none --depth=1 \
+    git clone --quiet --filter=blob:none --no-checkout \
       "https://github.com/${consumer_repository}.git" "$directory"
-    # The consumer commit's parent is the exact commit this run started
-    # from. If the default branch moved since the run began, fail closed
-    # rather than pinning the moved main (I216-04).
+    # The consumer commit is built on the exact run-base commit itself:
+    # fetch that SHA and check it out, whatever the default branch points
+    # at now (I216-04). A base that cannot be fetched — history rewritten
+    # away, branch deleted — fails closed.
+    if ! git -C "$directory" fetch --quiet --depth=1 origin "$run_base"; then
+      die "run base is unfetchable: $run_base"
+    fi
+    git -C "$directory" checkout --quiet --detach "$run_base"
     [ "$(git -C "$directory" rev-parse HEAD)" = "$run_base" ] ||
-      die "start-sha-moved: the consumer base moved since the run started"
+      die "run base checkout diverged: $run_base"
     target=$directory/testnets/$testnet
     mkdir -p "$target"
     cp "$rendered_model" "$target/docker-compose.yaml"

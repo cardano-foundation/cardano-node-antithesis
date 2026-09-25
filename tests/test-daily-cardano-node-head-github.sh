@@ -103,7 +103,13 @@ stub_handle_push() {
   fi
   printf '%s\n' "$pushed_sha" >"$marker/sha"
   printf '%s\t%s\n' "$pushed_sha" "$pushed_ref" >>"${STUB_LSREMOTE_FILE:?}"
+  printf '%s\n' "$pushed_sha" >>"$(stub_remote_shas)"
   printf '*\t%s:%s\t[new tag]\n' "$pushed_sha" "$pushed_ref"
+}
+# The remote's fetchable commit universe: everything the stub clone ever
+# fabricated, plus everything pushed through it.
+stub_remote_shas() {
+  printf '%s\n' "$(stub_lock_dir)/remote-shas"
 }
 case "${1:-}" in
   ls-remote)
@@ -117,9 +123,19 @@ case "${1:-}" in
   push)
     stub_handle_push "$@"
     ;;
+  fetch)
+    # Fetchable = recorded in the stub remote's commit universe.
+    requested=${*: -1}
+    if ! grep -Fqx "$requested" "$(stub_remote_shas)" 2>/dev/null; then
+      printf 'stub fetch rejected: %s\n' "$requested" >&2
+      exit 1
+    fi
+    ;;
   clone)
-    # Fabricate the cloned repository: one commit on main, no network, with
-    # fixed dates so the fabricated main SHA is deterministic for the suite.
+    # Fabricate the cloned repository: fixed-date commits on main, no
+    # network. STUB_CLONE_COMMITS=2 fabricates a second commit so the
+    # default branch tip differs from the first (a moved main). Every
+    # fabricated SHA is recorded as remotely fetchable.
     target=${!#}
     "${STUB_REAL_GIT:?}" init --quiet --initial-branch=main "$target"
     "${STUB_REAL_GIT}" -C "$target" config user.name stub
@@ -128,11 +144,27 @@ case "${1:-}" in
     "${STUB_REAL_GIT}" -C "$target" add README.stub
     GIT_AUTHOR_DATE='2026-01-01T00:00:00Z' GIT_COMMITTER_DATE='2026-01-01T00:00:00Z' \
       "${STUB_REAL_GIT}" -C "$target" commit --quiet -m 'stub main'
+    if [ "${STUB_CLONE_COMMITS:-1}" -ge 2 ]; then
+      printf 'moved main\n' >>"$target/README.stub"
+      GIT_AUTHOR_DATE='2026-01-02T00:00:00Z' GIT_COMMITTER_DATE='2026-01-02T00:00:00Z' \
+        "${STUB_REAL_GIT}" -C "$target" commit --quiet -am 'stub main moved'
+    fi
+    mkdir -p "$(stub_lock_dir)"
+    "${STUB_REAL_GIT}" -C "$target" rev-list HEAD | while IFS= read -r sha; do
+      printf '%s\n' "$sha" >>"$(stub_remote_shas)"
+    done
     ;;
   -C)
     case " $* " in
       *' push '*)
         stub_handle_push "$@"
+        ;;
+      *' fetch '*)
+        requested=${*: -1}
+        if ! grep -Fqx "$requested" "$(stub_remote_shas)" 2>/dev/null; then
+          printf 'stub fetch rejected: %s\n' "$requested" >&2
+          exit 1
+        fi
         ;;
       *' ls-remote '*)
         cat "${STUB_LSREMOTE_FILE:?}"
@@ -881,7 +913,7 @@ commit_subject=$("$real_git" -C "$prepare_state/consumer" log -1 --format=%s)
 [ "$commit_subject" = "chore: pin the daily cardano-node HEAD topology for $daily_day" ] ||
   fail "consumer commit does not carry its mode and day: $commit_subject"
 assert_log_contains \
-  "git clone --quiet --filter=blob:none --depth=1 https://github.com/$consumer_repository.git $prepare_state/consumer"
+  "git clone --quiet --filter=blob:none --no-checkout https://github.com/$consumer_repository.git $prepare_state/consumer"
 if grep -Eq '^git -C [^ ]+ .* push ' "$stub_log"; then
   fail 'prepare-consumer pushed before the day was claimed'
 fi
@@ -923,10 +955,21 @@ require_failure
 assert_stderr_token 'does not carry the candidate image'
 pass prepare-consumer-rejects-stale-model
 
-# Main moved between the run's start and consumer preparation: the transport
-# fails closed instead of pinning the moved main.
+# Main moved between the run's start and consumer preparation: the consumer
+# is still built on the exact run base — the moved tip is never pinned.
 moved_state=$tmp_root/moved-state
-moved_base=9999999999999999999999999999999999999999
+# The two-commit fixture's tip differs from the run base by construction.
+moved_probe=$tmp_root/moved-probe
+env -i \
+  PATH="$stub_bin:$PATH" \
+  STUB_LOG="$stub_log" \
+  STUB_REAL_GIT="$real_git" \
+  STUB_CLONE_COMMITS=2 \
+  "$stub_bin/git" clone \
+  "https://github.com/$consumer_repository.git" "$moved_probe"
+moved_tip=$("$real_git" -C "$moved_probe" rev-parse HEAD)
+[ "$moved_tip" != "$stub_main_sha" ] ||
+  fail 'the two-commit fixture did not move the default branch tip'
 run_transport_in "$moved_state" prepare-moved-render env \
   STUB_REAL_GIT="$real_git" \
   HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
@@ -934,14 +977,34 @@ run_transport_in "$moved_state" prepare-moved-render env \
 require_success
 run_transport_in "$moved_state" prepare-moved-base env \
   STUB_REAL_GIT="$real_git" \
+  STUB_CLONE_COMMITS=2 \
   HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
-  "$transport" prepare-consumer "$daily_day" "$moved_base" daily \
+  "$transport" prepare-consumer "$daily_day" "$stub_main_sha" daily \
   "$moved_state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
+require_success
+moved_parent=$("$real_git" -C "$moved_state/consumer" rev-parse HEAD^)
+[ "$moved_parent" = "$stub_main_sha" ] ||
+  fail "a moved main was pinned instead of the run base: parent=$moved_parent"
+assert_log_contains "git -C $moved_state/consumer fetch --quiet --depth=1 origin $stub_main_sha"
+assert_log_contains "git -C $moved_state/consumer checkout --quiet --detach $stub_main_sha"
+pass prepare-consumer-builds-on-exact-run-base
+
+# A run base the remote cannot fetch (history rewritten away) fails closed.
+unfetchable_state=$tmp_root/unfetchable-state
+run_transport_in "$unfetchable_state" prepare-unfetchable-render env \
+  STUB_REAL_GIT="$real_git" \
+  HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
+  "$transport" render-topology "$candidate_ref"
+require_success
+run_transport_in "$unfetchable_state" prepare-unfetchable-base env \
+  STUB_REAL_GIT="$real_git" \
+  "$transport" prepare-consumer "$daily_day" 9999999999999999999999999999999999999999 daily \
+  "$unfetchable_state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
 require_failure
-assert_stderr_token 'start-sha-moved'
-[ ! -e "$moved_state/consumer/testnets/$consumer_testnet" ] ||
-  fail 'a moved base still produced a consumer commit'
-pass prepare-consumer-fails-closed-on-moved-base
+assert_stderr_token 'run base is unfetchable'
+[ ! -e "$unfetchable_state/consumer/testnets/$consumer_testnet" ] ||
+  fail 'an unfetchable base still produced a consumer commit'
+pass prepare-consumer-refuses-unfetchable-base
 
 run_transport_in "$moved_state" prepare-bad-base env \
   STUB_REAL_GIT="$real_git" \
