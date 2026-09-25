@@ -96,7 +96,10 @@ the daily stages run:
    before any MOOG contact, and the tag is never re-pointed.
 4. **submit-run** — the existing `cardano-node.yaml` MOOG workflow is
    dispatched at the claim tag with `test=cardano_node_head`, `duration=3`,
-   `no-faults=false` — one real three-hour, fault-injected run.
+   `no-faults=false`, and a unique correlation marker carried into the run
+   title (`correlation=<marker>`); the transport then selects exactly the run
+   whose title carries that marker — one real three-hour, fault-injected run,
+   never a neighbouring one.
 5. **await-run** — the dispatched run is watched and its `moog-correlation`
    artifact read back; the terminal record correlates the MOOG test id,
    report URL and outcome with every candidate identity.
@@ -185,7 +188,7 @@ and a stable error token; no later stage runs after a stop.
 | `prepare-consumer` | the base moved, or the consumer commit cannot be created or is malformed | `consumer-failed`, `multi-line-consumer`, `malformed-consumer-sha`, plus the transport's `start-sha-moved` and `invalid run base` |
 | `construct-request` | the dispatch identity cannot be constructed | `malformed-repository` |
 | `claim-day` | the day is already claimed, the push fails, or the verdict is malformed | `day-already-claimed`, `claim-failed`, `malformed-claim-verdict` |
-| `submit-run` | the dispatch is rejected or its run is not observable | `dispatch-failed`, `multi-line-run-url`, `malformed-run-url` |
+| `submit-run` | the dispatch is rejected or its run cannot be identified | `dispatch-failed`, `correlation marker is absent or unusable`, `dispatched run was not identifiable`, `dispatched run selection is ambiguous`, `multi-line-run-url`, `malformed-run-url` |
 | `await-run` | the run cannot be awaited or its correlation is unusable | `await-failed`, `multi-line-correlation`, `malformed-correlation`, `run-not-terminal`, `outcome-nonterminal`, `malformed-report-url`, `malformed-moog-id` |
 
 The transport adds its own fail-closed stops with named stderr tokens before

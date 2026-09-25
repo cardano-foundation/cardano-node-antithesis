@@ -1,4 +1,8 @@
 name: "Antithesis on cardano-node testnet"
+run-name: >-
+  ${{ inputs.correlation != '' &&
+     format('{0} [{1}]', inputs.test, inputs.correlation) ||
+     'Antithesis on cardano-node testnet' }}
 env:
   # workflow_dispatch passes `inputs.test`; cron has no inputs so
   # falls through to the default. Without the `inputs.test` lookup
@@ -27,6 +31,14 @@ on:
         required: false
         default: false
         type: boolean
+       correlation:
+        description: >-
+          Correlation marker carried into the run title; the daily
+          controller dispatches with it and selects exactly the run it
+          dispatched. Empty keeps the ordinary title.
+        required: false
+        default: ''
+        type: string
   schedule:
     # run every 6 hours
     - cron:  '5 1,7,13,19 * * *'

@@ -279,9 +279,11 @@ case "$operation" in
 
   submit-run)
     # One boundary: dispatch the existing MOOG workflow at the immutable
-    # claim tag. No MOOG client is embedded here (plan.md: reuse
+    # claim tag, marked with a unique correlation value that the workflow
+    # carries in its run title, then select exactly the run whose title
+    # carries that marker. No MOOG client is embedded here (plan.md: reuse
     # cardano-node.yaml rather than a second client).
-    require_commands gh date sleep seq head
+    require_commands gh sleep seq grep
     consumer_sha=${1:?consumer SHA is required}
     claim_ref=${2:?claim ref is required}
     testnet=${3:?testnet is required}
@@ -293,21 +295,31 @@ case "$operation" in
       *) die 'duration is outside the frozen contract' ;;
     esac
     [ "$no_faults" = false ] || die 'faults must stay enabled'
+    correlation=${HEAD_CANDIDATE_CORRELATION:-${GITHUB_RUN_ID:-}}
+    [[ "$correlation" =~ ^[A-Za-z0-9._-]+$ ]] ||
+      die "correlation marker is absent or unusable: ${correlation:-empty}"
     tag_name=${claim_ref#refs/tags/}
-    started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     gh workflow run cardano-node.yaml -R "$consumer_repository" \
       --ref "$tag_name" -f "test=$testnet" -f "duration=$duration" \
-      -f no-faults=false
-    run_id=''
-    for _ in $(seq 1 30); do
-      run_id=$(gh run list -R "$consumer_repository" \
-        --workflow cardano-node.yaml --commit "$consumer_sha" \
-        --event workflow_dispatch --limit 10 --json databaseId,createdAt \
-        --jq ".[] | select(.createdAt >= \"$started\") | .databaseId" | head -n 1)
-      [ -z "$run_id" ] || break
-      sleep 2
+      -f no-faults=false -f "correlation=$correlation"
+    poll_attempts=${HEAD_CANDIDATE_RUN_POLL_ATTEMPTS:-30}
+    poll_seconds=${HEAD_CANDIDATE_RUN_POLL_SECONDS:-2}
+    matching=''
+    for _ in $(seq 1 "$poll_attempts"); do
+      rows=$(gh run list -R "$consumer_repository" \
+        --workflow cardano-node.yaml --limit 30 \
+        --json databaseId,displayTitle \
+        --jq '.[] | (.databaseId | tostring) + "|" + .displayTitle')
+      matching=$(grep -F "$correlation" <<<"$rows" || true)
+      [ -n "$matching" ] && break
+      sleep "$poll_seconds"
     done
-    [ -n "$run_id" ] || die 'launched workflow run was not observable'
+    [ -n "$matching" ] || die 'dispatched run was not identifiable'
+    match_count=$(grep -Ec . <<<"$matching")
+    [ "$match_count" -eq 1 ] ||
+      die "dispatched run selection is ambiguous: $match_count matches"
+    run_id=${matching%%|*}
+    [[ "$run_id" =~ ^[0-9]+$ ]] || die 'dispatched run id is malformed'
     emit "https://github.com/$consumer_repository/actions/runs/$run_id"
     ;;
 

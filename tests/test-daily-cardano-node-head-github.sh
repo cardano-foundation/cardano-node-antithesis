@@ -1024,37 +1024,108 @@ require_failure
 assert_stderr_token 'consumer workspace is not at the claimed commit'
 pass claim-day-requires-workspace-at-commit
 
-# submit-run: dispatch the existing MOOG workflow at the claim tag.
+# submit-run: dispatch the existing MOOG workflow at the claim tag, marked
+# with a unique correlation value, then select exactly the marked run.
+daily_marker=daily-cardano-node-head-$daily_day-run-4242
 run_list_fixture=$scenario_root/run-list
-printf '424242\n' >"$run_list_fixture"
+printf '424242|cardano_node_head [%s]\n' "$daily_marker" >"$run_list_fixture"
 
 run_transport claim-submit-daily env \
   STUB_REAL_GIT="$real_git" \
   STUB_RUN_LIST_FILE="$run_list_fixture" \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
   "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
   "$consumer_testnet" 3 false
 require_success
 assert_stdout_line \
   "https://github.com/$consumer_repository/actions/runs/424242"
 assert_log_contains \
-  "gh workflow run cardano-node.yaml -R $consumer_repository --ref $daily_tag -f test=$consumer_testnet -f duration=3 -f no-faults=false"
+  "gh workflow run cardano-node.yaml -R $consumer_repository --ref $daily_tag -f test=$consumer_testnet -f duration=3 -f no-faults=false -f correlation=$daily_marker"
 pass submit-run-dispatches-moog-workflow-at-tag
+
+# A competing eligible run in the list is not selected: only the run whose
+# title carries the exact correlation marker is chosen.
+competing_run_list=$scenario_root/run-list-competing
+{
+  printf '111111|cardano_node_master\n'
+  printf '424243|cardano_node_head [%s]\n' "$daily_marker"
+  printf '222222|cardano_node_head [someone-else]\n'
+} >"$competing_run_list"
+run_transport submit-run-selects-by-marker env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$competing_run_list" \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 3 false
+require_success
+assert_stdout_line \
+  "https://github.com/$consumer_repository/actions/runs/424243"
+pass submit-run-selects-exactly-its-run
+
+# Two runs carrying the marker: ambiguous, refuses.
+ambiguous_run_list=$scenario_root/run-list-ambiguous
+{
+  printf '424242|cardano_node_head [%s]\n' "$daily_marker"
+  printf '424243|cardano_node_head [%s]\n' "$daily_marker"
+} >"$ambiguous_run_list"
+run_transport submit-run-ambiguous env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$ambiguous_run_list" \
+  HEAD_CANDIDATE_RUN_POLL_ATTEMPTS=2 \
+  HEAD_CANDIDATE_RUN_POLL_SECONDS=0 \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 3 false
+require_failure
+assert_stderr_token 'dispatched run selection is ambiguous'
+pass submit-run-refuses-ambiguous-selection
+
+# No run carrying the marker: not identifiable, refuses.
+unmatched_run_list=$scenario_root/run-list-unmatched
+printf '111111|cardano_node_master\n' >"$unmatched_run_list"
+run_transport submit-run-unidentifiable env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$unmatched_run_list" \
+  HEAD_CANDIDATE_RUN_POLL_ATTEMPTS=2 \
+  HEAD_CANDIDATE_RUN_POLL_SECONDS=0 \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 3 false
+require_failure
+assert_stderr_token 'dispatched run was not identifiable'
+pass submit-run-refuses-unidentifiable-run
+
+# A dispatch without a correlation marker never leaves the ground.
+dispatches_before_absent=$(grep -Ec '^gh workflow run' "$stub_log" || true)
+run_transport submit-run-correlation-absent env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$run_list_fixture" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 3 false
+require_failure
+assert_stderr_token 'correlation marker is absent or unusable'
+dispatches_after_absent=$(grep -Ec '^gh workflow run' "$stub_log" || true)
+[ "$dispatches_after_absent" -eq "$dispatches_before_absent" ] ||
+  fail 'the marker-less dispatch reached the workflow'
+pass submit-run-refuses-absent-correlation
 
 validation_claim_ref="refs/tags/daily-cardano-node-head/validation/$daily_day"
 validation_tag=daily-cardano-node-head/validation/$daily_day
 run_transport claim-submit-validation env \
   STUB_REAL_GIT="$real_git" \
   STUB_RUN_LIST_FILE="$run_list_fixture" \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
   "$transport" submit-run "$consumer_commit" "$validation_claim_ref" \
   "$consumer_testnet" 1 false
 require_success
 assert_log_contains \
-  "gh workflow run cardano-node.yaml -R $consumer_repository --ref $validation_tag -f test=$consumer_testnet -f duration=1 -f no-faults=false"
+  "gh workflow run cardano-node.yaml -R $consumer_repository --ref $validation_tag -f test=$consumer_testnet -f duration=1 -f no-faults=false -f correlation=$daily_marker"
 pass submit-run-dispatches-validation-at-own-tag
 
 run_transport submit-duration-rejected env \
   STUB_REAL_GIT="$real_git" \
   STUB_RUN_LIST_FILE="$run_list_fixture" \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
   "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
   "$consumer_testnet" 5 false
 require_failure
@@ -1064,6 +1135,7 @@ pass submit-run-rejects-foreign-duration
 run_transport submit-faults-rejected env \
   STUB_REAL_GIT="$real_git" \
   STUB_RUN_LIST_FILE="$run_list_fixture" \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
   "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
   "$consumer_testnet" 3 true
 require_failure
@@ -1073,21 +1145,12 @@ pass submit-run-rejects-disabled-faults
 run_transport submit-testnet-rejected env \
   STUB_REAL_GIT="$real_git" \
   STUB_RUN_LIST_FILE="$run_list_fixture" \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
   "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
   cardano_node_master 3 false
 require_failure
 assert_stderr_token 'submit target is not the HEAD testnet'
 pass submit-run-rejects-foreign-testnet
-
-run_transport submit-unobservable env \
-  STUB_REAL_GIT="$real_git" \
-  STUB_RUN_LIST_FILE="$run_list_fixture" \
-  STUB_RUN_LIST_EMPTY=1 \
-  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
-  "$consumer_testnet" 3 false
-require_failure
-assert_stderr_token 'launched workflow run was not observable'
-pass submit-run-rejects-unobservable-run
 
 # await-run: read the MOOG correlation the dispatched run exposed.
 correlation_fixture=$scenario_root/moog-correlation
@@ -1178,6 +1241,16 @@ grep -Eq 'if: \$\{\{ always\(\) \}\}' "$moog_workflow" ||
 grep -q 'steps.request.outputs.id' "$moog_workflow" ||
   fail 'cardano-node.yaml correlation step does not bind the moog test id'
 pass moog-workflow-exposes-correlation
+
+# The run title carries the correlation input only when it is set; the
+# fallback keeps the ordinary name for schedule and matrix runs.
+grep -Fq "inputs.correlation != '' &&" "$moog_workflow" ||
+  fail 'the run name does not test the correlation input'
+grep -Fq "'Antithesis on cardano-node testnet'" "$moog_workflow" ||
+  fail 'the run name fallback is not the ordinary workflow name'
+grep -Eq '^[[:space:]]+correlation:' "$moog_workflow" ||
+  fail 'cardano-node.yaml lacks the correlation input'
+pass moog-workflow-run-name-correlation
 
 # ---------------------------------------------------------------------------
 # MOOG step guards: execute the real Submit test step text hermetically.
