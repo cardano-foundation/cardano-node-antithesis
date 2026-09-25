@@ -1314,6 +1314,40 @@ grep -Fq '!inputs.production && !inputs.validation' "$daily_workflow" ||
   fail 'the #215 manual candidate path lost its dispatch routing'
 pass workflow-manual-candidate-path-preserved
 
+# Every job that runs the daily/validation controller must grant the token
+# the real dispatch needs; the fake manual job must not grow it.
+job_grants() {
+  # job_grants <workflow> <job> <permission>
+  awk -v job="$2" -v perm="$3" '
+    $0 == "  " job ":" { injob = 1; next }
+    injob && /^  [A-Za-z0-9_-]+:$/ { exit }
+    injob && /^    permissions:/ { inperm = 1; next }
+    inperm && /^    [A-Za-z0-9_-]+:$/ { inperm = 0 }
+    inperm && $1 == perm ":" { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$1"
+}
+jobs_running_daily_modes() {
+  awk '
+    /^  [A-Za-z0-9_-]+:$/ { injob = 1; job = $0; gsub(/[ :]/, "", job); next }
+    injob && /HEAD_CANDIDATE_MODE: (daily|validation)/ { print job }
+  ' "$1" | sort -u
+}
+mapfile -t daily_mode_jobs < <(jobs_running_daily_modes "$daily_workflow")
+[ "${#daily_mode_jobs[@]}" -ge 2 ] ||
+  fail "expected both daily-mode controller jobs in the census, found: ${daily_mode_jobs[*]:-none}"
+for daily_mode_job in "${daily_mode_jobs[@]}"; do
+  job_grants "$daily_workflow" "$daily_mode_job" actions ||
+    fail "job $daily_mode_job dispatches the MOOG workflow without actions: write"
+done
+if job_grants "$daily_workflow" head-candidate actions; then
+  fail 'the fake manual candidate job grants actions: write'
+fi
+if job_grants "$daily_workflow" candidate-tests actions; then
+  fail 'the hermetic PR job grants actions: write'
+fi
+pass workflow-daily-jobs-grant-dispatch
+
 grep -q 'name: moog-correlation' "$moog_workflow" ||
   fail 'cardano-node.yaml does not expose the moog-correlation artifact'
 grep -Eq 'if: \$\{\{ always\(\) \}\}' "$moog_workflow" ||

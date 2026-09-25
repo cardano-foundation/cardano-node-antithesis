@@ -109,10 +109,12 @@ jobs:
     timeout-minutes: 360
     # The controller publishes the candidate image under the repository's
     # own GHCR namespace and creates the day tag (consumer commit) in this
-    # repository; nothing else is written.
+    # repository; nothing else is written. actions:write is required to
+    # dispatch the MOOG workflow for the real submission.
     permissions:
       contents: write
       packages: write
+      actions: write
     env:
       HEAD_CANDIDATE_IMAGE_REPOSITORY: >-
         ghcr.io/cardano-foundation/cardano-node-antithesis/cardano-node-head
@@ -169,6 +171,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      actions: write
     env:
       HEAD_CANDIDATE_IMAGE_REPOSITORY: >-
         ghcr.io/cardano-foundation/cardano-node-antithesis/cardano-node-head
