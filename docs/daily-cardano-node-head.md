@@ -113,7 +113,7 @@ non-force push before any MOOG request is constructed — and only then is the
 | day claim | created | the day tag exists; the day is spent |
 | day claim | already existed | nothing new; the day was already spent by the invocation that created it |
 | day claim | push error | this run did not confirm creation — check `git ls-remote` before retrying; a concurrent winner is reported as `day-already-claimed`, and otherwise the day is unspent and a recovery dispatch may retry |
-| lock | created | the lock tag exists; the dispatch proceeds to the census and the request |
+| lock | created | the lock tag exists; the dispatch proceeds to the census, and to the request only if the census passes |
 | lock | already existed | nothing new; refused with `daily-head-already-submitted` (an earlier dispatch holds the lock) |
 | lock | push error | this run did not confirm creation — check `git ls-remote` before retrying; nothing was submitted and the census was never read (`daily-head-lock-unpushable`); a later fresh dispatch may retry the lock, with the day tag from the controller's claim still standing |
 | census | existing test-run | nothing new; refused with `daily-head-already-submitted`; day and lock are both already spent |
@@ -240,8 +240,8 @@ from the *Antithesis on cardano-node testnet* workflow, and the consumer
 commit for a day is `refs/tags/daily-cardano-node-head/<YYYY-MM-DD>` in this
 repository — three views of one correlated attempt. A daily HEAD consumer
 commit may also carry its one-shot submission lock
-`refs/tags/daily-cardano-node-head-submitted/<consumer commit>`, created by
-the dispatched MOOG run at the moment it constructs the request — the lock
-can legitimately be **absent**: a refused lock push never created it, and a
-census refusal after a taken lock leaves the request unconstructed. Check
-with `git ls-remote` rather than inferring the ref from the receipt.
+`refs/tags/daily-cardano-node-head-submitted/<consumer commit>`. The
+dispatched MOOG run creates the lock before reading the census. The lock can
+be absent if the push did not create it. If the census then refuses, the lock
+exists although no request was constructed. Check the remote ref with
+`git ls-remote`.
