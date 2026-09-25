@@ -1315,15 +1315,16 @@ grep -Fq '!inputs.production && !inputs.validation' "$daily_workflow" ||
 pass workflow-manual-candidate-path-preserved
 
 # Every job that runs the daily/validation controller must grant the token
-# the real dispatch needs; the fake manual job must not grow it.
+# the real dispatch needs — the exact value actions: write, not merely the
+# key; the fake manual and PR jobs must not grow the key at all.
 job_grants() {
-  # job_grants <workflow> <job> <permission>
-  awk -v job="$2" -v perm="$3" '
+  # job_grants <workflow> <job> <permission> <value>
+  awk -v job="$2" -v perm="$3" -v value="$4" '
     $0 == "  " job ":" { injob = 1; next }
     injob && /^  [A-Za-z0-9_-]+:$/ { exit }
     injob && /^    permissions:/ { inperm = 1; next }
     inperm && /^    [A-Za-z0-9_-]+:$/ { inperm = 0 }
-    inperm && $1 == perm ":" { found = 1 }
+    inperm && $1 == perm ":" && $2 == value { found = 1 }
     END { exit found ? 0 : 1 }
   ' "$1"
 }
@@ -1337,15 +1338,25 @@ mapfile -t daily_mode_jobs < <(jobs_running_daily_modes "$daily_workflow")
 [ "${#daily_mode_jobs[@]}" -ge 2 ] ||
   fail "expected both daily-mode controller jobs in the census, found: ${daily_mode_jobs[*]:-none}"
 for daily_mode_job in "${daily_mode_jobs[@]}"; do
-  job_grants "$daily_workflow" "$daily_mode_job" actions ||
+  job_grants "$daily_workflow" "$daily_mode_job" actions write ||
     fail "job $daily_mode_job dispatches the MOOG workflow without actions: write"
 done
-if job_grants "$daily_workflow" head-candidate actions; then
+if job_grants "$daily_workflow" head-candidate actions write; then
   fail 'the fake manual candidate job grants actions: write'
 fi
-if job_grants "$daily_workflow" candidate-tests actions; then
+if job_grants "$daily_workflow" candidate-tests actions write; then
   fail 'the hermetic PR job grants actions: write'
 fi
+# Self-check: a seeded actions: read must fail the assertion, so the value
+# is really compared and not just the key's presence.
+permission_selfcheck=$tmp_root/daily-workflow-perm-selfcheck.yaml
+cp "$daily_workflow" "$permission_selfcheck"
+sed -i '0,/^      actions: write$/s//      actions: read/' "$permission_selfcheck"
+if job_grants "$permission_selfcheck" daily-head-run actions write; then
+  fail 'the permission assertion accepts actions: read'
+fi
+job_grants "$permission_selfcheck" validation-head-run actions write ||
+  fail 'the permission self-check mutated the wrong job'
 pass workflow-daily-jobs-grant-dispatch
 
 grep -q 'name: moog-correlation' "$moog_workflow" ||
