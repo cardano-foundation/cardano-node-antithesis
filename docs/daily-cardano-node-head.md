@@ -97,9 +97,9 @@ the daily stages run:
 4. **submit-run** — the existing `cardano-node.yaml` MOOG workflow is
    dispatched at the claim tag with `test=cardano_node_head`, `duration=3`,
    `no-faults=false`, and a unique correlation marker carried into the run
-   title (`correlation=<marker>`); the transport then selects exactly the run
-   whose title carries that marker — one real three-hour, fault-injected run,
-   never a neighbouring one.
+   title (`correlation=<marker>`); the transport then selects the run whose
+   display title equals `cardano_node_head [<marker>]` exactly — one real
+   three-hour, fault-injected run, never a neighbouring one.
 5. **await-run** — the dispatched run is watched and its `moog-correlation`
    artifact read back; the terminal record correlates the MOOG test id,
    report URL and outcome with every candidate identity.

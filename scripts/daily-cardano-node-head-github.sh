@@ -283,7 +283,7 @@ case "$operation" in
     # carries in its run title, then select exactly the run whose title
     # carries that marker. No MOOG client is embedded here (plan.md: reuse
     # cardano-node.yaml rather than a second client).
-    require_commands gh sleep seq grep
+    require_commands gh sleep seq awk
     consumer_sha=${1:?consumer SHA is required}
     claim_ref=${2:?claim ref is required}
     testnet=${3:?testnet is required}
@@ -298,6 +298,10 @@ case "$operation" in
     correlation=${HEAD_CANDIDATE_CORRELATION:-${GITHUB_RUN_ID:-}}
     [[ "$correlation" =~ ^[A-Za-z0-9._-]+$ ]] ||
       die "correlation marker is absent or unusable: ${correlation:-empty}"
+    # The workflow composes the run title as '<testnet> [<correlation>]'
+    # when the correlation input is set; selection demands exact equality of
+    # the whole title field, never a substring.
+    expected_title="$testnet [$correlation]"
     tag_name=${claim_ref#refs/tags/}
     gh workflow run cardano-node.yaml -R "$consumer_repository" \
       --ref "$tag_name" -f "test=$testnet" -f "duration=$duration" \
@@ -310,12 +314,14 @@ case "$operation" in
         --workflow cardano-node.yaml --limit 30 \
         --json databaseId,displayTitle \
         --jq '.[] | (.databaseId | tostring) + "|" + .displayTitle')
-      matching=$(grep -F "$correlation" <<<"$rows" || true)
+      matching=$(awk -F'|' -v want="$expected_title" '
+        index($0, "|") && substr($0, index($0, "|") + 1) == want
+      ' <<<"$rows")
       [ -n "$matching" ] && break
       sleep "$poll_seconds"
     done
     [ -n "$matching" ] || die 'dispatched run was not identifiable'
-    match_count=$(grep -Ec . <<<"$matching")
+    match_count=$(awk 'END {print NR}' <<<"$matching")
     [ "$match_count" -eq 1 ] ||
       die "dispatched run selection is ambiguous: $match_count matches"
     run_id=${matching%%|*}

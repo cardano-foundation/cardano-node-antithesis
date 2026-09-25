@@ -1043,13 +1043,15 @@ assert_log_contains \
   "gh workflow run cardano-node.yaml -R $consumer_repository --ref $daily_tag -f test=$consumer_testnet -f duration=3 -f no-faults=false -f correlation=$daily_marker"
 pass submit-run-dispatches-moog-workflow-at-tag
 
-# A competing eligible run in the list is not selected: only the run whose
-# title carries the exact correlation marker is chosen.
+# A competing eligible run in the list is not selected: only a run whose
+# title EQUALS 'cardano_node_head [<marker>]' is chosen — a superstring
+# title and a same-marker title for a different testnet are both refused.
 competing_run_list=$scenario_root/run-list-competing
 {
   printf '111111|cardano_node_master\n'
+  printf '999999|cardano_node_head [x%s]\n' "$daily_marker"
+  printf '888888|cardano_node_master [%s]\n' "$daily_marker"
   printf '424243|cardano_node_head [%s]\n' "$daily_marker"
-  printf '222222|cardano_node_head [someone-else]\n'
 } >"$competing_run_list"
 run_transport submit-run-selects-by-marker env \
   STUB_REAL_GIT="$real_git" \
@@ -1061,6 +1063,21 @@ require_success
 assert_stdout_line \
   "https://github.com/$consumer_repository/actions/runs/424243"
 pass submit-run-selects-exactly-its-run
+
+# A superstring title alone is not selected: exact equality or refusal.
+superstring_run_list=$scenario_root/run-list-superstring
+printf '999999|cardano_node_head [x%s]\n' "$daily_marker" >"$superstring_run_list"
+run_transport submit-run-refuses-superstring env \
+  STUB_REAL_GIT="$real_git" \
+  STUB_RUN_LIST_FILE="$superstring_run_list" \
+  HEAD_CANDIDATE_RUN_POLL_ATTEMPTS=2 \
+  HEAD_CANDIDATE_RUN_POLL_SECONDS=0 \
+  HEAD_CANDIDATE_CORRELATION="$daily_marker" \
+  "$transport" submit-run "$consumer_commit" "$daily_claim_ref" \
+  "$consumer_testnet" 3 false
+require_failure
+assert_stderr_token 'dispatched run was not identifiable'
+pass submit-run-refuses-superstring-title
 
 # Two runs carrying the marker: ambiguous, refuses.
 ambiguous_run_list=$scenario_root/run-list-ambiguous
