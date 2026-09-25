@@ -102,28 +102,29 @@ the daily stages run:
    report URL and outcome with every candidate identity.
 
 **No retry, and this is the exact order in which an attempt is spent.** The
-controller takes the **day claim** first (the create-once day tag), then the
-dispatched MOOG run takes the **submission lock** — the atomic create-once tag
-`refs/tags/daily-cardano-node-head-submitted/<consumer commit>`, pushed with a
-non-force push before any MOOG request is constructed — and only then is the
-**MOOG census** read. Which ref exists after each outcome:
+controller takes the **day claim** (the create-once day tag) before any MOOG
+contact; the dispatched MOOG run then reads the **MOOG census** before
+constructing its request. The one-attempt-per-day guarantee covers the
+scheduled, recovery and validation paths through the HEAD workflow — all of
+them pass the controller's day claim — plus workflow re-runs (the MOOG submit
+step refuses a non-first attempt for the HEAD testnet with
+`daily-head-rerun-refused`) and a second sequential dispatch of the MOOG
+workflow (the census refusal `daily-head-already-submitted`; an unreadable
+census is refused outright with `daily-head-census-unreadable`). Which ref
+exists after each day-claim outcome:
 
 | Guard | Outcome | Ref state afterwards |
 |---|---|---|
 | day claim | created | the day tag exists; the day is spent |
 | day claim | already existed | nothing new; the day was already spent by the invocation that created it |
 | day claim | push error | this run did not confirm creation — check `git ls-remote` before retrying; a concurrent winner is reported as `day-already-claimed`, and otherwise the day is unspent and a recovery dispatch may retry |
-| lock | created | the lock tag exists; the dispatch proceeds to the census, and to the request only if the census passes |
-| lock | already existed | nothing new; refused with `daily-head-already-submitted` (an earlier dispatch holds the lock) |
-| lock | push error | this run did not confirm creation — check `git ls-remote` before retrying; nothing was submitted and the census was never read (`daily-head-lock-unpushable`); a later fresh dispatch may retry the lock, with the day tag from the controller's claim still standing |
-| census | existing test-run | nothing new; refused with `daily-head-already-submitted`; day and lock are both already spent |
-| census | unreadable | nothing new; refused with `daily-head-census-unreadable`; day and lock are both already spent and no request was constructed |
 
 A push that git reports as *up-to-date* (an identical existing tag) creates
-nothing and is treated as *already existed*. The MOOG submit step's re-run
-guard (a non-first workflow attempt for the HEAD testnet,
-`daily-head-rerun-refused`) refuses before all of them. The next UTC day
-starts fresh.
+nothing and is treated as *already existed*. A **direct manual dispatch** of
+`cardano-node.yaml` for the HEAD directory — including two dispatched at the
+same moment — is an operator action outside this guarantee, exactly as it is
+for Daily Amaru and the release-matrix testnets. The next UTC day starts
+fresh.
 
 ### Validation mode (one hour)
 
@@ -131,8 +132,7 @@ starts fresh.
 `refs/tags/daily-cardano-node-head/validation/<YYYY-MM-DD>` — a claim
 namespace that cannot consume a production day claim, and a consumer commit
 whose message carries the validation mode and the UTC day, so a validation
-consumer SHA can never coincide with a production one and a validation
-submission lock can never occupy a production submission. It requires
+consumer SHA can never coincide with a production one. It requires
 explicit operator authorization at run time (it is never scheduled) and
 exists for the repository-required pre-merge validation of this path.
 
@@ -238,10 +238,8 @@ workflow, Actions tab). The dispatched MOOG run publishes its own
 `moog-correlation` artifact (`test_run_id`, `phase`, `outcome`, `report_url`)
 from the *Antithesis on cardano-node testnet* workflow, and the consumer
 commit for a day is `refs/tags/daily-cardano-node-head/<YYYY-MM-DD>` in this
-repository — three views of one correlated attempt. A daily HEAD consumer
-commit may also carry its one-shot submission lock
-`refs/tags/daily-cardano-node-head-submitted/<consumer commit>`. The
-dispatched MOOG run creates the lock before reading the census. The lock can
-be absent if the push did not create it. If the census then refuses, the lock
-exists although no request was constructed. Check the remote ref with
-`git ls-remote`.
+repository — three views of one correlated attempt. Whether a MOOG request
+was constructed for a given consumer commit is visible in the MOOG census
+itself (`moog facts test-runs`); a census refusal means no request was
+constructed by that dispatch. Check the day tag with `git ls-remote` before
+any manual action.
