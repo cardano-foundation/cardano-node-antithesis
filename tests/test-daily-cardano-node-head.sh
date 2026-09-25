@@ -473,6 +473,7 @@ daily_day=2026-09-24
 production_claim_ref="refs/tags/daily-cardano-node-head/$daily_day"
 validation_claim_ref="refs/tags/daily-cardano-node-head/validation/$daily_day"
 daily_consumer_sha=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+validation_consumer_sha=cececececececececececececececececececece
 daily_run_url=https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/424242
 daily_moog_id=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 daily_report_url=https://amaru-cardano.antithesis.com/report/00000000-0000-0000-0000-000000000000
@@ -526,6 +527,7 @@ assert_daily_complete_receipt() {
   local expected_mode=$1
   local expected_claim_ref=$2
   local expected_duration=$3
+  local expected_consumer_sha=$4
   local prepared_submission=''
   prepared_submission=$(awk '
     /^stage=submit-candidate$/ { in_prepared = 1 }
@@ -548,7 +550,7 @@ assert_daily_complete_receipt() {
   [ -n "$prepared_submission" ] ||
     fail 'no PREPARED submission record to correlate against'
   assert_last_receipt_contains "submission=$prepared_submission"
-  assert_last_receipt_contains "consumer_sha=$daily_consumer_sha"
+  assert_last_receipt_contains "consumer_sha=$expected_consumer_sha"
   assert_last_receipt_contains "workflow_run=$daily_run_url"
   assert_last_receipt_contains "moog_test_id=$daily_moog_id"
   assert_last_receipt_contains "report_url=$daily_report_url"
@@ -571,7 +573,7 @@ run_daily() {
   local scenario=$2
   local mode=${3:-daily}
   local shared_state=${4:-}
-  local day=${5:-$daily_day}
+  local day=${5-$daily_day}
   local run_base=${6-$daily_run_base}
   case_name=$label
   case_dir="$tmp_root/$daily_case_number-$label"
@@ -626,7 +628,7 @@ run_daily daily-prepared prepared daily
 require_daily_success daily-prepared
 assert_file_contains "$case_stdout" \
   "RUN $daily_day $upstream_sha $daily_consumer_sha success"
-assert_daily_complete_receipt daily "$production_claim_ref" 3
+assert_daily_complete_receipt daily "$production_claim_ref" 3 "$daily_consumer_sha"
 assert_log_count 1 '^prepare-consumer '
 assert_log_count 1 '^claim-day '
 assert_log_count 1 '^submit-run '
@@ -648,19 +650,27 @@ assert_file_contains "$case_log" \
   "submit-run $daily_consumer_sha $production_claim_ref cardano_node_head 3 false"
 assert_file_contains "$case_log" "await-run $daily_consumer_sha $daily_run_url"
 assert_file_contains "$case_log" \
-  "prepare-consumer $daily_day $daily_run_base $case_state/rendered-model $candidate_ref cardano_node_head"
+  "prepare-consumer $daily_day $daily_run_base daily $case_state/rendered-model $candidate_ref cardano_node_head"
 assert_file_contains "$case_log" "claim-day $production_claim_ref $daily_consumer_sha"
 pass request-3h-faults-exact-consumer
 
 # Every identity in one terminal record, agreeing with the observed request.
-assert_daily_complete_receipt daily "$production_claim_ref" 3
+assert_daily_complete_receipt daily "$production_claim_ref" 3 "$daily_consumer_sha"
 pass receipt-correlation
 
-# The day is derived from the clock when the workflow supplies no day.
+# The day is derived from the clock when the workflow supplies no day. The
+# expected value is computed on both sides of the invocation so a UTC
+# midnight rollover mid-scenario cannot fail an otherwise correct run.
+expected_today_before=$(TZ=UTC0 printf '%(%Y-%m-%d)T' -1)
 run_daily daily-clock-derived prepared daily '' ''
+expected_today_after=$(TZ=UTC0 printf '%(%Y-%m-%d)T' -1)
 require_daily_success daily-clock-derived
-expected_today=$(TZ=UTC0 printf '%(%Y-%m-%d)T' -1)
-assert_file_contains "$case_receipt" "day=$expected_today"
+if grep -Fqx "day=$expected_today_before" "$case_receipt" ||
+  grep -Fqx "day=$expected_today_after" "$case_receipt"; then
+  :
+else
+  fail "daily-clock-derived receipt day matches neither $expected_today_before nor $expected_today_after"
+fi
 pass daily-clock-derived
 
 # A terminal failure outcome is an honest terminal run, not a controller error.
@@ -677,19 +687,25 @@ validation_state=$tmp_root/validation-state
 mkdir -p "$validation_state/state"
 run_daily validation-prepared prepared validation "$validation_state"
 require_daily_success validation-prepared
-assert_daily_complete_receipt validation "$validation_claim_ref" 1
+assert_daily_complete_receipt validation "$validation_claim_ref" 1 "$validation_consumer_sha"
 assert_file_contains "$case_log" \
-  "submit-run $daily_consumer_sha $validation_claim_ref cardano_node_head 1 false"
+  "submit-run $validation_consumer_sha $validation_claim_ref cardano_node_head 1 false"
 [ -d "$(claim_marker_path "$validation_state/state" "$validation_claim_ref")" ] ||
   fail 'validation run left no validation claim marker'
 [ ! -d "$(claim_marker_path "$validation_state/state" "$production_claim_ref")" ] ||
   fail 'validation run consumed the production day claim'
+# Same day, same start SHA: the two consumer commits differ by construction
+# (the commit carries its mode), so their locks can never collide.
+[ "$validation_consumer_sha" != "$daily_consumer_sha" ] ||
+  fail 'validation and production consumer SHAs are not distinct by construction'
 # The same UTC day still allows a fresh production claim afterwards.
 run_daily daily-after-validation prepared daily "$validation_state"
 require_daily_success daily-after-validation
 assert_file_contains "$case_receipt" "claim_ref=$production_claim_ref"
+assert_file_contains "$case_receipt" "consumer_sha=$daily_consumer_sha"
 assert_file_contains "$case_receipt" 'stage=claim-day'
 assert_file_contains "$case_receipt" 'outcome=CLAIMED'
+assert_log_count 1 '^submit-run '
 pass validation-cannot-consume-day
 
 # --- duplicate day ----------------------------------------------------------

@@ -200,10 +200,15 @@ case "$operation" in
     require_commands git cp find mkdir
     day=${1:?day is required}
     run_base=${2:?run base is required}
-    rendered_model=${3:?rendered model is required}
-    candidate_ref=${4:?candidate ref is required}
-    testnet=${5:?testnet is required}
+    run_mode=${3:?run mode is required}
+    rendered_model=${4:?rendered model is required}
+    candidate_ref=${5:?candidate ref is required}
+    testnet=${6:?testnet is required}
     [[ "$run_base" =~ ^[0-9a-f]{40}$ ]] || die "invalid run base: $run_base"
+    case "$run_mode" in
+      daily | validation) ;;
+      *) die "unknown run mode: $run_mode" ;;
+    esac
     [ "$testnet" = cardano_node_head ] || die 'consumer directory is not the HEAD testnet'
     [ -f "$rendered_model" ] || die 'rendered model is absent'
     grep -Fq -- "image: $candidate_ref" "$rendered_model" ||
@@ -225,9 +230,15 @@ case "$operation" in
     find "$(dirname "$source_model")" -maxdepth 1 -type f \
       ! -name docker-compose.yaml -exec cp -t "$target" {} +
     git -C "$directory" add -- "testnets/$testnet"
+    # The commit message carries the run mode and the UTC day, so a
+    # validation consumer commit and a production consumer commit differ
+    # by construction even on the same day from the same start SHA: they
+    # can never share a SHA, and a validation lock can never occupy a
+    # production submission.
     git -C "$directory" -c user.name='daily-cardano-node-head' \
       -c user.email='daily-cardano-node-head@users.noreply.github.com' \
-      commit --quiet -m "chore: render the daily cardano-node HEAD topology for $day"
+      commit --quiet \
+      -m "chore: pin the $run_mode cardano-node HEAD topology for $day"
     emit "$(git -C "$directory" rev-parse HEAD)"
     ;;
 

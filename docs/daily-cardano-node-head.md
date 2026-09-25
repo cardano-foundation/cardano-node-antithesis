@@ -112,10 +112,10 @@ non-force push before any MOOG request is constructed — and only then is the
 |---|---|---|
 | day claim | created | the day tag exists; the day is spent |
 | day claim | already existed | nothing new; the day was already spent by the invocation that created it |
-| day claim | push error | no day tag exists (unless a concurrent invocation won it, which the transport re-checks and reports as `day-already-claimed`); the day is unspent and a recovery dispatch may retry |
+| day claim | push error | this run did not confirm creation — check `git ls-remote` before retrying; a concurrent winner is reported as `day-already-claimed`, and otherwise the day is unspent and a recovery dispatch may retry |
 | lock | created | the lock tag exists; the dispatch proceeds to the census and the request |
 | lock | already existed | nothing new; refused with `daily-head-already-submitted` (an earlier dispatch holds the lock) |
-| lock | push error | no lock tag exists; nothing was submitted and the census was never read (`daily-head-lock-unpushable`); a later fresh dispatch may retry the lock, with the day tag from the controller's claim still standing |
+| lock | push error | this run did not confirm creation — check `git ls-remote` before retrying; nothing was submitted and the census was never read (`daily-head-lock-unpushable`); a later fresh dispatch may retry the lock, with the day tag from the controller's claim still standing |
 | census | existing test-run | nothing new; refused with `daily-head-already-submitted`; day and lock are both already spent |
 | census | unreadable | nothing new; refused with `daily-head-census-unreadable`; day and lock are both already spent and no request was constructed |
 
@@ -129,14 +129,18 @@ starts fresh.
 
 `workflow_dispatch → validation` runs the same path with `duration=1` under
 `refs/tags/daily-cardano-node-head/validation/<YYYY-MM-DD>` — a claim
-namespace that cannot consume a production day claim. It requires explicit
-operator authorization at run time (it is never scheduled) and exists for the
-repository-required pre-merge validation of this path.
+namespace that cannot consume a production day claim, and a consumer commit
+whose message carries the validation mode and the UTC day, so a validation
+consumer SHA can never coincide with a production one and a validation
+submission lock can never occupy a production submission. It requires
+explicit operator authorization at run time (it is never scheduled) and
+exists for the repository-required pre-merge validation of this path.
 
 ## Recovery
 
 When a scheduled daily run fails, the receipt artifact names the stage that
-stopped it (see *Receipt lookup* below). Recovery is manual:
+stopped it (see *Receipt lookup* below). Recovery is manual, and follows the
+ref-state table above:
 
 - a failure **before the claim** (candidate stages, prepare-consumer,
   construct-request, including a moved main) can be retried the same day by
@@ -144,9 +148,14 @@ stopped it (see *Receipt lookup* below). Recovery is manual:
   unclaimed, and the retry starts from the new main; a moved main is the one
   failure class that is *expected* on an active repository and simply needs
   the re-dispatch;
-- a failure **at or after the claim** leaves the day consumed; the same-day
-  re-dispatch stops at `claim-day` with `day-already-claimed` by design. Fix
-  forward and let the next UTC day's schedule run it;
+- a **claim push error** left no ref this run could confirm: check
+  `git ls-remote origin refs/tags/daily-cardano-node-head/<YYYY-MM-DD>` — if
+  a concurrent invocation won it the receipt already says `day-already-claimed`,
+  otherwise the day is unspent and the re-dispatch retries the claim;
+- a failure **after the claim was created** (dispatch, await) leaves the day
+  consumed by design; the same-day re-dispatch stops at `claim-day` with
+  `day-already-claimed`. Fix forward and let the next UTC day's schedule run
+  it;
 - the #215 manual preparation (no inputs) remains available for isolating
   candidate-stage breakage without any submission boundary.
 
@@ -229,7 +238,10 @@ workflow, Actions tab). The dispatched MOOG run publishes its own
 `moog-correlation` artifact (`test_run_id`, `phase`, `outcome`, `report_url`)
 from the *Antithesis on cardano-node testnet* workflow, and the consumer
 commit for a day is `refs/tags/daily-cardano-node-head/<YYYY-MM-DD>` in this
-repository — three views of one correlated attempt. Each daily HEAD consumer
-commit also carries its one-shot submission lock
+repository — three views of one correlated attempt. A daily HEAD consumer
+commit may also carry its one-shot submission lock
 `refs/tags/daily-cardano-node-head-submitted/<consumer commit>`, created by
-the dispatched MOOG run at the moment it constructs the request.
+the dispatched MOOG run at the moment it constructs the request — the lock
+can legitimately be **absent**: a refused lock push never created it, and a
+census refusal after a taken lock leaves the request unconstructed. Check
+with `git ls-remote` rather than inferring the ref from the receipt.

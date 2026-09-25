@@ -840,6 +840,7 @@ seed_consumer_workspace() {
   local state=$1
   local name=$2
   local base=$3
+  local run_mode=$4
   run_transport_in "$state" "$name-render" env \
     STUB_REAL_GIT="$real_git" \
     HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
@@ -848,7 +849,7 @@ seed_consumer_workspace() {
   run_transport_in "$state" "$name-prepare" env \
     STUB_REAL_GIT="$real_git" \
     HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
-    "$transport" prepare-consumer "$daily_day" "$base" \
+    "$transport" prepare-consumer "$daily_day" "$base" "$run_mode" \
     "$state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
   require_success
   sed -n '1p' "$case_stdout"
@@ -857,7 +858,7 @@ seed_consumer_workspace() {
 # claim-day: creation-only push of the day tag.
 prepare_state=$tmp_root/prepare-state
 stub_main_sha=$(fabricated_main_sha)
-consumer_commit=$(seed_consumer_workspace "$prepare_state" prepare-ok "$stub_main_sha")
+consumer_commit=$(seed_consumer_workspace "$prepare_state" prepare-ok "$stub_main_sha" daily)
 [[ "$consumer_commit" =~ ^[0-9a-f]{40}$ ]] ||
   fail "prepare-consumer emitted a non-SHA commit: $consumer_commit"
 
@@ -876,6 +877,9 @@ commit_count=$("$real_git" -C "$prepare_state/consumer" rev-list --count HEAD)
 parent_sha=$("$real_git" -C "$prepare_state/consumer" rev-parse HEAD^)
 [ "$parent_sha" = "$stub_main_sha" ] ||
   fail "consumer commit is not pinned to the run's start SHA: parent=$parent_sha"
+commit_subject=$("$real_git" -C "$prepare_state/consumer" log -1 --format=%s)
+[ "$commit_subject" = "chore: pin the daily cardano-node HEAD topology for $daily_day" ] ||
+  fail "consumer commit does not carry its mode and day: $commit_subject"
 assert_log_contains \
   "git clone --quiet --filter=blob:none --depth=1 https://github.com/$consumer_repository.git $prepare_state/consumer"
 if grep -Eq '^git -C [^ ]+ .* push ' "$stub_log"; then
@@ -883,9 +887,25 @@ if grep -Eq '^git -C [^ ]+ .* push ' "$stub_log"; then
 fi
 pass prepare-consumer-renders-immutable-commit
 
+# Same day, same start SHA, different mode: the consumer commits differ by
+# construction (the message carries the mode), so their locks never collide
+# and production still submits.
+validation_prepare_state=$tmp_root/validation-prepare-state
+validation_commit=$(seed_consumer_workspace "$validation_prepare_state" \
+  validation-prepare-ok "$stub_main_sha" validation)
+[ "$validation_commit" != "$consumer_commit" ] ||
+  fail 'validation and production consumer commits share a SHA'
+validation_subject=$("$real_git" -C "$validation_prepare_state/consumer" log -1 --format=%s)
+[ "$validation_subject" = "chore: pin the validation cardano-node HEAD topology for $daily_day" ] ||
+  fail "validation consumer commit does not carry its mode: $validation_subject"
+validation_parent=$("$real_git" -C "$validation_prepare_state/consumer" rev-parse HEAD^)
+[ "$validation_parent" = "$stub_main_sha" ] ||
+  fail 'validation consumer commit is not pinned to the same run base'
+pass prepare-consumer-modes-distinct-by-construction
+
 run_transport_in "$prepare_state" prepare-missing-model env \
   STUB_REAL_GIT="$real_git" \
-  "$transport" prepare-consumer "$daily_day" "$stub_main_sha" \
+  "$transport" prepare-consumer "$daily_day" "$stub_main_sha" daily \
   "$prepare_state/not-rendered.yaml" "$candidate_ref" "$consumer_testnet"
 require_failure
 assert_stderr_token 'rendered model is absent'
@@ -896,7 +916,7 @@ sed "s#image: $candidate_ref#image: $stale_upstream_ref#g" \
   "$prepare_state/docker-compose.yaml" >"$stale_model"
 run_transport_in "$prepare_state" prepare-stale-model env \
   STUB_REAL_GIT="$real_git" \
-  "$transport" prepare-consumer "$daily_day" "$stub_main_sha" \
+  "$transport" prepare-consumer "$daily_day" "$stub_main_sha" daily \
   "$stale_model" "$candidate_ref" "$consumer_testnet"
 require_failure
 assert_stderr_token 'does not carry the candidate image'
@@ -914,7 +934,7 @@ require_success
 run_transport_in "$moved_state" prepare-moved-base env \
   STUB_REAL_GIT="$real_git" \
   HEAD_CANDIDATE_SOURCE_MODEL="$source_model" \
-  "$transport" prepare-consumer "$daily_day" "$moved_base" \
+  "$transport" prepare-consumer "$daily_day" "$moved_base" daily \
   "$moved_state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
 require_failure
 assert_stderr_token 'start-sha-moved'
@@ -924,7 +944,7 @@ pass prepare-consumer-fails-closed-on-moved-base
 
 run_transport_in "$moved_state" prepare-bad-base env \
   STUB_REAL_GIT="$real_git" \
-  "$transport" prepare-consumer "$daily_day" not-a-sha \
+  "$transport" prepare-consumer "$daily_day" not-a-sha daily \
   "$moved_state/docker-compose.yaml" "$candidate_ref" "$consumer_testnet"
 require_failure
 assert_stderr_token 'invalid run base'
@@ -934,7 +954,7 @@ pass prepare-consumer-rejects-malformed-base
 claim_ok_state=$tmp_root/claim-ok-state
 claim_ok_fixture=$scenario_root/claim-ok-empty
 : >"$claim_ok_fixture"
-claim_commit=$(seed_consumer_workspace "$claim_ok_state" claim-ok "$stub_main_sha")
+claim_commit=$(seed_consumer_workspace "$claim_ok_state" claim-ok "$stub_main_sha" daily)
 run_transport_in "$claim_ok_state" claim-day-ok env \
   STUB_REAL_GIT="$real_git" \
   STUB_LSREMOTE_FILE="$claim_ok_fixture" \
@@ -953,7 +973,7 @@ pass claim-day-creates-tag-once
 claim_blocked_state=$tmp_root/claim-blocked-state
 claim_blocked_fixture=$scenario_root/claim-blocked
 : >"$claim_blocked_fixture"
-blocked_commit=$(seed_consumer_workspace "$claim_blocked_state" claim-blocked "$stub_main_sha")
+blocked_commit=$(seed_consumer_workspace "$claim_blocked_state" claim-blocked "$stub_main_sha" daily)
 printf '%s\t%s\n' "$blocked_commit" "$daily_claim_ref" >>"$claim_blocked_fixture"
 blocked_marker_pushes=$(grep -Ec "push --force-with-lease=$daily_claim_ref:" "$stub_log" || true)
 run_transport_in "$claim_blocked_state" claim-day-blocked env \
@@ -972,7 +992,7 @@ pass claim-day-refuses-existing-tag
 claim_fail_state=$tmp_root/claim-fail-state
 claim_fail_fixture=$scenario_root/claim-fail-empty
 : >"$claim_fail_fixture"
-fail_commit=$(seed_consumer_workspace "$claim_fail_state" claim-fail "$stub_main_sha")
+fail_commit=$(seed_consumer_workspace "$claim_fail_state" claim-fail "$stub_main_sha" daily)
 case ${fail_commit:0:1} in
   0) wrong_commit="1${fail_commit:1}" ;;
   *) wrong_commit="0${fail_commit:1}" ;;

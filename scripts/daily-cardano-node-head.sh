@@ -329,7 +329,7 @@ fi
 # ---------------------------------------------------------------------------
 consumer_output=''
 if ! consumer_output=$(transport_call prepare-consumer \
-  "$day" "$run_base" "$rendered_model" "$candidate_ref" "$consumer_testnet"); then
+  "$day" "$run_base" "$mode" "$rendered_model" "$candidate_ref" "$consumer_testnet"); then
   fail_stage prepare-consumer consumer-failed
 fi
 consumer_sha=''

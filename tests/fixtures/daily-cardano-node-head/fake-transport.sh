@@ -15,6 +15,7 @@ fixture_ref=refs/heads/master
 fixture_mismatch_repository=ghcr.io/example/cardano-node
 
 consumer_sha=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+validation_consumer_sha=cececececececececececececececececececece
 moog_test_id=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 daily_report_url=https://amaru-cardano.antithesis.com/report/00000000-0000-0000-0000-000000000000
 daily_run_url=https://github.com/cardano-foundation/cardano-node-antithesis/actions/runs/424242
@@ -275,22 +276,33 @@ case "$operation" in
   prepare-consumer)
     day=${1:?day is required}
     run_base=${2:?run base is required}
-    rendered_model=${3:?rendered model is required}
-    candidate_ref=${4:?candidate ref is required}
-    testnet=${5:?testnet is required}
-    log prepare-consumer "$day" "$run_base" "$rendered_model" "$candidate_ref" "$testnet"
+    run_mode=${3:?run mode is required}
+    rendered_model=${4:?rendered model is required}
+    candidate_ref=${5:?candidate ref is required}
+    testnet=${6:?testnet is required}
+    log prepare-consumer "$day" "$run_base" "$run_mode" \
+      "$rendered_model" "$candidate_ref" "$testnet"
+    case "$run_mode" in
+      daily) consumer_result=$consumer_sha ;;
+      validation) consumer_result=$validation_consumer_sha ;;
+      *) consumer_result='' ;;
+    esac
     case "$scenario" in
       daily-consumer-failure)
         printf 'consumer preparation failed\n' >&2
         exit 1
         ;;
       daily-consumer-multiline)
-        printf '%s\n%s\n' "${consumer_sha:0:20}" "${consumer_sha:20}"
+        printf '%s\n%s\n' "${consumer_result:0:20}" "${consumer_result:20}"
         ;;
       daily-consumer-malformed-sha)
         printf 'not-a-consumer-sha\n'
         ;;
       *)
+        [ -n "$consumer_result" ] || {
+          printf 'unknown run mode: %s\n' "$run_mode" >&2
+          exit 1
+        }
         [ -f "$rendered_model" ] || {
           printf 'rendered model missing: %s\n' "$rendered_model" >&2
           exit 1
@@ -300,7 +312,7 @@ case "$operation" in
           printf 'consumer model candidate mismatch\n' >&2
           exit 1
         }
-        printf '%s\n' "$consumer_sha"
+        printf '%s\n' "$consumer_result"
         ;;
     esac
     ;;
