@@ -101,9 +101,9 @@ write_openssl_standin() {
 # read from the descriptor it is handed (never argv) and compared with the
 # expected key; the signature is opaque and deterministic.
 log=${DAILY_AMARU_BOUNDARY_OPENSSL_LOG:-/dev/null}
-printf 'openssl' >>"$log"
-printf ' %s' "$@" >>"$log"
-printf '\n' >>"$log"
+# One write per record: the dgst and base64 stages of the signing pipeline run
+# concurrently and share this log, so a record must not be split across writes.
+printf 'openssl %s\n' "$*" >>"$log"
 case "${1:-} ${2:-}" in
   'base64 -A')
     [ "$#" -eq 2 ] || exit 64
@@ -1495,7 +1495,7 @@ assert_consumer_identity() {
     fail 'consumer token leaked into argv, stdout, stderr or logs'
   fi
   grep -Eq '^openssl dgst -sha256 -sign /dev/fd/[0-9]+$' "$openssl_log" ||
-    fail 'private key was not handed to openssl on a descriptor'
+    fail "private key was not handed to openssl on a descriptor: $(tr '\n' ' ' <"$openssl_log")"
 
   # A later write is a later mint: renewal, never reuse of the first token.
   consumer_shared_counter="$tmp_root/consumer-shared-counter"
