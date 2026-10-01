@@ -262,9 +262,15 @@ if [ "$mode" = production ]; then
     fi
     fail_stage identity missing-production-identity
   fi
-  # No fallback to the workflow token: its consumer PRs never get CI admitted.
-  [ -n "${DAILY_AMARU_CONSUMER_IDENTITY:-}" ] ||
-    fail_stage consumer-identity missing-consumer-identity
+  # The consumer identity is minted from the App credentials at the write
+  # boundary; with none, the consumer PR would fall to the workflow token and
+  # never get CI admitted. Refuse before any claim or mutation.
+  consumer_missing=()
+  [ -n "${DAILY_AMARU_APP_ID:-}" ] || consumer_missing+=(DAILY_AMARU_APP_ID)
+  [ -n "${DAILY_AMARU_APP_PRIVATE_KEY:-}" ] || consumer_missing+=(DAILY_AMARU_APP_PRIVATE_KEY)
+  if [ "${#consumer_missing[@]}" -gt 0 ]; then
+    fail_stage consumer-identity "missing-consumer-credentials-$(IFS=,; printf '%s' "${consumer_missing[*]}")"
+  fi
 else
   identity=dry-run
 fi

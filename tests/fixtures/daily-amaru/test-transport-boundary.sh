@@ -12,13 +12,26 @@ fixture_root="$repo_root/tests/fixtures/daily-amaru"
 fake_gh="$fixture_root/boundary-gh.sh"
 fake_nix="$fixture_root/boundary-nix.sh"
 fake_docker="$fixture_root/boundary-docker.sh"
+fake_curl="$fixture_root/boundary-curl.sh"
 tmp_root=$(mktemp -d)
 trap 'rm -rf "$tmp_root"' EXIT
+
+# The App credentials every production-shaped run is given; the consumer mint
+# signs with them at the write boundary and the openssl stand-in checks the key.
+consumer_test_key='-----BEGIN PRIVATE KEY-----
+boundary-consumer-key-material
+-----END PRIVATE KEY-----'
+consumer_test_app=4639090
+export DAILY_AMARU_APP_ID=$consumer_test_app
+export DAILY_AMARU_APP_PRIVATE_KEY=$consumer_test_key
+export DAILY_AMARU_BOUNDARY_EXPECTED_KEY=$consumer_test_key
+export DAILY_AMARU_BOUNDARY_MINT_COUNTER=$tmp_root/mint-counter
+export DAILY_AMARU_BOUNDARY_CURL_LOG=$tmp_root/curl.log
 
 seeded_commands=(
   bash cat date dirname find git grep head jq mkdir mv sed seq sleep sort tail tr awk
 )
-standin_commands=(gh nix docker rg)
+standin_commands=(gh nix docker rg openssl curl)
 scheduled_command_census=()
 
 declare -A boundary_seed_sources=()
@@ -77,6 +90,39 @@ EOF
   chmod +x "$path"
 }
 
+write_openssl_standin() {
+  local path=$1 base64_bin sha_bin
+  base64_bin=$(command -v base64) || fail 'host base64 is required for the openssl stand-in'
+  sha_bin=$(command -v sha256sum) || fail 'host sha256sum is required for the openssl stand-in'
+  {
+    printf '#!/usr/bin/env bash\nset -euo pipefail\nbase64_bin=%q\nsha_bin=%q\n' "$base64_bin" "$sha_bin"
+    cat <<'EOF'
+# Stand-in for the two openssl invocations the consumer mint makes. The key is
+# read from the descriptor it is handed (never argv) and compared with the
+# expected key; the signature is opaque and deterministic.
+log=${DAILY_AMARU_BOUNDARY_OPENSSL_LOG:-/dev/null}
+printf 'openssl' >>"$log"
+printf ' %s' "$@" >>"$log"
+printf '\n' >>"$log"
+case "${1:-} ${2:-}" in
+  'base64 -A')
+    [ "$#" -eq 2 ] || exit 64
+    "$base64_bin" -w0
+    ;;
+  'dgst -sha256')
+    [ "$#" -eq 4 ] && [ "$3" = -sign ] || exit 64
+    [ "${DAILY_AMARU_BOUNDARY_OPENSSL_FAIL:-0}" != 1 ] || exit 1
+    key=$(cat "$4")
+    [ "$key" = "${DAILY_AMARU_BOUNDARY_EXPECTED_KEY:?}" ] || exit 1
+    { cat; printf '%s\n' "$key"; } | "$sha_bin" | awk '{ print $1 }'
+    ;;
+  *) exit 64 ;;
+esac
+EOF
+  } >"$path"
+  chmod +x "$path"
+}
+
 bind_boundary_sources() {
   local command source_dir target
   [ "$boundary_sources_bound" -eq 0 ] || return 0
@@ -101,7 +147,9 @@ bind_boundary_sources() {
   ln -sf "$fake_gh" "$source_dir/gh"
   ln -sf "$fake_nix" "$source_dir/nix"
   ln -sf "$fake_docker" "$source_dir/docker"
+  ln -sf "$fake_curl" "$source_dir/curl"
   write_rg_standin "$source_dir/rg"
+  write_openssl_standin "$source_dir/openssl"
   for command in "${standin_commands[@]}"; do
     target="$source_dir/$command"
     [ "${target:0:1}" = / ] && [ -x "$target" ] ||
@@ -449,7 +497,6 @@ assert_pollution_with_remotes() {
     DAILY_AMARU_DAY="$day" \
     DAILY_AMARU_HEAD="$workflow_head" \
     DAILY_AMARU_IDENTITY=boundary-bootstrap-token \
-    DAILY_AMARU_CONSUMER_IDENTITY=boundary-consumer-token \
     GH_TOKEN=boundary-repository-token \
     DAILY_AMARU_STATE_DIR="$state" \
     DAILY_AMARU_RECEIPT="$receipt" \
@@ -631,7 +678,6 @@ execute_value_operation() {
   GIT_TRACE=1 DAILY_AMARU_DAY="$day" GIT_CONFIG_NOSYSTEM=1 \
     GIT_CONFIG_GLOBAL=/dev/null \
     DAILY_AMARU_IDENTITY=boundary-bootstrap-token GH_TOKEN=boundary-repository-token \
-    DAILY_AMARU_CONSUMER_IDENTITY=boundary-consumer-token \
     DAILY_AMARU_STATE_DIR="$state" DAILY_AMARU_BOUNDARY_GH_LOG="$effects" \
     DAILY_AMARU_BOUNDARY_COMMENTS="$comments" \
     DAILY_AMARU_BOUNDARY_BOOTSTRAP_REMOTE="$bootstrap_remote" \
@@ -812,8 +858,8 @@ assert_value_mutants() {
       inside && operation == "prepare-consumer-repin" && /consumer-pr/ && /^    printf/ {
         print "    emit \"$pr_url\" " marker
       }
-      inside && operation == "require-consumer-checks" && /^    emit "\$rows"/ {
-        print "    emit \"$rows\" " marker
+      inside && operation == "require-consumer-checks" && /^    observe_consumer_checks / {
+        print "    emit \"$candidate\" " marker
       }
       inside && operation == "resolve-image" && /invalid registry digest/ {
         print "    emit \"$digest\" " marker
@@ -1213,7 +1259,6 @@ run_atomic_controller() {
     DAILY_AMARU_DAY="$day" \
     DAILY_AMARU_HEAD="$workflow_head" \
     DAILY_AMARU_IDENTITY=boundary-bootstrap-token \
-    DAILY_AMARU_CONSUMER_IDENTITY=boundary-consumer-token \
     GH_TOKEN=boundary-repository-token \
     DAILY_AMARU_STATE_DIR="$state" \
     DAILY_AMARU_RECEIPT="$receipt" \
@@ -1346,28 +1391,44 @@ assert_atomic_peer_snapshot() {
     "$prs_after_failure" "$launches"
 }
 
-# Consumer writes must carry the dedicated consumer App identity, never the
-# workflow's own token (whose PR events await approval and run no CI). Every
-# credential-bearing step is observed where it executes: `gh` records its
-# identity, and the receiving repository's pre-receive hook records the identity
-# in the environment of the real `git push`.
+# Consumer writes must carry a consumer App identity minted at the write
+# boundary, never the workflow's own token (whose PR events await approval and
+# run no CI) and never a token minted earlier (it lives one hour; the bootstrap
+# wait that precedes the write may outlast it). Every credential-bearing step is
+# observed where it executes: `gh` records its identity, and the receiving
+# repository's pre-receive hook records the identity in the environment of the
+# real `git push`.
 # shellcheck disable=SC2016
 consumer_identity_run() {
-  local label=$1 consumer_token=$2 rc=0
+  local label=$1 app_key=$2 rc=0
   local remote hook_bash
   remote=$(create_consumer_remote "$label")
   prepare_case "$label"
   hook_bash=$(command -v bash)
   identity_log="$case_root/identity"
+  openssl_log="$case_root/openssl"
+  curl_log="$case_root/curl"
+  : >"$curl_log"
+  mint_counter=${consumer_shared_counter:-$case_root/mint-counter}
   : >"$identity_log"
+  : >"$openssl_log"
   printf '#!%s\nprintf "push token=%%s\\n" "${GH_TOKEN:-}" >>%q\n' \
     "$hook_bash" "$identity_log" >"$remote/hooks/pre-receive"
   chmod +x "$remote/hooks/pre-receive"
   consumer_identity_remote=$remote
+  local kv
+  for kv in ${consumer_extra_env[@]+"${consumer_extra_env[@]}"}; do
+    export "${kv?}"
+  done
   GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
     DAILY_AMARU_DAY="$day" \
     GH_TOKEN=boundary-repository-token \
-    DAILY_AMARU_CONSUMER_IDENTITY="$consumer_token" \
+    DAILY_AMARU_APP_ID="$consumer_test_app" \
+    DAILY_AMARU_APP_PRIVATE_KEY="$app_key" \
+    DAILY_AMARU_BOUNDARY_EXPECTED_KEY="$consumer_test_key" \
+    DAILY_AMARU_BOUNDARY_OPENSSL_LOG="$openssl_log" \
+    DAILY_AMARU_BOUNDARY_CURL_LOG="$curl_log" \
+    DAILY_AMARU_BOUNDARY_MINT_COUNTER="$mint_counter" \
     DAILY_AMARU_STATE_DIR="$state" \
     DAILY_AMARU_BOUNDARY_GH_LOG="$effects" \
     DAILY_AMARU_BOUNDARY_IDENTITY_LOG="$identity_log" \
@@ -1376,61 +1437,131 @@ consumer_identity_run() {
     run_boundary_command "$bin" "$transport" prepare-consumer-repin \
     "ghcr.io/lambdasistemi/amaru-bootstrap-producer:$upstream_sha@sha256:$(printf '%064d' 0)" \
     >"$stdout" 2>"$stderr" || rc=$?
+  for kv in ${consumer_extra_env[@]+"${consumer_extra_env[@]}"}; do
+    unset "${kv%%=*}"
+  done
   consumer_identity_rc=$rc
 }
 
-assert_consumer_identity() {
-  local expected_token=boundary-consumer-token
-  local operations_seen
+assert_consumer_branch() {
+  git --git-dir="$consumer_identity_remote" rev-parse --verify --quiet \
+    "refs/heads/daily-amaru/consumer-$day" >/dev/null
+}
 
-  consumer_identity_run consumer-identity-present "$expected_token"
+assert_consumer_no_effect() {
+  local why=$1
+  [ ! -s "$identity_log" ] || fail "consumer mutation attempted: $why"
+  ! assert_consumer_branch || fail "consumer branch pushed: $why"
+  ! grep -Fq 'repo clone' "$effects" || fail "consumer clone attempted: $why"
+}
+
+# shellcheck disable=SC2015
+assert_consumer_identity() {
+  local first_token=boundary-consumer-token-1 second_token=boundary-consumer-token-2
+  consumer_extra_env=()
+
+  # Delayed use: the job-start token the workflow could have minted is expired
+  # by the time the write boundary is reached. It is offered in the environment
+  # and must be ignored; a token is minted at the moment of use.
+  consumer_extra_env=(DAILY_AMARU_CONSUMER_IDENTITY=boundary-expired-token)
+  consumer_identity_run consumer-identity-present "$consumer_test_key"
   [ "$consumer_identity_rc" -eq 0 ] ||
     fail "consumer repin failed: $(tr '\n' ' ' <"$stderr")"
-  # Control: all three consumer mutations (clone, push, PR creation) were seen.
   for operation in 'repo clone' 'push' 'pr create'; do
-    grep -Fqx "$operation token=$expected_token" "$identity_log" ||
-      fail "consumer mutation did not carry the consumer identity: $operation"
+    grep -Fqx "$operation token=$first_token" "$identity_log" ||
+      fail "consumer mutation did not carry the freshly minted identity: $operation"
   done
-  operations_seen=$(wc -l <"$identity_log")
-  [ "$operations_seen" -eq 3 ] ||
-    fail "consumer identity census saw $operations_seen operations, expected 3"
+  [ "$(wc -l <"$identity_log")" -eq 3 ] ||
+    fail "consumer identity census saw $(wc -l <"$identity_log") operations, expected 3"
   if grep -Fq 'boundary-repository-token' "$identity_log"; then
     fail 'repository token reached a consumer mutation'
   fi
-  if grep -Fq "$expected_token" "$effects" "$stdout" "$stderr"; then
-    fail 'consumer identity leaked into argv, stdout or stderr'
+  if grep -Fq 'boundary-expired-token' "$identity_log"; then
+    fail 'an expired consumer token reached a consumer mutation'
   fi
-  git --git-dir="$consumer_identity_remote" rev-parse --verify --quiet \
-    "refs/heads/daily-amaru/consumer-$day" >/dev/null ||
-    fail 'consumer branch was not pushed'
+  [ "$(cat "$mint_counter")" -eq 1 ] || fail 'consumer identity was not minted exactly once'
+  if grep -Eq 'Bearer|eyJ' "$curl_log" "$effects" "$stderr"; then
+    fail 'the App JWT reached an argument vector or a log'
+  fi
+  grep -Fq -- '--header @/dev/fd/' "$curl_log" ||
+    fail 'the App JWT was not handed to curl on a descriptor'
+  assert_consumer_branch || fail 'consumer branch was not pushed'
+  # Nothing secret in argv, outputs or effect logs: the key travels on a
+  # descriptor, the JWT and token only in the environment.
+  if grep -Fq 'boundary-consumer-key-material' "$effects" "$stdout" "$stderr" "$openssl_log" "$curl_log"; then
+    fail 'consumer private key leaked into argv, stdout, stderr or logs'
+  fi
+  if grep -Fq "$first_token" "$effects" "$stdout" "$stderr" "$openssl_log" "$curl_log"; then
+    fail 'consumer token leaked into argv, stdout, stderr or logs'
+  fi
+  grep -Eq '^openssl dgst -sha256 -sign /dev/fd/[0-9]+$' "$openssl_log" ||
+    fail 'private key was not handed to openssl on a descriptor'
 
+  # A later write is a later mint: renewal, never reuse of the first token.
+  consumer_shared_counter="$tmp_root/consumer-shared-counter"
+  rm -f "$consumer_shared_counter"
+  consumer_identity_run consumer-identity-first "$consumer_test_key"
+  consumer_identity_run consumer-identity-later "$consumer_test_key"
+  consumer_shared_counter=''
+  [ "$consumer_identity_rc" -eq 0 ] &&
+    grep -Fqx "repo clone token=$second_token" "$identity_log" &&
+    grep -Fqx "push token=$second_token" "$identity_log" &&
+    grep -Fqx "pr create token=$second_token" "$identity_log" ||
+    fail 'a later write did not mint its own identity'
+
+  # Absent credentials: classified, and not one effect reaches the consumer.
+  consumer_extra_env=()
   consumer_identity_run consumer-identity-absent ''
-  [ "$consumer_identity_rc" -ne 0 ] || fail 'absent consumer identity succeeded'
-  grep -Fq 'consumer identity is empty' "$stderr" ||
-    fail 'absent consumer identity was not classified'
-  [ ! -s "$effects" ] && [ ! -s "$identity_log" ] ||
-    fail 'consumer mutation was attempted without a consumer identity'
-  if git --git-dir="$consumer_identity_remote" rev-parse --verify --quiet \
-    "refs/heads/daily-amaru/consumer-$day" >/dev/null; then
-    fail 'consumer branch was pushed without a consumer identity'
-  fi
-  printf 'CONSUMER-IDENTITY mutations=3 consumer_token=3 repository_token=0 absent=classified-no-effects\n'
+  [ "$consumer_identity_rc" -ne 0 ] || fail 'absent consumer credentials succeeded'
+  grep -Fq 'consumer mint failed: app-credentials-absent' "$stderr" ||
+    fail 'absent consumer credentials were not classified'
+  assert_consumer_no_effect 'absent credentials'
+  [ ! -s "$effects" ] || fail 'absent credentials still reached gh'
+
+  # Each failing mint step is named and stops before any consumer effect.
+  consumer_extra_env=(DAILY_AMARU_BOUNDARY_OPENSSL_FAIL=1)
+  consumer_identity_run consumer-identity-signing "$consumer_test_key"
+  [ "$consumer_identity_rc" -ne 0 ] &&
+    grep -Fq 'consumer mint failed: jwt-signing' "$stderr" ||
+    fail 'a signing failure was not classified'
+  assert_consumer_no_effect 'signing failure'
+  consumer_extra_env=(DAILY_AMARU_BOUNDARY_INSTALLATION=absent)
+  consumer_identity_run consumer-identity-installation "$consumer_test_key"
+  [ "$consumer_identity_rc" -ne 0 ] &&
+    grep -Fq 'consumer mint failed: installation-lookup' "$stderr" ||
+    fail 'a missing installation was not classified'
+  assert_consumer_no_effect 'missing installation'
+  consumer_extra_env=()
+  consumer_identity_run consumer-identity-wrong-key 'not-the-key'
+  [ "$consumer_identity_rc" -ne 0 ] &&
+    grep -Fq 'consumer mint failed: jwt-signing' "$stderr" ||
+    fail 'a wrong private key was not rejected at signing'
+  assert_consumer_no_effect 'wrong key'
+  printf 'CONSUMER-IDENTITY mutations=3 minted_at_use=1 expired_token_ignored=1 repository_token=0 failures=4 classified-no-effects\n'
 }
 
 # shellcheck disable=SC2016
 assert_consumer_identity_mutants() {
   local mutant_root="$tmp_root/consumer-identity-mutants" mutant
   mkdir -p "$mutant_root"
-  # Broken wiring 1: the default repository token silently replaces the App's.
-  mutant="$mutant_root/fallback.sh"
-  sed 's#^consumer_identity=.*#consumer_identity=${DAILY_AMARU_CONSUMER_IDENTITY:-${GH_TOKEN:-}}#' \
+  # Broken wiring 1: the job-start token is trusted instead of minting at use.
+  mutant="$mutant_root/static.sh"
+  sed 's#^    consumer_identity=\$(mint_consumer_identity) || die .consumer identity mint failed.#    consumer_identity=${DAILY_AMARU_CONSUMER_IDENTITY:-}#' \
     "$transport" >"$mutant"
   chmod +x "$mutant"
-  grep -Fq 'consumer_identity=${DAILY_AMARU_CONSUMER_IDENTITY:-${GH_TOKEN:-}}' "$mutant" ||
-    fail 'fallback mutation did not apply'
+  grep -Fq 'consumer_identity=${DAILY_AMARU_CONSUMER_IDENTITY:-}' "$mutant" ||
+    fail 'static-token mutation did not apply'
+  reject_scenario_mutant consumer-static "$mutant" consumer-identity \
+    'consumer repin failed'
+  # Broken wiring 2: the repository token silently replaces the consumer one.
+  mutant="$mutant_root/fallback.sh"
+  sed 's#^    consumer_identity=\$(mint_consumer_identity) || die .consumer identity mint failed.#    consumer_identity=$(mint_consumer_identity || printf %s "${GH_TOKEN:-}")#' \
+    "$transport" >"$mutant"
+  chmod +x "$mutant"
+  grep -Fq 'printf %s "${GH_TOKEN:-}")' "$mutant" || fail 'fallback mutation did not apply'
   reject_scenario_mutant consumer-fallback "$mutant" consumer-identity \
-    'absent consumer identity succeeded'
-  # Broken wiring 2: only the push regresses to the repository token.
+    'absent consumer credentials succeeded'
+  # Broken wiring 3: only the push regresses to the repository token.
   mutant="$mutant_root/push.sh"
   sed 's#push_branch "$directory" "$branch" "$consumer_identity"#push_branch "$directory" "$branch" "$repository_identity"#' \
     "$transport" >"$mutant"
@@ -1438,17 +1569,23 @@ assert_consumer_identity_mutants() {
   grep -Fq 'push_branch "$directory" "$branch" "$repository_identity"' "$mutant" ||
     fail 'push mutation did not apply'
   reject_scenario_mutant consumer-push "$mutant" consumer-identity \
-    'consumer mutation did not carry the consumer identity: push'
-  # Broken wiring 3: PR creation regresses to the repository token.
+    'consumer mutation did not carry the freshly minted identity: push'
+  # Broken wiring 4: PR creation regresses to the repository token.
   mutant="$mutant_root/pr.sh"
-  sed 's#^      "\$consumer_identity")#      "$repository_identity")#' \
-    "$transport" >"$mutant"
+  sed 's#^      "\$consumer_identity")#      "$repository_identity")#' "$transport" >"$mutant"
   chmod +x "$mutant"
-  grep -Fq '      "$repository_identity")' "$mutant" ||
-    fail 'PR mutation did not apply'
+  grep -Fq '      "$repository_identity")' "$mutant" || fail 'PR mutation did not apply'
   reject_scenario_mutant consumer-pr "$mutant" consumer-identity \
-    'consumer mutation did not carry the consumer identity: pr create'
-  printf 'CONSUMER-IDENTITY-MUTANTS rejected=3\n'
+    'consumer mutation did not carry the freshly minted identity: pr create'
+  # Broken wiring 5: the token request widens beyond this repository.
+  mutant="$mutant_root/scope.sh"
+  sed 's#\\"repositories\\":\[\\"%s\\"\]#\\"repositories\\":[\\"%s\\",\\"other\\"]#' "$transport" >"$mutant"
+  sed -i 's#{"repositories":\["%s"\]#{"repositories":["%s","other"]#' "$mutant"
+  chmod +x "$mutant"
+  grep -Fq '"repositories":["%s","other"]' "$mutant" || fail 'scope mutation did not apply'
+  reject_scenario_mutant consumer-scope "$mutant" consumer-identity \
+    'consumer repin failed'
+  printf 'CONSUMER-IDENTITY-MUTANTS rejected=5\n'
 }
 
 case "$scenario" in
@@ -1466,6 +1603,13 @@ case "$scenario" in
     ;;
   consumer-identity)
     assert_consumer_identity
+    ;;
+  consumer-observation)
+    # shellcheck disable=SC1091
+    . "$fixture_root/check-observation.sh"
+    # shellcheck disable=SC1091
+    . "$fixture_root/consumer-observation.sh"
+    assert_consumer_observation
     ;;
   census)
     assert_value_census
@@ -1496,6 +1640,10 @@ case "$scenario" in
     . "$fixture_root/check-observation.sh"
     run_check_observation_proof
     run_check_observation_boundaries_proof
+    # shellcheck disable=SC1091
+    . "$fixture_root/consumer-observation.sh"
+    assert_consumer_observation
+    assert_consumer_observation_mutants
     printf 'VALUE-CHANNEL operations=%s executed=%s census=complete mutants_rejected=%s\n' \
       "$value_operation_count" "$value_executed_count" "$value_mutants_rejected"
     printf 'VALUE-CHANNEL-FIRED reproduced=malformed-candidate-sha real_git=1 real_transport=1\n'

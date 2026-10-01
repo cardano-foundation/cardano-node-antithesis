@@ -41,8 +41,8 @@ repository variable `DAILY_AMARU_APP_ID` and secret
 `amaru-bootstrap` alone, and exactly five permissions: actions read, checks
 read, contents write, pull requests write, metadata read.
 
-That token authorizes the bootstrap boundary only. Other same-repository work — issue
-receipts, check observation, launch — uses the workflow's own
+That token authorizes the bootstrap boundary only. Same-repository work — issue
+receipts, consumer repin, check observation, launch — uses the workflow's own
 repository token, granted exactly the permissions those operations declare. The
 two are never interchangeable, and neither the private key nor the minted token
 is printed, persisted, exported through `$GITHUB_ENV`, committed, or passed as a
@@ -60,17 +60,40 @@ the transport cannot publish its issue receipt.
 
 ## Consumer App identity
 
-The consumer branch push and pull request are created with a second token
-minted from the same App, scoped to owner `cardano-foundation`, repository
-`cardano-node-antithesis` alone, and exactly three permissions: contents write,
+The consumer branch push and pull request are created with an installation
+token of the same App, minted by the transport at the moment of the write —
+never at job start, because the token lives one hour and the bootstrap wait
+before the write may outlast it. It is scoped to repository
+`cardano-node-antithesis` alone, with exactly three permissions: contents write,
 pull requests write, metadata read. Pull request events authored with the
 workflow's own token wait for manual approval and run no checks, so only an App
-token lets the seven consumer checks run unattended. It is bound to the
-controller step as `DAILY_AMARU_CONSUMER_IDENTITY`, used for the consumer clone,
-push and pull request creation only, and never replaced by the workflow token.
+token lets the seven consumer checks run unattended. The mint signs a five
+minute App JWT with `openssl`, asks `GET /repos/<repository>/installation` for
+the installation and `POST /app/installations/<id>/access_tokens` for the token.
+The private key is read through a descriptor, the JWT travels in an
+`Authorization: Bearer` header read by `curl` from a descriptor, and the token
+only in `GH_TOKEN`; none appears in argv, logs, receipts or git remotes. There
+is no fallback: the workflow token never stands in for it.
 
-An absent or failed consumer mint exits non-zero at `stage=consumer-identity`
-with `error=missing-consumer-identity`, before any claim or consumer effect.
+Absent App credentials fail at `stage=consumer-identity` with
+`error=missing-consumer-credentials-<names>` before any claim or effect. A mint
+that fails at the write boundary names its step (`app-credentials-absent`,
+`jwt-signing`, `installation-lookup`, `token-request`) and stops before any
+consumer effect.
+
+## Consumer check observation
+
+A freshly created consumer pull request starts with no checks, then queued and
+running ones. `require-consumer-checks` therefore observes the exact candidate
+head until every required check is uniquely successful, polling every
+`DAILY_AMARU_CONSUMER_CHECK_POLL_SECONDS` (default 30) up to an absolute
+ceiling `DAILY_AMARU_CONSUMER_CHECK_MAX_SECONDS` (default 2700; with the 7200
+second bootstrap ceiling this fits the 180 minute job). Absence and pending
+states are waited out; a terminal non-success, a skipped required job, a
+duplicate success, a run awaiting approval (`action_required`) or a transport
+error fails at once, and rows for any other head never count. At the ceiling the
+failure names the check, the poll count and the checks actually observed
+(`still-running` or `never-reported`).
 
 ## Operator setup gate
 

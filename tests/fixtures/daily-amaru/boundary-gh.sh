@@ -15,6 +15,11 @@ main_sha=${DAILY_AMARU_BOUNDARY_MAIN_SHA:-$integrated_sha}
   printf '\n'
 } >>"$log_file"
 printf 'boundary-gh diagnostic: %s\n' "$*" >&2
+# A token the App has let expire is rejected like the real API would.
+if [ "${GH_TOKEN:-}" = boundary-expired-token ]; then
+  printf 'boundary-gh: Bad credentials (expired token)\n' >&2
+  exit 1
+fi
 if [ -n "${DAILY_AMARU_BOUNDARY_IDENTITY_LOG:-}" ]; then
   case "${1:-} ${2:-}" in
     "repo clone" | "pr create")

@@ -18,18 +18,20 @@ bootstrap_repository=${DAILY_AMARU_BOOTSTRAP_REPOSITORY:-lambdasistemi/amaru-boo
 producer_image=ghcr.io/lambdasistemi/amaru-bootstrap-producer
 
 # The bootstrap App token authorizes lambdasistemi/amaru-bootstrap only. The
-# consumer App token is scoped to this repository and is used only for the
-# consumer branch push and PR creation, whose events must trigger CI (events
-# authored with the workflow's own token await approval). Other same-repository
-# operations use the workflow's own token. None is interchangeable.
+# consumer identity is a separate App installation token scoped to this
+# repository, minted by `mint_consumer_identity` at the consumer write boundary
+# (never at job start: it lives one hour and the bootstrap wait may outlast it)
+# and used only for the consumer clone, push and PR creation, whose events must
+# trigger CI (events authored with the workflow token await approval). Other
+# same-repository operations use the workflow token. None is interchangeable.
 bootstrap_identity=${DAILY_AMARU_IDENTITY:-}
-consumer_identity=${DAILY_AMARU_CONSUMER_IDENTITY:-}
+consumer_identity=''
 repository_identity=${GH_TOKEN:-}
 
 # D213-04: every non-shell command a reachable production operation needs.
 # `preflight` reports the first absent member by name.
 scheduled_command_census=(
-  gh git jq rg sed awk grep tail tr head seq sleep date docker nix
+  gh git jq rg sed awk grep tail tr head seq sleep date docker nix openssl curl
 )
 consumer_required_checks=(
   'Build and push component images for cardano-node testnet|publish-images'
@@ -158,6 +160,67 @@ with_identity() {
   GH_TOKEN=$identity "$@"
 }
 
+b64url() {
+  openssl base64 -A | tr '+/' '-_' | tr -d '='
+}
+
+# One App-authenticated request. The App JWT must go in an `Authorization:
+# Bearer` header (a `token` scheme is refused for JWTs, which is what `gh`
+# sends), and it must not appear in argv: curl reads the header from a
+# descriptor. Body, when given, arrives on stdin.
+app_api() {
+  local jwt=$1 method=$2 path=$3
+  local api=${GITHUB_API_URL:-https://api.github.com}
+  local -a payload_flag=()
+  [ "$method" = GET ] || payload_flag=(--data-binary @-)
+  curl --silent --show-error --fail-with-body --max-time 30 \
+    --request "$method" \
+    --header @<(printf 'Authorization: Bearer %s\n' "$jwt") \
+    --header 'Accept: application/vnd.github+json' \
+    "${payload_flag[@]}" "$api/$path"
+}
+# A one-hour installation token scoped to this repository, minted from the App
+# credentials at the moment of use. Nothing secret reaches argv or a file: the
+# private key is read through a descriptor, the JWT and token travel only in
+# GH_TOKEN and on stdout/stdin. Failure names the step, never a value, and there
+# is no fallback identity.
+mint_consumer_identity() {
+  local app_id=${DAILY_AMARU_APP_ID:-}
+  local key=${DAILY_AMARU_APP_PRIVATE_KEY:-}
+  local repository_name=${repository#*/}
+  local now header payload unsigned signature jwt installation token
+
+  if [ -z "$app_id" ] || [ -z "$key" ]; then
+    printf 'daily-amaru-github: consumer mint failed: app-credentials-absent\n' >&2
+    return 1
+  fi
+  now=$(date +%s) || return 1
+  header=$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64url) || return 1
+  payload=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' \
+    "$((now - 60))" "$((now + 300))" "$app_id" | b64url) || return 1
+  unsigned=$header.$payload
+  if ! signature=$(printf '%s' "$unsigned" |
+    openssl dgst -sha256 -sign <(printf '%s\n' "$key") | b64url) ||
+    [ -z "$signature" ]; then
+    printf 'daily-amaru-github: consumer mint failed: jwt-signing\n' >&2
+    return 1
+  fi
+  jwt=$unsigned.$signature
+  if ! installation=$(app_api "$jwt" GET "repos/$repository/installation" </dev/null |
+    jq -er .id) || [ -z "$installation" ]; then
+    printf 'daily-amaru-github: consumer mint failed: installation-lookup\n' >&2
+    return 1
+  fi
+  if ! token=$(printf '{"repositories":["%s"],"permissions":{"contents":"write","pull_requests":"write","metadata":"read"}}' \
+    "$repository_name" |
+    app_api "$jwt" POST "app/installations/$installation/access_tokens" |
+    jq -er .token) || [ -z "$token" ]; then
+    printf 'daily-amaru-github: consumer mint failed: token-request\n' >&2
+    return 1
+  fi
+  printf '%s\n' "$token"
+}
+
 # The boundary a failing census was attempting must reach the caller, but
 # `rows=$(collect_action_rows ...)` discards the callee's variables.
 # Splitting the census from its entry point keeps the name in an ordinary
@@ -178,6 +241,7 @@ collect_action_rows_census() {
   local head=$2
   local identity=${3:-${GH_TOKEN:-}}
   local runs workflow suite run_head jobs run_tsv
+  local run_conclusion
 
   observation_boundary runs-api
   runs=$(with_identity "$identity" gh api \
@@ -186,10 +250,15 @@ collect_action_rows_census() {
   # Process substitution would discard a jq parse failure as an empty census.
   observation_boundary runs-parse
   run_tsv=$(jq -r \
-    '.workflow_runs[] | [.name, (.check_suite_id | tostring), .head_sha] | @tsv' \
+    '.workflow_runs[] | [.name, (.check_suite_id | tostring), .head_sha, (.conclusion // "-")] | @tsv' \
     <<<"$runs") || return 1
-  while IFS=$'\t' read -r workflow suite run_head; do
+  while IFS=$'\t' read -r workflow suite run_head run_conclusion; do
     [ -n "$suite" ] || continue
+    # A run gated on approval has no jobs, so only the run itself can say so.
+    if [ "$run_conclusion" = action_required ]; then
+      printf '%s|(workflow run)|%s|action_required\n' "$workflow" "$run_head"
+      continue
+    fi
     observation_boundary check-runs-api
     jobs=$(with_identity "$identity" gh api \
       "repos/$target_repository/check-suites/$suite/check-runs?per_page=100") ||
@@ -268,14 +337,16 @@ observed_check_surface() {
   printf '%s\n' "${surface:-none}"
 }
 
-classify_bootstrap_check() {
-  local name=$1
-  local candidate=$2
-  local rows=$3
+classify_check_rows() {
+  local workflow=$1
+  local name=$2
+  local candidate=$3
+  local rows=$4
   local success=0 failed=0 pending=0 total=0
-  local check_name head state
+  local row_workflow check_name head state
 
-  while IFS='|' read -r _ check_name head state; do
+  while IFS='|' read -r row_workflow check_name head state; do
+    [ -z "$workflow" ] || [ "$row_workflow" = "$workflow" ] || continue
     [ "$check_name" = "$name" ] || continue
     [ "$head" = "$candidate" ] || continue
     total=$((total + 1))
@@ -305,6 +376,10 @@ classify_bootstrap_check() {
     return 0
   fi
   printf '%s\n' pending
+}
+
+classify_bootstrap_check() {
+  classify_check_rows '' "$1" "$2" "$3"
 }
 
 observe_bootstrap_checks() {
@@ -414,6 +489,87 @@ observe_bootstrap_checks() {
     remaining=$((deadline - now))
     if [ "$remaining" -gt "$cadence" ]; then
       remaining=$cadence
+    fi
+    sleep "$remaining"
+  done
+}
+
+consumer_observation_ceiling() {
+  local ceiling=${DAILY_AMARU_CONSUMER_CHECK_MAX_SECONDS:-2700}
+  [[ "$ceiling" =~ ^[1-9][0-9]*$ ]] ||
+    die "consumer observation ceiling is unusable: $ceiling"
+  printf '%s\n' "$ceiling"
+}
+
+# The checks of a freshly created consumer PR start absent and pass through
+# queued and in-progress, so a single census right after creation cannot judge
+# them. Wait, within an absolute ceiling, only while nothing is terminal:
+# success of every required check on the exact candidate ends the wait; a
+# terminal non-success, an approval gate, a duplicate success or a transport
+# error ends it as a failure at once; absence or pending past the ceiling is a
+# failure that names what was and was not seen.
+observe_consumer_checks() {
+  local candidate=$1
+  local identity=$2
+  local ceiling poll start now deadline remaining
+  local polls=0 rows status required workflow name gated boundary
+  local pending_check='' absent_check='' all_success
+
+  ceiling=$(consumer_observation_ceiling)
+  poll=${DAILY_AMARU_CONSUMER_CHECK_POLL_SECONDS:-30}
+  [[ "$poll" =~ ^[1-9][0-9]*$ ]] || die "consumer observation cadence is unusable: $poll"
+  start=$(date +%s) || die 'observation clock is unreadable'
+  [[ "$start" =~ ^[0-9]+$ ]] || die 'observation clock is unusable'
+  deadline=$((start + ceiling))
+
+  while true; do
+    polls=$((polls + 1))
+    pending_check=''
+    absent_check=''
+    all_success=1
+    if ! rows=$(collect_action_rows "$repository" "$candidate" "$identity"); then
+      boundary=$(observation_boundary_receipt "$rows")
+      die "consumer check transport-failed on $candidate polls=$polls boundary=${boundary:-unnamed}"
+    fi
+    gated=$(awk -F'|' -v head="$candidate" \
+      '$3 == head && $4 == "action_required" { print $1; exit }' <<<"$rows")
+    [ -z "$gated" ] ||
+      die "consumer check gated on $candidate: $gated awaits approval (action_required) polls=$polls"
+    for required in "${consumer_required_checks[@]}"; do
+      workflow=${required%%|*}
+      name=${required#*|}
+      status=$(classify_check_rows "$workflow" "$name" "$candidate" "$rows")
+      case "$status" in
+        success) ;;
+        failed)
+          die "consumer check failed on $candidate: $workflow / $name polls=$polls"
+          ;;
+        absent)
+          all_success=0
+          [ -n "$absent_check" ] || absent_check="$workflow / $name"
+          ;;
+        pending)
+          all_success=0
+          [ -n "$pending_check" ] || pending_check="$workflow / $name"
+          ;;
+        *) die "consumer check classifier returned unusable state $status" ;;
+      esac
+    done
+    if [ "$all_success" -eq 1 ]; then
+      printf 'consumer-check-observation polls=%s\n' "$polls" >&2
+      emit "$rows"
+      return 0
+    fi
+    now=$(date +%s) || die 'observation clock is unreadable'
+    if [ "$now" -ge "$deadline" ]; then
+      if [ -n "$pending_check" ]; then
+        die "consumer check still-running on $candidate: $pending_check polls=$polls observed=$(observed_check_surface "$candidate" "$rows") ceiling=$ceiling"
+      fi
+      die "consumer check never-reported on $candidate: $absent_check polls=$polls observed=$(observed_check_surface "$candidate" "$rows") ceiling=$ceiling"
+    fi
+    remaining=$((deadline - now))
+    if [ "$remaining" -gt "$poll" ]; then
+      remaining=$poll
     fi
     sleep "$remaining"
   done
@@ -833,12 +989,13 @@ case "$operation" in
 
   prepare-consumer-repin)
     # repository-token-permissions: contents=write pull-requests=write
-    require_commands gh git rg sed
+    require_commands gh git rg sed openssl curl jq date tr
     image_ref=${1:?image reference is required}
     day=${DAILY_AMARU_DAY:?DAILY_AMARU_DAY is required}
     directory=$state_dir/consumer
     branch="daily-amaru/consumer-$day"
 
+    consumer_identity=$(mint_consumer_identity) || die 'consumer identity mint failed'
     [ -n "$consumer_identity" ] || die 'consumer identity is empty'
     [ ! -e "$directory" ] || die "consumer workspace already exists: $directory"
     with_identity "$consumer_identity" gh repo clone "$repository" "$directory" -- --filter=blob:none
@@ -872,21 +1029,13 @@ case "$operation" in
 
   require-consumer-checks)
     # repository-token-permissions: actions=read checks=read
-    require_commands gh jq awk
+    require_commands gh jq awk date sleep
     candidate=${1:?consumer candidate is required}
+    [[ "$candidate" =~ ^[0-9a-f]{40}$ ]] ||
+      die "invalid consumer candidate: $candidate"
     # TODO(cardano-node-antithesis#208): replace this explicit current-head
     # census with the complete exact-revision interface preflight.
-    rows=$(collect_action_rows "$repository" "$candidate" "$repository_identity")
-    for required in "${consumer_required_checks[@]}"; do
-      workflow=${required%%|*}
-      name=${required#*|}
-      count=$(awk -F'|' -v w="$workflow" -v n="$name" -v h="$candidate" \
-        '$1 == w && $2 == n && $3 == h && $4 == "success" { count++ }
-         END { print count + 0 }' <<<"$rows")
-      [ "$count" -eq 1 ] ||
-        die "consumer check is not uniquely successful on $candidate: $workflow / $name"
-    done
-    emit "$rows"
+    observe_consumer_checks "$candidate" "$repository_identity"
     ;;
 
   run-producer-check)
