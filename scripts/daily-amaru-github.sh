@@ -17,9 +17,13 @@ state_dir=${DAILY_AMARU_STATE_DIR:?DAILY_AMARU_STATE_DIR is required}
 bootstrap_repository=${DAILY_AMARU_BOOTSTRAP_REPOSITORY:-lambdasistemi/amaru-bootstrap}
 producer_image=ghcr.io/lambdasistemi/amaru-bootstrap-producer
 
-# The App token authorizes lambdasistemi/amaru-bootstrap only; same-repository
-# operations use the workflow's own token. The two are never interchangeable.
+# The bootstrap App token authorizes lambdasistemi/amaru-bootstrap only. The
+# consumer App token is scoped to this repository and is used only for the
+# consumer branch push and PR creation, whose events must trigger CI (events
+# authored with the workflow's own token await approval). Other same-repository
+# operations use the workflow's own token. None is interchangeable.
 bootstrap_identity=${DAILY_AMARU_IDENTITY:-}
+consumer_identity=${DAILY_AMARU_CONSUMER_IDENTITY:-}
 repository_identity=${GH_TOKEN:-}
 
 # D213-04: every non-shell command a reachable production operation needs.
@@ -835,8 +839,9 @@ case "$operation" in
     directory=$state_dir/consumer
     branch="daily-amaru/consumer-$day"
 
+    [ -n "$consumer_identity" ] || die 'consumer identity is empty'
     [ ! -e "$directory" ] || die "consumer workspace already exists: $directory"
-    with_identity "$repository_identity" gh repo clone "$repository" "$directory" -- --filter=blob:none
+    with_identity "$consumer_identity" gh repo clone "$repository" "$directory" -- --filter=blob:none
     git -C "$directory" checkout -b "$branch" origin/main
     mapfile -t producer_files < <(
       rg -l "image:.*$producer_image" "$directory/testnets" -g '*.yaml' -g '*.yml'
@@ -856,11 +861,11 @@ case "$operation" in
     git -C "$directory" -c user.name='daily-amaru' \
       -c user.email='daily-amaru@users.noreply.github.com' \
       commit -m "chore: repin Amaru producer to exact digest"
-    push_branch "$directory" "$branch" "$repository_identity"
+    push_branch "$directory" "$branch" "$consumer_identity"
     pr_url=$(create_or_find_pr "$repository" "$branch" \
       'chore: repin Amaru producer to exact digest' \
       "Daily Amaru controller repin to $image_ref. Integration is lane-supervised." \
-      "$repository_identity")
+      "$consumer_identity")
     printf '%s\n' "$pr_url" >"$state_dir/consumer-pr"
     emit "$(git -C "$directory" rev-parse HEAD)"
     ;;

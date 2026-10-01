@@ -15,6 +15,13 @@ main_sha=${DAILY_AMARU_BOUNDARY_MAIN_SHA:-$integrated_sha}
   printf '\n'
 } >>"$log_file"
 printf 'boundary-gh diagnostic: %s\n' "$*" >&2
+if [ -n "${DAILY_AMARU_BOUNDARY_IDENTITY_LOG:-}" ]; then
+  case "${1:-} ${2:-}" in
+    "repo clone" | "pr create")
+      printf "%s %s token=%s\n" "$1" "$2" "${GH_TOKEN:-}" >>"$DAILY_AMARU_BOUNDARY_IDENTITY_LOG"
+      ;;
+  esac
+fi
 
 case "${1:-} ${2:-}" in
   'repo clone')

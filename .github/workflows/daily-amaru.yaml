@@ -84,6 +84,24 @@ jobs:
           permission-pull-requests: write
           permission-metadata: read
 
+      # The consumer branch push and PR creation must come from an App actor:
+      # events produced with GITHUB_TOKEN enter approval-required admission, so
+      # no consumer check ever runs. Scoped to this repository only; an absent
+      # input or failed mint reaches the controller as an empty identity, which
+      # fails closed before any consumer mutation. No fallback to github.token.
+      - name: Mint the consumer App identity
+        id: consumer-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.DAILY_AMARU_APP_ID }}
+          private-key: ${{ secrets.DAILY_AMARU_APP_PRIVATE_KEY }}
+          owner: cardano-foundation
+          repositories: cardano-node-antithesis
+          permission-contents: write
+          permission-pull-requests: write
+          permission-metadata: read
+
       # Always reached: a failed dependency or mint step must become a
       # classified receipt, not a skipped controller. The controller derives
       # the UTC day itself, so no external command stands before that boundary.
@@ -91,6 +109,7 @@ jobs:
         if: always()
         env:
           DAILY_AMARU_IDENTITY: ${{ steps.app-token.outputs.token }}
+          DAILY_AMARU_CONSUMER_IDENTITY: ${{ steps.consumer-token.outputs.token }}
           DAILY_AMARU_APP_ID: ${{ vars.DAILY_AMARU_APP_ID }}
           DAILY_AMARU_APP_PRIVATE_KEY: ${{ secrets.DAILY_AMARU_APP_PRIVATE_KEY }}
           DAILY_AMARU_STATE_DIR: ${{ runner.temp }}/daily-amaru

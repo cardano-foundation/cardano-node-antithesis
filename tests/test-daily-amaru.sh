@@ -198,6 +198,7 @@ run_case() {
     DAILY_AMARU_MODE="$mode" \
     DAILY_AMARU_DAY=2026-07-31 \
     DAILY_AMARU_IDENTITY="$identity" \
+    DAILY_AMARU_CONSUMER_IDENTITY="${case_consumer_identity-test-consumer-identity}" \
     DAILY_AMARU_APP_ID="$app_id" \
     DAILY_AMARU_APP_PRIVATE_KEY="$app_key" \
     DAILY_AMARU_STATE_DIR="$case_state" \
@@ -246,6 +247,7 @@ run_hermetic_case() {
     GITHUB_SHA="$default_workflow_head" \
     "${day_env[@]}" \
     DAILY_AMARU_IDENTITY=seed-non-empty-identity \
+    DAILY_AMARU_CONSUMER_IDENTITY=seed-non-empty-consumer-identity \
     DAILY_AMARU_STATE_DIR="$hermetic_state" \
     DAILY_AMARU_RECEIPT="$hermetic_receipt" \
     "$bash_binary" "$script" \
@@ -372,6 +374,20 @@ workflow_job() {
   ' "$1"
 }
 
+# The consumer App identity is the one authorized change to the production job
+# since the baseline: its mint step, the comment block above it, and its single
+# environment binding. Those exact lines are removed from the candidate before
+# the comparison, so every other line of the job is still frozen to the baseline.
+strip_consumer_identity() {
+  awk '
+    /^      # The consumer branch push and PR creation must come from an App actor:$/ { skip = 1 }
+    skip && /^      # Always reached: a failed dependency or mint step must become a$/ { skip = 0 }
+    skip { next }
+    /^          DAILY_AMARU_CONSUMER_IDENTITY: / { next }
+    { print }
+  '
+}
+
 production_job_untouched() {
   local file=$1 repository=${2:-$repo_root}
   local base_commit=${3:-$s4_base}
@@ -380,8 +396,8 @@ production_job_untouched() {
   git -C "$repository" show \
     "$base_commit:.github/workflows/daily-amaru.yaml" >"$base_workflow" || return 1
   cmp -s \
-    <(workflow_job "$file" daily-amaru-scheduled) \
-    <(workflow_job "$base_workflow" daily-amaru-scheduled)
+    <(workflow_job "$file" daily-amaru-scheduled | strip_consumer_identity) \
+    <(workflow_job "$base_workflow" daily-amaru-scheduled | strip_consumer_identity)
 }
 
 canonical_dry_run_steps() {
@@ -840,20 +856,30 @@ pass broken-preconditions-no-business-effects
 # literal workflow text; expanding them here would defeat the assertion.
 # shellcheck disable=SC2016
 for literal in \
-  'uses: actions/create-github-app-token@v1' \
-  'app-id: ${{ vars.DAILY_AMARU_APP_ID }}' \
-  'private-key: ${{ secrets.DAILY_AMARU_APP_PRIVATE_KEY }}' \
   'owner: lambdasistemi' \
   'repositories: amaru-bootstrap' \
   'permission-actions: read' \
-  'permission-checks: read' \
+  'permission-checks: read'
+do
+  assert_workflow_literal_once "$literal"
+done
+# The bootstrap and consumer mints share their App credentials and exactly the
+# permissions both need; everything else is declared once, by one of them.
+# shellcheck disable=SC2016
+for literal in \
+  'uses: actions/create-github-app-token@v1' \
+  'app-id: ${{ vars.DAILY_AMARU_APP_ID }}' \
+  'private-key: ${{ secrets.DAILY_AMARU_APP_PRIVATE_KEY }}' \
   'permission-contents: write' \
   'permission-pull-requests: write' \
   'permission-metadata: read'
 do
-  assert_workflow_literal_once "$literal"
+  actual=$(count_literal "$workflow" "$literal")
+  [ "$actual" -eq 2 ] ||
+    fail "workflow must declare exactly twice (found $actual): $literal"
 done
-app_permissions=$(count_matches "$workflow" '^[[:space:]]*permission-[a-z-]+:')
+bootstrap_mint=$(awk '$0 == "      - name: Mint the dedicated bootstrap App identity" { inside = 1; print; next } inside && /^      - (name|uses):/ { exit } inside { print }' "$workflow")
+app_permissions=$(grep -Ec '^[[:space:]]*permission-[a-z-]+:' <<<"$bootstrap_mint" || true)
 [ "$app_permissions" -eq 5 ] ||
   fail "bootstrap App permission census must be exactly five, found $app_permissions"
 identity_boundary_holds "$transport" ||
@@ -887,6 +913,91 @@ reject_mutant downgraded.sh "$transport" 's#bootstrap_identity#repository_identi
 printf 'IDENTITY-BOUNDARY bootstrap_ops=%s repository_ops=%s mutants_rejected=2\n' \
   "${#bootstrap_boundary_operations[@]}" "${#repository_boundary_operations[@]}"
 pass dedicated-app-scope
+
+# Consumer identity contract: the consumer branch push and PR creation come from
+# a repository-scoped App token, never from the workflow's own token (PR events
+# authored with it await approval and run no CI), and its absence fails closed.
+consumer_step_text() {
+  awk '
+    $0 == "      - name: Mint the consumer App identity" { inside = 1; print; next }
+    inside && /^      - (name|uses):/ { exit }
+    inside { print }
+  ' "$1"
+}
+consumer_identity_contract_holds() {
+  local file=$1 step
+  step=$(consumer_step_text "$file")
+  [ -n "$step" ] || return 1
+  # shellcheck disable=SC2016
+  for literal in \
+    'id: consumer-token' \
+    'continue-on-error: true' \
+    'owner: cardano-foundation' \
+    'repositories: cardano-node-antithesis' \
+    'permission-contents: write' \
+    'permission-pull-requests: write' \
+    'permission-metadata: read'; do
+    grep -Fq -- "$literal" <<<"$step" || return 1
+  done
+  [ "$(grep -Ec '^[[:space:]]*permission-[a-z-]+:' <<<"$step")" -eq 3 ] || return 1
+  [ "$(grep -Ec '^[[:space:]]*repositories:' <<<"$step")" -eq 1 ] || return 1
+  # Bound exactly once, to the controller step, from the consumer mint only.
+  # shellcheck disable=SC2016
+  [ "$(grep -Fc 'DAILY_AMARU_CONSUMER_IDENTITY: ${{ steps.consumer-token.outputs.token }}' "$file")" -eq 1 ] || return 1
+  [ "$(grep -Fc 'steps.consumer-token.outputs.token' "$file")" -eq 1 ] || return 1
+  # The default token stays the repository identity and never feeds the consumer.
+  # shellcheck disable=SC2016
+  [ "$(grep -Fc 'GH_TOKEN: ${{ github.token }}' "$file")" -eq 1 ] || return 1
+  ! grep -Eq 'DAILY_AMARU_CONSUMER_IDENTITY:.*(github\.token|secrets\.)' "$file" || return 1
+  return 0
+}
+consumer_identity_contract_holds "$workflow" ||
+  fail 'the consumer App identity contract does not hold in the workflow'
+mutant_root="$tmp_root/mutants"
+reject_mutant consumer-wide-scope.yaml "$workflow" \
+  '/repositories: cardano-node-antithesis/d' \
+  '!repositories: cardano-node-antithesis' \
+  'a consumer token minted without a repository scope' consumer_identity_contract_holds
+# shellcheck disable=SC2016
+reject_mutant consumer-default-token.yaml "$workflow" \
+  's#DAILY_AMARU_CONSUMER_IDENTITY: .*#DAILY_AMARU_CONSUMER_IDENTITY: ${{ github.token }}#' \
+  'DAILY_AMARU_CONSUMER_IDENTITY: ${{ github.token }}' \
+  'the default workflow token standing in for the consumer identity' consumer_identity_contract_holds
+reject_mutant consumer-extra-permission.yaml "$workflow" \
+  's#^          permission-metadata: read$#&\n          permission-workflows: write#' \
+  'permission-workflows: write' \
+  'a consumer token with an extra permission' consumer_identity_contract_holds
+reject_mutant consumer-no-mint-isolation.yaml "$workflow" \
+  's#id: consumer-token#id: app-token#' \
+  '!id: consumer-token' \
+  'a consumer mint that is not its own step' consumer_identity_contract_holds
+
+# Absent consumer identity: classified failure before any consumer mutation or
+# claim; the failure receipt stays reachable. Control: the same case with the
+# identity present proceeds past that stage.
+case_consumer_identity='' run_case missing-consumer-identity production seeded-bootstrap-token
+require_failure
+assert_honest_failure_receipt consumer-identity
+assert_file_contains "$case_receipt" 'error=missing-consumer-identity'
+assert_log_count 0 '^claim-sha-attempt '
+assert_no_mutation
+assert_no_launch
+run_case missing-consumer-identity production seeded-bootstrap-token
+if grep -Fq 'stage=consumer-identity' "$case_receipt" 2>/dev/null; then
+  fail 'consumer identity control failed at the consumer-identity stage'
+fi
+consumer_mutant="$mutant_root/controller-no-consumer-gate.sh"
+sed '/fail_stage consumer-identity missing-consumer-identity/d' "$controller" >"$consumer_mutant"
+chmod +x "$consumer_mutant"
+! grep -Fq 'missing-consumer-identity' "$consumer_mutant" ||
+  fail 'controller consumer-gate mutation did not apply'
+case_consumer_identity='' run_case missing-consumer-identity production seeded-bootstrap-token \
+  "" "" "daily:$default_workflow_head" "" "$consumer_mutant"
+if grep -Fq 'stage=consumer-identity' "$case_receipt" 2>/dev/null; then
+  fail 'gate mutant still classified the missing consumer identity'
+fi
+printf 'CONSUMER-CONTRACT scope=repository permissions=3 workflow_mutants_rejected=4 absent=classified controller_mutant_rejected=1\n'
+pass consumer-identity-contract
 
 # INV-213-05: bound exactly once, nowhere else, and never persisted.
 for forbidden in DAILY_AMARU_CROSS_REPO_TOKEN MOOG_GITHUB_PAT GITHUB_ENV; do
@@ -1019,7 +1130,8 @@ assert_workflow_literal_once 'DAILY_AMARU_MODE: production'
 assert_workflow_literal_once 'uses: actions/upload-artifact@v6'
 [ "$(count_literal "$workflow" 'if: always()')" -eq 2 ] ||
   fail 'the scheduled job must always reach both the controller and the publisher'
-assert_workflow_literal_once 'continue-on-error: true'
+[ "$(count_literal "$workflow" 'continue-on-error: true')" -eq 2 ] ||
+  fail 'exactly the two App mint steps (bootstrap, consumer) may continue on error'
 [ "$(count_literal "$workflow" 'ripgrep')" -ge 1 ] ||
   fail 'the scheduled runner does not provision the incident command'
 [ "$(count_literal "$workflow" 'setup-nix')" -ge 1 ] ||

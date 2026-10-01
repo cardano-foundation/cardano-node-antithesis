@@ -449,6 +449,7 @@ assert_pollution_with_remotes() {
     DAILY_AMARU_DAY="$day" \
     DAILY_AMARU_HEAD="$workflow_head" \
     DAILY_AMARU_IDENTITY=boundary-bootstrap-token \
+    DAILY_AMARU_CONSUMER_IDENTITY=boundary-consumer-token \
     GH_TOKEN=boundary-repository-token \
     DAILY_AMARU_STATE_DIR="$state" \
     DAILY_AMARU_RECEIPT="$receipt" \
@@ -630,6 +631,7 @@ execute_value_operation() {
   GIT_TRACE=1 DAILY_AMARU_DAY="$day" GIT_CONFIG_NOSYSTEM=1 \
     GIT_CONFIG_GLOBAL=/dev/null \
     DAILY_AMARU_IDENTITY=boundary-bootstrap-token GH_TOKEN=boundary-repository-token \
+    DAILY_AMARU_CONSUMER_IDENTITY=boundary-consumer-token \
     DAILY_AMARU_STATE_DIR="$state" DAILY_AMARU_BOUNDARY_GH_LOG="$effects" \
     DAILY_AMARU_BOUNDARY_COMMENTS="$comments" \
     DAILY_AMARU_BOUNDARY_BOOTSTRAP_REMOTE="$bootstrap_remote" \
@@ -1211,6 +1213,7 @@ run_atomic_controller() {
     DAILY_AMARU_DAY="$day" \
     DAILY_AMARU_HEAD="$workflow_head" \
     DAILY_AMARU_IDENTITY=boundary-bootstrap-token \
+    DAILY_AMARU_CONSUMER_IDENTITY=boundary-consumer-token \
     GH_TOKEN=boundary-repository-token \
     DAILY_AMARU_STATE_DIR="$state" \
     DAILY_AMARU_RECEIPT="$receipt" \
@@ -1343,6 +1346,111 @@ assert_atomic_peer_snapshot() {
     "$prs_after_failure" "$launches"
 }
 
+# Consumer writes must carry the dedicated consumer App identity, never the
+# workflow's own token (whose PR events await approval and run no CI). Every
+# credential-bearing step is observed where it executes: `gh` records its
+# identity, and the receiving repository's pre-receive hook records the identity
+# in the environment of the real `git push`.
+# shellcheck disable=SC2016
+consumer_identity_run() {
+  local label=$1 consumer_token=$2 rc=0
+  local remote hook_bash
+  remote=$(create_consumer_remote "$label")
+  prepare_case "$label"
+  hook_bash=$(command -v bash)
+  identity_log="$case_root/identity"
+  : >"$identity_log"
+  printf '#!%s\nprintf "push token=%%s\\n" "${GH_TOKEN:-}" >>%q\n' \
+    "$hook_bash" "$identity_log" >"$remote/hooks/pre-receive"
+  chmod +x "$remote/hooks/pre-receive"
+  consumer_identity_remote=$remote
+  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+    DAILY_AMARU_DAY="$day" \
+    GH_TOKEN=boundary-repository-token \
+    DAILY_AMARU_CONSUMER_IDENTITY="$consumer_token" \
+    DAILY_AMARU_STATE_DIR="$state" \
+    DAILY_AMARU_BOUNDARY_GH_LOG="$effects" \
+    DAILY_AMARU_BOUNDARY_IDENTITY_LOG="$identity_log" \
+    DAILY_AMARU_BOUNDARY_COMMENTS="$comments" \
+    DAILY_AMARU_BOUNDARY_REPOSITORY_REMOTE="$remote" \
+    run_boundary_command "$bin" "$transport" prepare-consumer-repin \
+    "ghcr.io/lambdasistemi/amaru-bootstrap-producer:$upstream_sha@sha256:$(printf '%064d' 0)" \
+    >"$stdout" 2>"$stderr" || rc=$?
+  consumer_identity_rc=$rc
+}
+
+assert_consumer_identity() {
+  local expected_token=boundary-consumer-token
+  local operations_seen
+
+  consumer_identity_run consumer-identity-present "$expected_token"
+  [ "$consumer_identity_rc" -eq 0 ] ||
+    fail "consumer repin failed: $(tr '\n' ' ' <"$stderr")"
+  # Control: all three consumer mutations (clone, push, PR creation) were seen.
+  for operation in 'repo clone' 'push' 'pr create'; do
+    grep -Fqx "$operation token=$expected_token" "$identity_log" ||
+      fail "consumer mutation did not carry the consumer identity: $operation"
+  done
+  operations_seen=$(wc -l <"$identity_log")
+  [ "$operations_seen" -eq 3 ] ||
+    fail "consumer identity census saw $operations_seen operations, expected 3"
+  if grep -Fq 'boundary-repository-token' "$identity_log"; then
+    fail 'repository token reached a consumer mutation'
+  fi
+  if grep -Fq "$expected_token" "$effects" "$stdout" "$stderr"; then
+    fail 'consumer identity leaked into argv, stdout or stderr'
+  fi
+  git --git-dir="$consumer_identity_remote" rev-parse --verify --quiet \
+    "refs/heads/daily-amaru/consumer-$day" >/dev/null ||
+    fail 'consumer branch was not pushed'
+
+  consumer_identity_run consumer-identity-absent ''
+  [ "$consumer_identity_rc" -ne 0 ] || fail 'absent consumer identity succeeded'
+  grep -Fq 'consumer identity is empty' "$stderr" ||
+    fail 'absent consumer identity was not classified'
+  [ ! -s "$effects" ] && [ ! -s "$identity_log" ] ||
+    fail 'consumer mutation was attempted without a consumer identity'
+  if git --git-dir="$consumer_identity_remote" rev-parse --verify --quiet \
+    "refs/heads/daily-amaru/consumer-$day" >/dev/null; then
+    fail 'consumer branch was pushed without a consumer identity'
+  fi
+  printf 'CONSUMER-IDENTITY mutations=3 consumer_token=3 repository_token=0 absent=classified-no-effects\n'
+}
+
+# shellcheck disable=SC2016
+assert_consumer_identity_mutants() {
+  local mutant_root="$tmp_root/consumer-identity-mutants" mutant
+  mkdir -p "$mutant_root"
+  # Broken wiring 1: the default repository token silently replaces the App's.
+  mutant="$mutant_root/fallback.sh"
+  sed 's#^consumer_identity=.*#consumer_identity=${DAILY_AMARU_CONSUMER_IDENTITY:-${GH_TOKEN:-}}#' \
+    "$transport" >"$mutant"
+  chmod +x "$mutant"
+  grep -Fq 'consumer_identity=${DAILY_AMARU_CONSUMER_IDENTITY:-${GH_TOKEN:-}}' "$mutant" ||
+    fail 'fallback mutation did not apply'
+  reject_scenario_mutant consumer-fallback "$mutant" consumer-identity \
+    'absent consumer identity succeeded'
+  # Broken wiring 2: only the push regresses to the repository token.
+  mutant="$mutant_root/push.sh"
+  sed 's#push_branch "$directory" "$branch" "$consumer_identity"#push_branch "$directory" "$branch" "$repository_identity"#' \
+    "$transport" >"$mutant"
+  chmod +x "$mutant"
+  grep -Fq 'push_branch "$directory" "$branch" "$repository_identity"' "$mutant" ||
+    fail 'push mutation did not apply'
+  reject_scenario_mutant consumer-push "$mutant" consumer-identity \
+    'consumer mutation did not carry the consumer identity: push'
+  # Broken wiring 3: PR creation regresses to the repository token.
+  mutant="$mutant_root/pr.sh"
+  sed 's#^      "\$consumer_identity")#      "$repository_identity")#' \
+    "$transport" >"$mutant"
+  chmod +x "$mutant"
+  grep -Fq '      "$repository_identity")' "$mutant" ||
+    fail 'PR mutation did not apply'
+  reject_scenario_mutant consumer-pr "$mutant" consumer-identity \
+    'consumer mutation did not carry the consumer identity: pr create'
+  printf 'CONSUMER-IDENTITY-MUTANTS rejected=3\n'
+}
+
 case "$scenario" in
   pollution)
     assert_pollution_closed
@@ -1356,8 +1464,13 @@ case "$scenario" in
   fresh)
     assert_fresh
     ;;
+  consumer-identity)
+    assert_consumer_identity
+    ;;
   census)
     assert_value_census
+    assert_consumer_identity
+    assert_consumer_identity_mutants
     ;;
   all)
     assert_pollution_closed
@@ -1365,6 +1478,8 @@ case "$scenario" in
     assert_foreign
     assert_fresh
     assert_value_census
+    assert_consumer_identity
+    assert_consumer_identity_mutants
     assert_awaiting_age_from_receipts
     assert_integration_outcome_classification
     assert_value_mutants

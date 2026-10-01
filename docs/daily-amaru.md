@@ -41,8 +41,8 @@ repository variable `DAILY_AMARU_APP_ID` and secret
 `amaru-bootstrap` alone, and exactly five permissions: actions read, checks
 read, contents write, pull requests write, metadata read.
 
-That token authorizes the bootstrap boundary only. Same-repository work — issue
-receipts, consumer repin, check observation, launch — uses the workflow's own
+That token authorizes the bootstrap boundary only. Other same-repository work — issue
+receipts, check observation, launch — uses the workflow's own
 repository token, granted exactly the permissions those operations declare. The
 two are never interchangeable, and neither the private key nor the minted token
 is printed, persisted, exported through `$GITHUB_ENV`, committed, or passed as a
@@ -58,12 +58,27 @@ the scheduled job uploads that file on every outcome, so a broken precondition
 leaves the day, stage, `outcome=FAILED`, and a specific error behind even when
 the transport cannot publish its issue receipt.
 
+## Consumer App identity
+
+The consumer branch push and pull request are created with a second token
+minted from the same App, scoped to owner `cardano-foundation`, repository
+`cardano-node-antithesis` alone, and exactly three permissions: contents write,
+pull requests write, metadata read. Pull request events authored with the
+workflow's own token wait for manual approval and run no checks, so only an App
+token lets the seven consumer checks run unattended. It is bound to the
+controller step as `DAILY_AMARU_CONSUMER_IDENTITY`, used for the consumer clone,
+push and pull request creation only, and never replaced by the workflow token.
+
+An absent or failed consumer mint exits non-zero at `stage=consumer-identity`
+with `error=missing-consumer-identity`, before any claim or consumer effect.
+
 ## Operator setup gate
 
-Creating the App, installing it on `lambdasistemi/amaru-bootstrap`, approving
+Creating the App, installing it on `lambdasistemi/amaru-bootstrap` and on
+`cardano-foundation/cardano-node-antithesis`, approving
 its permissions, and placing the variable and secret are operator actions
 outside this repository. Until they are done the scheduled run is expected to
-fail at `stage=identity`; that is the contract working, not a regression. No
+fail at `stage=identity` or `stage=consumer-identity`; that is the contract working, not a regression. No
 secret value is recorded anywhere in this repository.
 
 ## Decision and durable guards

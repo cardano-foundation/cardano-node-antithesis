@@ -262,6 +262,9 @@ if [ "$mode" = production ]; then
     fi
     fail_stage identity missing-production-identity
   fi
+  # No fallback to the workflow token: its consumer PRs never get CI admitted.
+  [ -n "${DAILY_AMARU_CONSUMER_IDENTITY:-}" ] ||
+    fail_stage consumer-identity missing-consumer-identity
 else
   identity=dry-run
 fi
