@@ -1,0 +1,138 @@
+# Prompt — Cardano Run Health Report (project-first triage)
+
+Paste this as a prompt (optionally set `DAYS`). It produces an owner-oriented,
+project-first triage report of recent Antithesis runs, rendered as a
+**public-safe markdown report** (a GitHub gist / wiki page — **not** HTML),
+separating **real client/SUT bugs**, **potential bugs**, and
+**genuine Antithesis-platform faults**.
+
+---
+
+Generate a **project-first run-health report** for the last **{{DAYS|7}} days** of Antithesis runs on this tenant, **or** for an explicit **start–end date range / week** if one is given. Today's date is the reference point for the default window; skip anything outside the window. **`in_progress` vs `incomplete` are different statuses:** skip `in_progress` runs, but **do triage `incomplete` runs** via their `failure_reason` classes (§2) — they have finished and carry root-cause evidence.
+
+**Week references:** if the window is given as a week (e.g. "week of the 20th"), resolve it to concrete dates and compute the **ISO week label** (`YYYY-Www`) the window falls in — the output page is named and filed by ISO week (see §4).
+
+**Date sanity — call it out BEFORE running (don't silently "fix" dates).** Validate the requested window first and surface any of these to the user rather than proceeding on an assumption:
+
+- **Invalid range** — start after end, an unparseable date, or a bound in the future (beyond today). Stop and ask for a corrected range; don't guess.
+- **Not aligned to an ISO week** — the report files by ISO week (`YYYY-Www` = Monday 00:00 UTC → the following Monday 00:00 UTC). If the requested window doesn't start on a Monday and span exactly 7 days (e.g. `07-19 → 07-25`), say so explicitly: it will be **filed under the ISO week that holds the bulk of it**, but the label and the analyzed dates won't line up. Offer to **snap to the canonical Mon→Sun week** (e.g. `07-20 → 07-26`) instead. Let the user choose.
+- **Spans more than one ISO week** — name the single week it'll be filed under (the one holding most of the window) and confirm before running, since a page is one ISO week.
+- **Whatever the user confirms, the report body's "Analyzed window" line and the index `Period` cell must state the ACTUAL analyzed dates — never fudge them to the canonical ISO-week Mon→Sun just to match the filename.** The filename/label is the filing bucket; the period tells the truth about coverage. (A misaligned window is exactly why the two can differ.)
+
+## 0. Preflight
+
+- All data comes from the tenant's **v1 REST API** via `./api_call.sh` (repo root). Auth is transparent: the script prefers a `customer curl` wrapper when one exists, else the sandbox proxy — `curl -x http://localhost:3000 -H "Authorization: Bearer proxied"`. `$BASE` below = `https://<tenant>.antithesis.com` (script default: `amaru-cardano`; override with `ANTITHESIS_BASE_URL`).
+- Require `curl` + `jq`. Probe once before fanning out: `curl -sS -x http://localhost:3000 -H "Authorization: Bearer proxied" "$BASE/api/v1/runs?limit=1"` must return JSON with `.data`.
+- **Preflight the publish target *before* triaging** (don't spend the fan-out only to hit a dead-end at the end). Output is a **markdown gist / wiki page**, so confirm the publish path up front: `gh auth status` (or a `GH_TOKEN`/`GITHUB_TOKEN` env var, or the CF `antithesis-wiki-report` uploader). If none is available, tell the user immediately and offer to (a) proceed and hand back the finished markdown file for them to paste, or (b) take a PAT with `gist` scope. Never store a token in memory or any file.
+
+## 1. Prefetch — run the script (one call, all the data)
+
+```bash
+bash api_call.sh --days {{DAYS|7}} --out triage_prefetch.json
+# or an explicit range:  bash api_call.sh --from <ISO> --to <ISO> --out triage_prefetch.json
+```
+
+The script pages through `/api/v1/runs` for the window, groups by **org / repo / directory** (this triple = one "project", **owner = the requester(s)**, parsed from the JSON-encoded run description with null-guards), and per project emits status counts plus:
+
+- **every incomplete run pre-classified** from `failure_reason` (§2) — including the terminal build-logs `[STATUS]` line already captured as `evidence` where relevant;
+- **failing properties prefetched for every completed run** (name, group, counterexample counts, up to 3 counterexample moments, one truncated sample); clean completed runs appear only as `clean_completed_ids`.
+
+Everything downstream reads `triage_prefetch.json` — do **NOT** re-list runs or re-fetch per-run details already in it. `in_progress` runs appear as `in_progress_ids` (ignore them). The stdout table is the at-a-glance check that the window and grouping look right; the JSON's `total_runs` is the true total.
+
+## 2. Triage each project (fan out — one agent per project)
+
+Spawn parallel agents (general-purpose). Give each agent its project's slice of `triage_prefetch.json` and these rules. Agents make **on-demand API calls only for moment logs / event searches** — never re-fetch what the prefetch already holds, and **never open a triage report** (the WASM SPA doesn't render headless, and nothing below needs it — `failure_reason` already carries what the report's Error panel would say).
+
+On-demand fetches (same auth as the script — `curl -x http://localhost:3000 -H "Authorization: Bearer proxied" …` or `customer curl`):
+
+- **Moment log:** `"$BASE/api/v1/runs/<run-id>/logs?input_hash=<h>&vtime=<v>"` (NDJSON; match vtime **exactly**, don't let it round).
+- **Event search:** `-G "$BASE/api/v1/runs/<run-id>/events" --data-urlencode "q=<term>"` — find more pass/fail occurrences of a property.
+- **More counterexamples:** `"$BASE/api/v1/runs/<run-id>/properties?status=Failing"` (paginate with `after=<next_cursor>`) — the prefetch keeps only the first 3 moments per property.
+- **Full build-logs** (only for `BUILD_FAILED_UNPARSED` below): `"$BASE/api/v1/runs/<run-id>/build_logs"` (NDJSON, `.text`).
+
+**Completed runs — failing properties** (prefetched under `completed_failing`):
+
+- For each failing property, pull the moment log for at least one counterexample moment and analyze it; use the events search to establish the pass/fail timeline.
+- Classify each failing property into one of §3's three buckets. Faults are expected, so a *transient* dip that recovers once the fault clears is a **potential bug** to confirm (see §3), not an automatic pass. A failure that **persists / never recovers**, or that reproduces with **zero faults active**, is a real SUT bug.
+
+**Incomplete runs — already classified by the script from `failure_reason`**. The `class` field is mechanical; the agent's job is only what each class says below:
+
+- **`ANTITHESIS`** — `failure_reason: "Antithesis session failed"`, or "Build failed" with a 3xxx `antithesis_error` in `evidence`. Platform failure, **final** — nothing to fetch, nothing to verify. (These runs also show a degenerate `0/0` `failure_moment`, but that alone is NOT the signal — "Build failed" runs are `0/0` too and are usually `CLIENT_BUILD`; the `failure_reason` / error code decides.) One-liner per §4 C + the §4 D rollup.
+- **`CLIENT_BUILD`** — reason "Build failed", terminal `[STATUS]` carries a **4xxx** `antithesis_error` (image unreachable / unauthorized / wrong registry path) → **CLIENT** (image/config). The `evidence` field holds the exact `[STATUS]` line — quote the image + message from it; no further fetches needed.
+- **`BUILD_FAILED_UNPARSED`** — build failed but no `antithesis_error` code was extracted. Read the full build-logs yourself and classify from the terminal `[STATUS]`: 4xxx → CLIENT, 3xxx → ANTITHESIS.
+- **`CLIENT_SETUP`** — reason "Container setup failure" / "No 'setup complete' event received". Client/SUT setup-phase, and it carries a **real `failure_moment`** → fetch that moment log to localize the crash (container exit, panic, missing image at runtime) and quote it as evidence. Lean CLIENT; reclassify only if the log unambiguously points at Antithesis's own binaries (signals below).
+- **`OTHER`** — an unrecognized `failure_reason` string. Take the string at face value for the classification lean, then verify with the cheapest evidence: build-logs `[STATUS]` first, moment log if a moment exists. Still no report.
+- **`UNKNOWN`** — `failure_reason` is null (these runs also carry **no `failure_moment` at all**). Root cause is **not retrievable from the API**. Classify **UNKNOWN / unresolved — do NOT default to client-side.** Classify as antihesis issue with a **Antithesis callout: "session-phase failure"**
+
+**Source-code correlation (only for projects whose source is checked out locally):** if the project's `repo` matches a checkout under `git/<repo>` in the current directory (e.g. `git/cardano-node-antithesis`, `git/ouroboros-leios`), trace each 🟥 Real / 🟨 Potential finding into that source: locate the failing property/assertion definition, the component that crashed or emitted the evidence line, or the setup script / compose config at fault. Draft a short **suggested fix** per finding — what to change, in which file (**repo-relative path**), and why it addresses the evidence. It feeds the project's "Suggested fix" dropdown in §4 C. Skip silently when there is no local checkout, and never draft fixes for 🟦 Antithesis findings.
+
+**Platform-vs-client signals — match on the STRUCTURE, not on a specific message.** The error's `message`/`condition`/`location`/`exit_reason`/`backtrace` vary run to run — do NOT treat any one instance's text as the criteria. Classify on:
+
+- `failure_reason: "Antithesis session failed"`, or an `antithesis_error` with a **3xxx** code → **Antithesis session/platform failure**, whatever the message says. (One observed 3xxx read `{"code":3001,"message":"Assertion","location":"./telemetry/event_synthesis/event_synthesizer.cpp:130","exit_reason":"hard_overskid"}` — an *example* of the shape; the next 3xxx will read differently.)
+- The **`No Antithesis errors`** meta-property failing (see classification below).
+- A `location`/`backtrace` pointing at **Antithesis's own binaries** (`fuzzer.debug`, `*.cpp` under the telemetry/event-synthesis/driver code) rather than the SUT → platform.
+- Contrast — **client**, not platform: a **4xxx** `antithesis_error` (esp. `4001` image unreachable/unauthorized/registry-path), or a failure whose logs/backtrace point at the customer's containers, node, or setup scripts.
+- **Capture, don't match:** once the class says platform, quote the actual `code` + `message` + `location`/`exit_reason` (and vtime) verbatim as the evidence for that run.
+
+## 3. Classify every finding into exactly one bucket
+
+- **Real (client/SUT)** — a bug/misconfig in the customer's node, images, workload, or setup scripts. Includes: spontaneous node crashes/panics, over-severe or wrong logging, setup/harness timeouts, missing/unauthorized images, wrong registry paths, cluster-generation script failures.
+- **Potential bug** — a failing property that is not (yet) a confirmed SUT bug and is not an Antithesis issue: the evidence is inconclusive, or the property failed only *transiently* under faults and may have recovered. Faults being active does NOT make it "expected" — the SUT may still be required to hold, so flag it for the owner to confirm rather than dismiss it. Base the call on what the evidence actually shows (property status + pass/fail timeline + moment logs) — e.g. a `sometimes`/liveness property that never reached its target, or a safety property that dipped during a fault burst and then recovered. State what would confirm or clear it.
+- **Antithesis-platform** — a fault in Antithesis itself, not the customer. Signals: `failure_reason: "Antithesis session failed"` or an **`antithesis_error` code 3xxx** (a session-phase platform failure, even when the build reached `ready:true`); the meta-property **`No Antithesis errors`** failing (its own description says it may reflect an Antithesis bug); internal errors not present in any exposed SUT/component channel; tooling edge cases (e.g. log-fetch rejecting a negative `input_hash`). Chase the triggering string via the moment-log / events API as far as you can — but **whatever you find or fail to find, the report gets only the one-liner from §4 C.** Don't narrate the retrieval attempt on the page. (Common dead end worth knowing, not worth writing up: the log window can end *before* the counterexample vtime, and re-requesting at a rounded vtime 404s.)
+
+Be conservative labeling something Antithesis-platform — only when it does NOT trace to customer code.
+
+## 4. Output — one markdown report (GitHub gist / wiki page), project-first, aimed at owners
+
+Render a **single self-contained markdown file** — **not HTML, not an artifact**. It must be **public-safe** (this is the CF wiki's hard rule): **run IDs only, never authenticated/tokenized report URLs**, no secrets, no SSO cookies. GitHub renders `<details>`/`<summary>`, tables, and fenced code blocks natively, so use those for structure. Keep the layout **deterministic** — same sections, same order, every time.
+
+**Filing & naming.** Write the file into the CF wiki checkout `cardano-node-antithesis.wiki/` and name it **by ISO week**: `Antithesis-Report-YYYY-Www.md` (e.g. `Antithesis-Report-2026-W30.md`). Start the page with a wiki header `# Antithesis platform report — YYYY-Www`, then an **Analyzed window** line (`YYYY-MM-DD → YYYY-MM-DD (UTC)` + run/project counts + tenant), then a link back to `[Antithesis-Reports](Antithesis-Reports)`. If the requested window doesn't align to a single ISO week, name by the ISO week the bulk of it falls in and state the exact analyzed dates in the window line.
+
+**The week page may already exist as a stub** (CF pre-creates the current ISO week in the index with status `stub`). In that case **overwrite the stub page** and **rewrite its existing index row** (don't append a duplicate). Update `Antithesis-Reports.md` and `_Sidebar.md`:
+
+- **Index row** (exact columns): `| [YYYY-Www](Antithesis-Report-YYYY-Www) | <analyzed-start> → <analyzed-end> | <Author Name (@handle)> | published |`. The **Period cell = the actual analyzed dates**, never the canonical ISO-week Mon→Sun if they differ (see the Date-sanity rule). The uploader defaults status to `filled`; a hand-published finished report uses `published`.
+- **Sidebar**: add a `  - [Www](Antithesis-Report-YYYY-Www)` bullet under the year — but if the stub already listed the week, it's already there (leave it).
+
+**A. Header + window line** (as above). No separate stat band beyond the one window line.
+
+**B. Projects at a glance** (top). One markdown table: project + directory, **owner (requester)**, runs, clean count, incomplete count, and a state (Healthy / Node bug / Setup issues / Fully blocked / **Antithesis failure**) — use a leading emoji as the "pill" (🟢/🟠/🔴/🟦). Below it, a one-line legend: 🟥 Real / 🟨 Potential Bug / 🟦 Antithesis.
+
+**C. Per-project detail** — one **`<details>` block per project, collapsed by default** (no `open` attribute), **sorted by owner** (alphabetically; worst-first within an owner: fully blocked / antithesis failure → node bug → setup → healthy). The `<summary>` line reads exactly: `<b><owner-name></b> - project: <b><dirname></b> - repo: <b><org-name>/<repo></b>` + a one-line state — owner, dirname, and org/repo each wrapped in `<b>` tags. Inside:
+
+- A one-line "what's happening" summary.
+- **🟥 Real and 🟨 Potential findings as pointers:** bold title, short plain-language explanation, a fenced **evidence** code block (log line / assertion / moment, verbatim), a **"Pointer for `<owner>`:"** action line, and the **full run IDs** it applies to.
+- **Suggested fix (only projects with a local source checkout — see §2 source-code correlation):** one additional **nested** `<details><summary>Suggested fix</summary>` block at the end of the project's detail, containing per-finding: the source-level cause (repo-relative file paths, symbol/property names) and the concrete suggested change. Public-safe (paths and code identifiers only, no local absolute paths). Omit the block entirely when there's no local checkout or nothing actionable — no placeholder.
+- **🟦 Antithesis findings get a ONE-LINER: bold title + full run IDs, nothing else.** No explanation, no evidence block, and **never a "Pointer for `<owner>`:" line** — a platform fault is not the customer's to act on, and attaching an owner action line (even "nothing to fix your side") reads as though it were. Same for any Antithesis-side commentary: no "worth raising with us", no snouty/tooling-gap notes, no `antithesis-debug` suggestions anywhere in the report. Keep that reasoning in your triage, out of the page. Shape: `**🟦 Antithesis — <property> failed in N runs.** \`<run-id>\`, \`<run-id>\``
+- **Do NOT add a "No Antithesis callouts" note.** Silence = none. Antithesis findings appear inline in their project *and* are rolled up in section D.
+
+**D. Antithesis issues (consolidated)** — **at the very bottom, as a markdown table.** Compact, one row per project for the ones that have issues, no long prose:
+
+- `org / repo · <requester>` → if there is one: a **few-word summary + full run IDs** (e.g. `⚠️ No Antithesis errors ×3 · <run-id>, <run-id>, <run-id>`).
+  This is the "is anything wrong on our side?" glance — keep it terse. **No prose paragraph after the table.**
+
+**Publish.** Two paths:
+
+- **CF uploader** (preferred when `gh` is available): `tools/antithesis-wiki-report/scripts/upload-report.sh publish --week YYYY-Www --authors "Name (@handle)" --status published <report.md>`. It clones the wiki fresh, **regenerates the index + sidebar itself**, runs the public-safety check, commits, and pushes — so if you use it, do NOT also hand-edit the index/sidebar (it redoes them). Note: it needs `gh` + Write access; it can't run in a sandbox without them.
+- **Manual git** (fallback — the usual case here; the uploader can't run without `gh`): stage **exactly the three files** and commit with the uploader's message format so history stays consistent:
+
+  ```bash
+  WIKI=<path>/cardano-node-antithesis.wiki
+  git -C "$WIKI" add -- "Antithesis-Report-YYYY-Www.md" "Antithesis-Reports.md" "_Sidebar.md"
+  git -C "$WIKI" commit -m "report: Antithesis platform YYYY-Www (<Author Name (@handle)>)"
+  ```
+
+  - **Commit message must be** `report: Antithesis platform YYYY-Www (<authors>)` — matches `upload-report.sh`.
+  - **Git identity is often unset in the sandbox** (`commit` fails with "Author identity unknown"). Don't set global config — pass it inline, reusing the **previous report commit's author** for consistency: `git -C "$WIKI" -c user.name="…" -c user.email="…" commit -m "…"` (find it via `git -C "$WIKI" log -1 --format='%an <%ae>'`).
+  - **Do NOT stage the untracked `cardano-node-antithesis/` tooling checkout** that lives inside the wiki dir (it shows as `??` in status) — only the three report files.
+  - **Do NOT push by default.** Pushing uses the user's credentials; commit locally, then hand the user the push command (`git -C "$WIKI" push origin HEAD`) unless they've said to push.
+
+Before committing either way, run the public-safety check (`upload-report.sh check <report.md>`, or the equivalent greps for `antithesis.com/report/…?`, session cookies/PASETO/Bearer, and `token=` params). Also `grep -n '</invoke>\|</content>\|<antml' <report.md>` — stray tool-call syntax leaks into the end of a long written file and ships to a public wiki if unchecked. Report the resulting page URL (`https://github.com/cardano-foundation/cardano-node-antithesis/wiki/Antithesis-Report-YYYY-Www`) — that URL is fine to share; it's the *report page*, not an authenticated Antithesis report URL.
+
+## Formatting rules (learned)
+
+- **Always print run IDs in full** (e.g. `6ea304d97098b65fdfa8e0477dec05b7-56-17`), never truncated — they're needed for lookups.
+- Attribute each project to its **owner = requester**, not to "client".
+- Frame the whole report **by project**, not as a global client-vs-Antithesis split — but still tag each finding's classification and surface Antithesis callouts clearly per project.
+- Ground every conclusion in log/property evidence; if a property has no moment/logs (404), say so and rely on its `details`.
+- Note cross-cutting root causes (e.g. one SUT behavior causing multiple properties to fail) so the owner fixes once.
+- End with concrete next-step offers (e.g. `antithesis-debug` to recover an internal error string; `antithesis-query-logs` to confirm a failure reproduces without faults).
