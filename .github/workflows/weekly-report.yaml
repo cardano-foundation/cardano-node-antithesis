@@ -14,17 +14,29 @@ on:
 permissions:
   contents: read
 
+# Secrets (repository or environment scope):
+#   ANTITHESIS_API_KEY       Antithesis tenant API key
+#   CLAUDE_CODE_OAUTH_TOKEN  ANTHROPIC_API_KEY
+#   WIKI_PUSH_TOKEN          PAT (classic or if fine-grained works)
+# Variables (optional): REPORT_AUTHOR, REPORT_GIT_NAME, REPORT_GIT_EMAIL — who the report and its commit are attributed to.
+
 jobs:
   report:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    environment: weekly-report
+    defaults:
+      run:
+        working-directory: antithesis-report
     env:
       ANTITHESIS_BASE_URL: https://amaru-cardano.antithesis.com
       ANTITHESIS_API_KEY: ${{ secrets.ANTITHESIS_API_KEY }}
       ANTITHESIS_PROXY: ""          # no sandbox proxy on a runner: api_call.sh calls the API directly
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # from `claude setup-token` on a logged-in machine
-      REPORT_AUTHOR: "Asghar Musani (@asgharmusani-antithesis-dev)"
-      WIKI_PUSH_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}   # classic PAT with `repo` scope from an account with write access to the CF repo
+      WIKI_PUSH_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}
+      REPORT_AUTHOR: ${{ vars.REPORT_AUTHOR || 'Asghar Musani (@asgharmusani-antithesis-dev)' }}
+      REPORT_GIT_NAME: ${{ vars.REPORT_GIT_NAME || 'Asghar Musani' }}
+      REPORT_GIT_EMAIL: ${{ vars.REPORT_GIT_EMAIL || 'asghar.musani@antithesis.com' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,12 +51,12 @@ jobs:
           mkdir -p work
           claude -p "Read prompts/run-health-report-prompt.md and run it for last week.
 
-          Environment notes — this is a non-interactive CI runner, so never wait for a user; make the routine calls yourself:
+          Environment notes — this is a non-interactive CI runner:
           - The prefetch script is at scripts/api_call.sh (run it as: bash scripts/api_call.sh ...). It already reads ANTITHESIS_API_KEY and ANTITHESIS_PROXY from the environment.
-          - There is NO localhost proxy and no 'customer' wrapper here. For on-demand API calls use: curl -sS -H \"Authorization: Bearer \$ANTITHESIS_API_KEY\" \"$ANTITHESIS_BASE_URL/api/v1/...\"
+          - There is NO localhost proxy here. For on-demand API calls use: curl -sS -H \"Authorization: Bearer \$ANTITHESIS_API_KEY\" \"$ANTITHESIS_BASE_URL/api/v1/...\"
           - Project source checkouts are under ./git/<repo> (see repos.txt), freshly updated with all remote branches fetched. Use them for the source-code correlation and Suggested-fix sections.
           - The CF wiki checkout is ./git/cardano-node-antithesis.wiki . Write the report page, the index row and the sidebar bullet there.
-          - gh is not installed: use the prompt's manual-git publish path. Commit locally with the uploader's message format and the author \"$REPORT_AUTHOR\". Do NOT push." \
+          - Commit locally with the uploader's message format, author string \"$REPORT_AUTHOR\" and git identity \"$REPORT_GIT_NAME <$REPORT_GIT_EMAIL>\". Do NOT push." \
             --permission-mode bypassPermissions \
             --output-format text \
             2> work/claude_stderr.log | tee work/claude_output.md
@@ -89,7 +101,7 @@ jobs:
           fi
 
           # 4. rebase onto whatever landed meanwhile, then push over HTTPS with the PAT
-          git -C "$W" -c user.name="Asghar Musani" -c user.email="asghar.musani@antithesis.com" rebase --quiet origin/master
+          git -C "$W" -c user.name="$REPORT_GIT_NAME" -c user.email="$REPORT_GIT_EMAIL" rebase --quiet origin/master
           git -C "$W" push "https://x-access-token:${WIKI_PUSH_TOKEN}@github.com/cardano-foundation/cardano-node-antithesis.wiki.git" HEAD:master
           echo "pushed: https://github.com/cardano-foundation/cardano-node-antithesis/wiki/${page%.md}" | tee -a "$GITHUB_STEP_SUMMARY"
 

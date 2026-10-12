@@ -15,8 +15,10 @@
 #   --out FILE   Output JSON (default: triage_prefetch.json).
 #   --jobs N     Parallel per-run fetches (default: 8).
 #
-# Requires: curl, jq. Auth: uses sandbox proxy (localhost:3000) with the literal bearer
-# token "proxied" (real credentials are injected by the proxy).
+# Requires: curl, jq.
+# Auth: ANTITHESIS_API_KEY is sent as a bearer token. ANTITHESIS_PROXY (default
+# http://localhost:3000) names an HTTP proxy to route through; set it to "" to
+# call the tenant API directly, which is what the GitHub workflow does.
 set -euo pipefail
 
 BASE="${ANTITHESIS_BASE_URL:-https://amaru-cardano.antithesis.com}"

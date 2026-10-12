@@ -21,8 +21,8 @@ Generate a **project-first run-health report** for the last **{{DAYS|7}} days** 
 
 ## 0. Preflight
 
-- All data comes from the tenant's **v1 REST API** via `./api_call.sh` (repo root). Auth is transparent: the sandbox proxy — `curl -x http://localhost:3000 -H "Authorization: Bearer proxied"`. `$BASE` below = `https://<tenant>.antithesis.com` (script default: `amaru-cardano`; override with `ANTITHESIS_BASE_URL`).
-- Require `curl` + `jq`. Probe once before fanning out: `curl -sS -x http://localhost:3000 -H "Authorization: Bearer proxied" "$BASE/api/v1/runs?limit=1"` must return JSON with `.data`.
+- All data comes from the tenant's **v1 REST API** via `antithesis-report/scripts/api_call.sh`. Auth: `ANTITHESIS_API_KEY` is sent as a bearer token — `curl -H "Authorization: Bearer $ANTITHESIS_API_KEY"`; `ANTITHESIS_PROXY=""` calls the API directly. `$BASE` below = `https://<tenant>.antithesis.com` (script default: `amaru-cardano`; override with `ANTITHESIS_BASE_URL`).
+- Require `curl` + `jq`. Probe once before fanning out: `curl -sS -H "Authorization: Bearer $ANTITHESIS_API_KEY" "$BASE/api/v1/runs?limit=1"` must return JSON with `.data`.
 - **Preflight the publish target *before* triaging** (don't spend the fan-out only to hit a dead-end at the end). Output is a **markdown gist / wiki page**, so confirm the publish path up front: `gh auth status` (or a `GH_TOKEN`/`GITHUB_TOKEN` env var, or the CF `antithesis-wiki-report` uploader). If none is available, tell the user immediately and offer to (a) proceed and hand back the finished markdown file for them to paste, or (b) take a PAT with `gist` scope. Never store a token in memory or any file.
 
 ## 1. Prefetch — run the script (one call, all the data)
@@ -43,7 +43,7 @@ Everything downstream reads `triage_prefetch.json` — do **NOT** re-list runs o
 
 Spawn parallel agents (general-purpose). Give each agent its project's slice of `triage_prefetch.json` and these rules. Agents make **on-demand API calls only for moment logs / event searches** — never re-fetch what the prefetch already holds, and **never open a triage report** (the WASM SPA doesn't render headless, and nothing below needs it — `failure_reason` already carries what the report's Error panel would say).
 
-On-demand fetches (same auth as the script — `curl -x http://localhost:3000 -H "Authorization: Bearer proxied" …`:
+On-demand fetches (same auth as the script — `curl -sS -H "Authorization: Bearer $ANTITHESIS_API_KEY" …`):
 
 - **Moment log:** `"$BASE/api/v1/runs/<run-id>/logs?input_hash=<h>&vtime=<v>"` (NDJSON; match vtime **exactly**, don't let it round).
 - **Event search:** `-G "$BASE/api/v1/runs/<run-id>/events" --data-urlencode "q=<term>"` — find more pass/fail occurrences of a property.
@@ -135,4 +135,3 @@ Before committing either way, run the public-safety check (`upload-report.sh che
 - Frame the whole report **by project**, not as a global client-vs-Antithesis split — but still tag each finding's classification and surface Antithesis callouts clearly per project.
 - Ground every conclusion in log/property evidence; if a property has no moment/logs (404), say so and rely on its `details`.
 - Note cross-cutting root causes (e.g. one SUT behavior causing multiple properties to fail) so the owner fixes once.
-- End with concrete next-step offers (e.g. `antithesis-debug` to recover an internal error string; `antithesis-query-logs` to confirm a failure reproduces without faults).
