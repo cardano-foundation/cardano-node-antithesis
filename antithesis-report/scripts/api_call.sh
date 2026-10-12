@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Antithesis run-health prefetch — replaces the snouty triage machinery.
+# Antithesis run-health prefetch
 #
 # Fetches every run in a time window from the v1 API, classifies incomplete
 # runs via failure_reason (no report opening), prefetches failing properties
@@ -15,8 +15,7 @@
 #   --out FILE   Output JSON (default: triage_prefetch.json).
 #   --jobs N     Parallel per-run fetches (default: 8).
 #
-# Requires: curl, jq. Auth: uses `customer curl` when available, otherwise
-# falls back to the sandbox proxy (localhost:3000) with the literal bearer
+# Requires: curl, jq. Auth: uses sandbox proxy (localhost:3000) with the literal bearer
 # token "proxied" (real credentials are injected by the proxy).
 set -euo pipefail
 
@@ -37,12 +36,8 @@ done
 [[ -z "$FROM" ]] && FROM="$(date -u -d "-${DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
 [[ -z "$TO"   ]] && TO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-if command -v customer >/dev/null 2>&1; then
-  fetch() { customer curl -sS -m 60 "$@" 2>/dev/null; }
-else
-  fetch() { curl -sS -m 60 -x "${ANTITHESIS_PROXY:-http://localhost:3000}" \
+fetch() { curl -sS -m 60 -x "${ANTITHESIS_PROXY:-http://localhost:3000}" \
                  -H "Authorization: Bearer ${ANTITHESIS_API_KEY:-proxied}" "$@"; }
-fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
