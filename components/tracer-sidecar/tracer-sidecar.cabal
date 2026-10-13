@@ -80,4 +80,5 @@ test-suite test
   build-tool-depends: hspec-discover:hspec-discover
   other-modules:
     ForkTreeSpec
+    RunEvidence
     Spec

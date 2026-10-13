@@ -7,6 +7,7 @@
 
 module Cardano.Antithesis.Sidecar
     ( mkSpec
+    , defaultSecurityParam
     , initialStateIO
     , processMessageIO
     , Output (..)
@@ -19,6 +20,7 @@ import Cardano.Antithesis.ForkTree
     ( ForkTreeState
     , Tip (..)
     , clusterForkDepth
+    , currentTips
     , initialForkTreeState
     , recordExtension
     , setTip
@@ -58,6 +60,8 @@ import Control.Monad.Trans.Writer.Strict
     )
 import Data.Aeson
     ( Value
+    , object
+    , (.=)
     )
 import qualified Data.ByteString.Lazy as BL
 import Data.Foldable
@@ -66,8 +70,10 @@ import Data.Foldable
 import Data.List
     ( mapAccumL
     )
+import qualified Data.Map.Strict as Map
 import Data.Maybe
     ( fromMaybe
+    , listToMaybe
     , mapMaybe
     )
 import Data.Set
@@ -78,25 +84,53 @@ import Data.Text
     )
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
+import Data.Time
+    ( NominalDiffTime
+    , UTCTime
+    , diffUTCTime
+    )
 import System.Environment (lookupEnv)
 import System.IO (IOMode (AppendMode), withFile)
+import Text.Read
+    ( readMaybe
+    )
 
 -- spec ------------------------------------------------------------------------
 
--- | Praos security parameter for the master testnet (k = 432).
--- Forks shorter than this heal by definition; any cluster-wide
--- divergence at this depth or beyond is unrecoverable.
-defaultK :: Int
-defaultK = 432
+-- | Praos security parameter of the master and adversary testnets
+-- (k = 432).  A testnet with another @securityParam@ in its
+-- @testnet.yaml@ passes its own value to 'mkSpec'.
+defaultSecurityParam :: Int
+defaultSecurityParam = 432
 
--- | Cap on per-host ancestry walks when computing common
--- ancestors.  Set generously above 'defaultK' so the walk can
--- still detect a common ancestor at the boundary.
-defaultDepthCap :: Int
-defaultDepthCap = defaultK * 2
+-- | Cap on per-host ancestry walks when placing a host against the
+-- longest chain.  Generous: it must cover the lag of a slow host as
+-- well as a fork of depth @k@.
+walkCap :: Int -> Int
+walkCap k = max 1024 (k * 2)
 
-mkSpec :: Int -> Maybe Text -> Bool -> Spec
-mkSpec nPools consumerHost amaruEnabled = do
+-- | How long an Amaru relay may stay more than @k@ blocks behind the
+-- producers before it counts as not following the chain.  Restarts
+-- injected by faults put a relay back on its stored tip and it
+-- catches up within seconds: in Antithesis run
+-- @84894c33e560cf8494b0b78ac8fbaba9-62-14@ the longest such episode
+-- before the stall was 18 s, while the stalled relays stayed behind
+-- for 1425 s.
+amaruFollowWindow :: NominalDiffTime
+amaruFollowWindow = 300
+
+-- | Substrings of an Amaru stdout line that mean the node is dead or
+-- cannot recover.  @lifecycle.consensus_died@ is the line the
+-- current Amaru logs when a consensus stage exits.
+amaruFatalMarkers :: [Text]
+amaruFatalMarkers =
+    [ "Consensus died"
+    , "lifecycle.consensus_died"
+    , "attempted roll back in the future"
+    ]
+
+mkSpec :: Int -> Int -> Maybe Text -> Bool -> Spec
+mkSpec k nPools consumerHost amaruEnabled = do
     mapM_
         sometimesTraces
         [ "TraceAddBlockEvent.SwitchedToAFork"
@@ -115,7 +149,7 @@ mkSpec nPools consumerHost amaruEnabled = do
     observe recordAllChainPoints
 
     -- Cluster-wide fork-depth probe (#119).
-    forkTreeProbe defaultK defaultDepthCap
+    forkTreeProbe k (walkCap k)
 
     forM_ consumerHost $ \host ->
         amaruConsumerConvergenceProbe nPools host
@@ -130,11 +164,11 @@ mkSpec nPools consumerHost amaruEnabled = do
                 case details of
                     AmaruStdout{amaruMessage} ->
                         not
-                            $ T.isInfixOf "Consensus died" amaruMessage
-                                || T.isInfixOf
-                                    "attempted roll back in the future"
-                                    amaruMessage
+                            $ any
+                                (`T.isInfixOf` amaruMessage)
+                                amaruFatalMarkers
                     _ -> True
+        amaruFollowProbe k nPools
   where
     -- Issue #123, Layer 2 was here — a "did the adversary appear in
     -- some producer's InboundGovernor stream" probe via substring
@@ -199,6 +233,12 @@ data State = State
     -- ^ First observed amaru-consumer chain length.  The
     -- convergence property only fires after the consumer advances
     -- beyond this baseline.
+    , amaruRelayLengths :: !(Map.Map Text Int)
+    -- ^ Latest block height each Amaru relay reported on a
+    -- @tip.adopt@ line.
+    , amaruBehindSince :: !(Map.Map Text UTCTime)
+    -- ^ For each Amaru relay more than @k@ blocks behind the
+    -- producers, when it was first seen so.
     }
 
 initialState :: Spec -> (State, [Output])
@@ -216,6 +256,8 @@ initialState spec =
             , maxForkDepth = 0
             , producerTipHashes = mempty
             , consumerFirstLen = Nothing
+            , amaruRelayLengths = mempty
+            , amaruBehindSince = mempty
             }
     setupFns = stateInitFunctions spec
 
@@ -250,6 +292,18 @@ alwaysOrUnreachable
     -> (State -> LogMessage -> Bool)
     -> Spec
 alwaysOrUnreachable name f =
+    alwaysOrUnreachableWith name $ \s msg@LogMessage{json} ->
+        if f s msg then Nothing else Just json
+
+-- | Like 'alwaysOrUnreachable', but the predicate names its own
+-- evidence: 'Nothing' while the invariant holds, 'Just' the details to
+-- report the first time it does not.
+alwaysOrUnreachableWith
+    :: Text
+    -- ^ Name and identifier
+    -> (State -> LogMessage -> Maybe Value)
+    -> Spec
+alwaysOrUnreachableWith name f =
     Spec
         $ tell
             [ Rule process (Just (alwaysOrUnreachableDeclaration name)) initState
@@ -258,15 +312,15 @@ alwaysOrUnreachable name f =
     initState s = s{unreachedAssertions = Set.insert name (unreachedAssertions s)}
 
     process :: State -> LogMessage -> (State, [Output])
-    process s@State{unreachedAssertions = scanningFor} msg@LogMessage{json} =
+    process s@State{unreachedAssertions = scanningFor} msg =
         case f s msg of
-            False
+            Just evidence
                 | Set.member name scanningFor ->
                     ( s{unreachedAssertions = Set.delete name scanningFor}
-                    , [AntithesisSdk $ alwaysOrUnreachableFailed name json]
+                    , [AntithesisSdk $ alwaysOrUnreachableFailed name evidence]
                     )
                 | otherwise -> (s, [])
-            True -> (s, [])
+            Nothing -> (s, [])
 
 observe :: (State -> LogMessage -> [Output]) -> Spec
 observe process = do
@@ -355,8 +409,8 @@ forkTreeProbe k depthCap = do
     -- threshold.  The highest passed threshold in the report tells
     -- you how deep the cluster forked under fault injection without
     -- drilling into per-event details.  Thresholds are sparse on
-    -- purpose (k = 432 makes per-integer rows wasteful and floods
-    -- the report).
+    -- purpose (a deep fork is rare, so per-integer rows would be
+    -- wasteful and flood the report).
     forM_ depthThresholds $ \threshold ->
         sometimesOptional
             ( "cluster_fork_depth_"
@@ -366,10 +420,10 @@ forkTreeProbe k depthCap = do
             $ \s _ -> maxForkDepth s >= threshold
 
 -- | Sparse depth thresholds — covers "anything", "small fork",
--- "medium fork", "large fork" without one row per integer.  k=432
--- is the failure ceiling; thresholds beyond ~k/2 are uninteresting
--- because crossing k is already its own AlwaysOrUnreachable
--- assertion.
+-- "medium fork", "large fork" without one row per integer.  k is
+-- the failure ceiling and varies per testnet; thresholds at or above
+-- it stay unreachable because crossing k is already its own
+-- AlwaysOrUnreachable assertion.
 depthThresholds :: [Int]
 depthThresholds = [2, 3, 5, 10, 50, 100, 200]
 
@@ -482,6 +536,91 @@ sameHost configured observed =
 hostStem :: Text -> Text
 hostStem host =
     fromMaybe host (T.stripSuffix ".example" host)
+
+-- Amaru relays follow the producers -------------------------------------------
+
+-- | An Amaru relay that stays more than @k@ blocks behind the
+-- producers for 'amaruFollowWindow' has stopped following the chain.
+-- Its height is the latest @block_height@ of its @tip.adopt@ lines;
+-- the producers' height is the longest tip among @p1..pN@.
+amaruFollowProbe :: Int -> Int -> Spec
+amaruFollowProbe k nPools = do
+    Spec
+        $ tell
+            [ Rule
+                { _ruleProcess = updateAmaruFollow k nPools
+                , ruleDeclaration = Nothing
+                , ruleInit = id
+                }
+            ]
+    alwaysOrUnreachableWith "amaru relays follow the producer tip"
+        $ \s@State{amaruRelayLengths, amaruBehindSince} LogMessage{at} ->
+            listToMaybe
+                [ object
+                    [ "host" .= relay
+                    , "relay_tip_length" .= Map.lookup relay amaruRelayLengths
+                    , "producer_tip_length" .= producerTipLength nPools s
+                    , "behind_since" .= since
+                    , "observed_at" .= at
+                    , "window_seconds" .= (realToFrac amaruFollowWindow :: Double)
+                    , "k" .= k
+                    ]
+                | (relay, since) <- Map.toList amaruBehindSince
+                , diffUTCTime at since >= amaruFollowWindow
+                ]
+
+updateAmaruFollow
+    :: Int -> Int -> State -> LogMessage -> (State, [Output])
+updateAmaruFollow k nPools s LogMessage{at, host, details} =
+    ( s{amaruRelayLengths = lengths, amaruBehindSince = behindSince}
+    , []
+    )
+  where
+    lengths = case details of
+        AmaruStdout{amaruMessage}
+            | Just height <- tipAdoptHeight amaruMessage ->
+                Map.insert host height (amaruRelayLengths s)
+        _ -> amaruRelayLengths s
+    producers = producerTipLength nPools s
+    behindSince =
+        Map.mapMaybeWithKey
+            ( \relay height ->
+                if producers - height > k
+                    then
+                        Just
+                            $ Map.findWithDefault
+                                at
+                                relay
+                                (amaruBehindSince s)
+                    else Nothing
+            )
+            lengths
+
+-- | Longest tip among the block-producing pools.
+producerTipLength :: Int -> State -> Int
+producerTipLength nPools State{forkTree} =
+    maximum
+        $ 0
+            : [ tipChainLength tip
+              | (host, tip) <- Map.toList (currentTips forkTree)
+              , hostStem host `Set.member` pools
+              ]
+  where
+    pools =
+        Set.fromList
+            ["p" <> T.pack (show i) | i <- [1 :: Int .. nPools]]
+
+-- | The @block_height@ an Amaru @tip.adopt@ line reports.
+tipAdoptHeight :: Text -> Maybe Int
+tipAdoptHeight line
+    | "tip.adopt" `T.isInfixOf` line =
+        listToMaybe
+            [ height
+            | word <- T.words line
+            , Just digits <- [T.stripPrefix "block_height=" word]
+            , Just height <- [readMaybe (T.unpack digits)]
+            ]
+    | otherwise = Nothing
 
 declarations :: Spec -> [Output]
 declarations (Spec s) = mapMaybe (fmap AntithesisSdk . ruleDeclaration) $ execWriter s

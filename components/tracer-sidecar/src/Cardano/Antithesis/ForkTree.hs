@@ -10,11 +10,12 @@
 -- @SwitchedToAFork@ do not need to record the parent (the producer
 -- already did, eventually).
 --
--- The cluster-wide fork depth is then
--- @max(tip[h].chainLength) - commonAncestor.chainLength@ where
--- @commonAncestor@ is the deepest block present in /every/ host's
--- ancestry walk.  When that value crosses Praos's @k@, the divergence
--- is by definition unrecoverable.
+-- The cluster-wide fork depth is the deepest rollback any host would
+-- need to follow the longest tip: for each host,
+-- @tip[h].chainLength - lca(tip[h], longestTip).chainLength@.  A host
+-- whose tip is an ancestor of the longest tip is merely behind, not
+-- forked, and needs no rollback.  When the depth crosses Praos's @k@,
+-- the divergence is by definition unrecoverable.
 module Cardano.Antithesis.ForkTree
     ( -- * Types
       BlockHash
@@ -32,7 +33,6 @@ module Cardano.Antithesis.ForkTree
 
       -- * Queries
     , currentTips
-    , commonAncestor
     , clusterForkDepth
 
       -- * Internal (exposed for tests)
@@ -41,11 +41,10 @@ module Cardano.Antithesis.ForkTree
     )
 where
 
-import Data.List (foldl')
+import Data.List (delete, find)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 
@@ -85,24 +84,28 @@ initialForkTreeState :: ForkTreeState
 initialForkTreeState =
     ForkTreeState{tips = Map.empty, parents = Map.empty}
 
--- | Record a sequential chain extension on a host: the previous
---   tip becomes the parent of the new tip.  Idempotent.
+-- | Record a chain extension on a host: when the new tip is exactly
+--   one block above the host's previous tip, the previous tip is its
+--   parent.  Idempotent.
 --
--- Use this on every @AddedToCurrentChain@ event.  The new tip's
--- parent IS the previous tip the host had, regardless of how the
--- previous tip arrived (forge, normal extension, or fork switch).
+-- Use this on every @AddedToCurrentChain@ event.  A host that adopts
+-- several blocks at once (a node catching up reports only the last
+-- block of each batch) skips blocks: the previous tip is then an
+-- ancestor but not the parent, and recording it as the parent would
+-- overwrite the true edge another host recorded for the same block.
 recordExtension :: Host -> Tip -> ForkTreeState -> ForkTreeState
 recordExtension host newTip st =
     let st' = case Map.lookup host (tips st) of
-            Nothing -> st
-            Just prev ->
-                st
-                    { parents =
-                        Map.insert
-                            (tipHash newTip)
-                            (tipHash prev, tipChainLength prev)
-                            (parents st)
-                    }
+            Just prev
+                | tipChainLength newTip == tipChainLength prev + 1 ->
+                    st
+                        { parents =
+                            Map.insert
+                                (tipHash newTip)
+                                (tipHash prev, tipChainLength prev)
+                                (parents st)
+                        }
+            _ -> st
     in  st'{tips = Map.insert host newTip (tips st')}
 
 -- | Update a host's current tip without recording a parent edge.
@@ -141,48 +144,44 @@ walkBack maxDepth startHash startLen st =
             Nothing -> []
             Just (ph, plen) -> go ph plen
 
--- | Deepest block present in /every/ host's ancestry walk, capped
---   at @maxDepth@ ancestors per host.  Returns 'Nothing' if there
---   are no tips, or if the tips share no recorded common ancestor
---   within the cap.
-commonAncestor
-    :: Int -> ForkTreeState -> Maybe (BlockHash, ChainLength)
-commonAncestor maxDepth st = case Map.elems (tips st) of
-    [] -> Nothing
-    (firstTip : restTips) ->
-        let firstWalk =
-                walkBack
-                    maxDepth
-                    (tipHash firstTip)
-                    (tipChainLength firstTip)
-                    st
-            restWalks =
-                [ walkBack maxDepth (tipHash t) (tipChainLength t) st
-                | t <- restTips
-                ]
-            firstSet = Set.fromList (map fst firstWalk)
-            restSets = map (Set.fromList . map fst) restWalks
-            common = foldl' Set.intersection firstSet restSets
-            -- Read each common hash's chain length from firstWalk
-            -- (chain length is a property of the block, identical
-            -- across all walks that contain it).
-            commonWithLen =
-                mapMaybe
-                    (\(h, l) -> if Set.member h common then Just (h, l) else Nothing)
-                    firstWalk
-        in  case commonWithLen of
-                [] -> Nothing
-                (x : xs) -> Just (foldl' deeper x xs)
-  where
-    deeper a@(_, la) b@(_, lb) = if lb > la then b else a
-
--- | Cluster-wide fork depth: @max(tip.chainLength) -
---   commonAncestor.chainLength@.  Returns 'Nothing' when no common
---   ancestor is known (e.g.  not enough events processed yet).
+-- | Cluster-wide fork depth: the deepest rollback any host would need
+--   to follow the longest tip.  For each host that is
+--   @tip.chainLength - lca.chainLength@, where @lca@ is the first
+--   block of the host's ancestry walk that lies on the longest tip's
+--   chain.  A host whose own tip is on that chain is behind, not
+--   forked, and contributes @0@.  Both walks are capped at
+--   @maxDepth@ ancestors; a host whose walk meets no block of the
+--   longest chain within the cap (a gap in the recorded edges, or a
+--   lag beyond the cap) contributes nothing.  Ties for the longest
+--   tip go to the smallest hash.
+--
+--   Returns 'Nothing' when no tips are known, or when other hosts
+--   exist but none of them can be placed against the longest chain.
 clusterForkDepth :: Int -> ForkTreeState -> Maybe Int
-clusterForkDepth maxDepth st = do
-    (_, ancestorLen) <- commonAncestor maxDepth st
-    let lens = map tipChainLength (Map.elems (tips st))
-    case lens of
-        [] -> Nothing
-        _ -> Just (foldl' max 0 lens - ancestorLen)
+clusterForkDepth maxDepth st = case Map.elems (tips st) of
+    [] -> Nothing
+    allTips ->
+        let leader = foldl1 longer allTips
+            others = delete leader allTips
+            leaderChain =
+                Set.fromList
+                    . map fst
+                    $ walkBack
+                        maxDepth
+                        (tipHash leader)
+                        (tipChainLength leader)
+                        st
+            rollback t =
+                (\(_, len) -> tipChainLength t - len)
+                    <$> find
+                        ((`Set.member` leaderChain) . fst)
+                        (walkBack maxDepth (tipHash t) (tipChainLength t) st)
+        in  case (others, mapMaybe rollback others) of
+                ([], _) -> Just 0
+                (_, []) -> Nothing
+                (_, depths) -> Just (maximum depths)
+  where
+    longer a b
+        | tipChainLength b > tipChainLength a = b
+        | tipChainLength b == tipChainLength a && tipHash b < tipHash a = b
+        | otherwise = a

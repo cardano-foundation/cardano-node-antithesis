@@ -22,7 +22,8 @@ import Cardano.Antithesis.Sdk
     , writeSdkJsonl
     )
 import Cardano.Antithesis.Sidecar
-    ( initialStateIO
+    ( defaultSecurityParam
+    , initialStateIO
     , mkSpec
     , processMessageIO
     )
@@ -96,13 +97,16 @@ main = do
         _ -> error "Usage: <executable name> <directory>"
 
     (nPools :: Int) <- read <$> getEnv "POOLS"
+    securityParam <-
+        maybe defaultSecurityParam (read :: String -> Int)
+            <$> lookupEnv "SECURITY_PARAM"
     consumerHost <- fmap Text.pack <$> lookupEnv "AMARU_CONSUMER_HOST"
     amaruLogDir <- lookupEnv "AMARU_LOG_DIR"
     let amaruEnabled = isJust amaruLogDir
 
     writeSdkJsonl $ sometimesTracesDeclaration "find log files"
 
-    let spec = mkSpec nPools consumerHost amaruEnabled
+    let spec = mkSpec securityParam nPools consumerHost amaruEnabled
     mvar <- newMVar =<< initialStateIO spec
 
     forM_ amaruLogDir $ \logDir -> do

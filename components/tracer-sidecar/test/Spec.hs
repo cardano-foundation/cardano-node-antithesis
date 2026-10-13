@@ -19,6 +19,7 @@ import Cardano.Antithesis.LogMessage
     )
 import Cardano.Antithesis.Sidecar
     ( Output (..)
+    , defaultSecurityParam
     , initialState
     , mkSpec
     , processMessages
@@ -50,6 +51,7 @@ import Data.Either
     ( partitionEithers
     )
 import Data.Foldable (forM_)
+import Data.Function ((&))
 import Data.List
     ( sort
     )
@@ -60,6 +62,11 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time
 import ForkTreeSpec qualified
+import RunEvidence
+    ( amaruRelayLines
+    , chainAdoptions
+    , timeline
+    )
 import System.FilePath ((</>))
 import System.IO.Temp
     ( withSystemTempDirectory
@@ -83,7 +90,7 @@ spec = do
             let outputs =
                     sdkAssertions
                         $ runSynthetic
-                            (mkSpec 1 (Just "amaru-consumer.example") False)
+                            (mkSpec defaultSecurityParam 1 (Just "amaru-consumer.example") False)
                             [ addedToCurrentChain "amaru-consumer.example" 10 "seed"
                             , addedToCurrentChain "p1.example" 11 "producer-tip"
                             , addedToCurrentChain "amaru-consumer.example" 11 "producer-tip"
@@ -94,7 +101,7 @@ spec = do
             let outputs =
                     sdkAssertions
                         $ runSynthetic
-                            (mkSpec 1 (Just "amaru-consumer.example") False)
+                            (mkSpec defaultSecurityParam 1 (Just "amaru-consumer.example") False)
                             [ addedToCurrentChain "amaru-consumer.example" 10 "seed"
                             , addedToCurrentChain "amaru-relay-1.example" 11 "producer-tip"
                             , addedToCurrentChain "amaru-consumer.example" 11 "producer-tip"
@@ -105,7 +112,7 @@ spec = do
             let outputs =
                     sdkAssertions
                         $ runSynthetic
-                            (mkSpec 1 (Just "amaru-consumer.example") False)
+                            (mkSpec defaultSecurityParam 1 (Just "amaru-consumer.example") False)
                             [ addedToCurrentChain "amaru-consumer.example" 10 "seed"
                             , addedToCurrentChain "p1.example" 11 "producer-tip"
                             , addedToCurrentChain "amaru-consumer.example" 10 "seed"
@@ -118,7 +125,7 @@ spec = do
             let outputs =
                     sdkAssertions
                         $ runSynthetic
-                            (mkSpec 1 Nothing False)
+                            (mkSpec defaultSecurityParam 1 Nothing False)
                             [ addedToCurrentChain "p1.example" 11 "producer-tip"
                             ]
             outputs
@@ -209,7 +216,7 @@ spec = do
             let outputs =
                     sdkAssertions
                         $ runSynthetic
-                            (mkSpec 1 Nothing False)
+                            (mkSpec defaultSecurityParam 1 Nothing False)
                             [addedToCurrentChain "p1.example" 11 "tip"]
             outputs
                 `shouldNotSatisfy` any
@@ -264,7 +271,7 @@ spec = do
                         (UTCTime (fromGregorian 2026 7 28) 0)
                         "amaru-relay-1.log"
                         "ERROR something bad\n"
-                amaruSpec = mkSpec 1 Nothing True
+                amaruSpec = mkSpec defaultSecurityParam 1 Nothing True
                 outputs =
                     sdkAssertions
                         $ snd
@@ -386,9 +393,186 @@ spec = do
                 msgs <- readMVar r
                 length msgs `shouldBe` 0
 
+    describe
+        "replay of Antithesis run 84894c33e560cf8494b0b78ac8fbaba9-62-14" $ do
+        chain <- runIO chainAdoptions
+        relays <- runIO amaruRelayLines
+        let clusterSpec =
+                mkSpec
+                    cardanoAmaruSecurityParam
+                    3
+                    (Just "amaru-consumer.example")
+                    True
+            replay msgs =
+                sdkAssertions
+                    $ snd
+                    $ processMessages clusterSpec (initialState clusterSpec) msgs
+            relayLinesWith needle =
+                [ m
+                | m@LogMessage{details = AmaruStdout{amaruMessage}} <- relays
+                , needle `T.isInfixOf` amaruMessage
+                ]
+            beforeTheStall =
+                filter
+                    ( \LogMessage{at = t} ->
+                        t < UTCTime (fromGregorian 2026 10 12) (19 * 3600 + 48 * 60)
+                    )
+
+        it "cluster fork depth < k holds while a consumer only lags" $ do
+            chain `shouldSatisfy` (not . null)
+            replay chain
+                `shouldNotSatisfy` any (assertionFailed "cluster fork depth < k")
+
+        it
+            "lifecycle.consensus_died on amaru-relay-2 fails the fatal invariant" $ do
+            let died = relayLinesWith "lifecycle.consensus_died"
+            died `shouldSatisfy` (not . null)
+            replay died
+                `shouldSatisfy` any (assertionFailed "no fatal amaru consensus logs")
+
+        it "the other relay errors of the run are not fatal" $ do
+            let others =
+                    [ m
+                    | m@LogMessage{details = AmaruStdout{amaruMessage}} <- relays
+                    , " ERROR " `T.isInfixOf` amaruMessage
+                    , not ("lifecycle.consensus_died" `T.isInfixOf` amaruMessage)
+                    ]
+            others `shouldSatisfy` (not . null)
+            replay others
+                `shouldNotSatisfy` any (assertionFailed "no fatal amaru consensus logs")
+
+        it "relays stuck behind the producers fail the follow property"
+            $ replay (timeline (chain <> relays))
+            `shouldSatisfy` any (assertionFailed followPropertyName)
+
+        it "the run before the stall keeps the follow property green" $ do
+            let outputs = replay (beforeTheStall (timeline (chain <> relays)))
+            outputs `shouldSatisfy` any (assertionDeclared followPropertyName)
+            outputs `shouldNotSatisfy` any (assertionFailed followPropertyName)
+
+    describe "cluster fork depth uses the testnet security parameter" $ do
+        let forkedBy depth =
+                [ addedToCurrentChain "p1.example" 0 "root"
+                , addedToCurrentChain "p2.example" 0 "root"
+                ]
+                    <> concat
+                        [ [ addedToCurrentChain "p1.example" i ("a" <> T.pack (show i))
+                          , addedToCurrentChain "p2.example" i ("b" <> T.pack (show i))
+                          ]
+                        | i <- [1 .. depth]
+                        ]
+            failsWith k depth =
+                runSynthetic (mkSpec k 2 Nothing False) (forkedBy depth)
+                    & sdkAssertions
+                    & any (assertionFailed "cluster fork depth < k")
+
+        it "fails when two producers diverge by k blocks"
+            $ failsWith 20 20
+            `shouldBe` True
+
+        it "holds when they diverge by one block less than k"
+            $ failsWith 20 19
+            `shouldBe` False
+
+        it "holds at a depth that only the default k = 432 would tolerate" $ do
+            failsWith 20 25 `shouldBe` True
+            failsWith defaultSecurityParam 25 `shouldBe` False
+
+    describe "amaru relays follow the producer tip" $ do
+        let t0 = UTCTime (fromGregorian 2026 10 12) 0
+            at' seconds = addUTCTime seconds t0
+            producerAt seconds len =
+                (addedToCurrentChain "p1.example" len ("h" <> T.pack (show len)))
+                    { at = at' seconds
+                    }
+            relayAt seconds relay height =
+                (amaruEvent relay (tipAdoptLine height)){at = at' seconds}
+            followSpec = mkSpec 20 1 Nothing True
+            outputsOf =
+                sdkAssertions
+                    . snd
+                    . processMessages followSpec (initialState followSpec)
+            failures = filter (assertionFailed followPropertyName)
+
+        it
+            "fails once a relay has been more than k blocks behind for the whole window" $ do
+            let outputs =
+                    outputsOf
+                        [ producerAt 0 100
+                        , relayAt 0 "amaru-relay-1" 70
+                        , producerAt 300 160
+                        ]
+            case failures outputs of
+                [f] ->
+                    assertionField "details" f
+                        `shouldBe` Just
+                            ( object
+                                [ "host" .= ("amaru-relay-1" :: Text)
+                                , "relay_tip_length" .= (70 :: Int)
+                                , "producer_tip_length" .= (160 :: Int)
+                                , "behind_since" .= at' 0
+                                , "observed_at" .= at' 300
+                                , "window_seconds" .= (300 :: Double)
+                                , "k" .= (20 :: Int)
+                                ]
+                            )
+                other ->
+                    expectationFailure
+                        $ "expected exactly one failure, got "
+                            <> show (length other)
+
+        it "holds when the relay catches up just before the window ends"
+            $ outputsOf
+                [ producerAt 0 100
+                , relayAt 0 "amaru-relay-1" 70
+                , producerAt 299 160
+                , relayAt 299 "amaru-relay-1" 160
+                , producerAt 600 220
+                , relayAt 600 "amaru-relay-1" 220
+                ]
+            `shouldNotSatisfy` any (assertionFailed followPropertyName)
+
+        it "holds while a relay is exactly k blocks behind"
+            $ outputsOf
+                [ producerAt 0 100
+                , relayAt 0 "amaru-relay-1" 80
+                , producerAt 1000 100
+                ]
+            `shouldNotSatisfy` any (assertionFailed followPropertyName)
+
+        it "judges each relay on its own" $ do
+            let outputs =
+                    outputsOf
+                        [ producerAt 0 100
+                        , relayAt 0 "amaru-relay-1" 100
+                        , relayAt 0 "amaru-relay-2" 70
+                        , producerAt 400 190
+                        , relayAt 400 "amaru-relay-1" 190
+                        ]
+            map (assertionField "details") (failures outputs)
+                `shouldSatisfy` \case
+                    [Just (Aeson.Object d)] ->
+                        KeyMap.lookup "host" d
+                            == Just (Aeson.String "amaru-relay-2")
+                    _ -> False
+
+        it "reads block_height, not max_block_height"
+            $ outputsOf
+                [ producerAt 0 100
+                , relayAt 0 "amaru-relay-1" 100
+                , ( amaruEvent
+                        "amaru-relay-1"
+                        "tip.adopt block_height=100 max_block_height=10"
+                  )
+                    { at = at' 0
+                    }
+                , producerAt 1000 100
+                ]
+            `shouldNotSatisfy` any (assertionFailed followPropertyName)
+
     it "processMessages"
         $ let
-            propSpec = mkSpec 3 Nothing False
+            propSpec = mkSpec defaultSecurityParam 3 Nothing False
             (_finalState, actualVals) = processMessages propSpec (initialState propSpec) msgs
             msgs = mapMaybe decodeStrict' input
           in
@@ -589,4 +773,20 @@ runAmaru :: [LogMessage] -> [Value]
 runAmaru msgs =
     sdkAssertions $ snd $ processMessages spec (initialState spec) msgs
   where
-    spec = mkSpec 1 Nothing True
+    spec = mkSpec defaultSecurityParam 1 Nothing True
+
+followPropertyName :: Text
+followPropertyName = "amaru relays follow the producer tip"
+
+-- | @securityParam@ of testnets/cardano_amaru/testnet.yaml.
+cardanoAmaruSecurityParam :: Int
+cardanoAmaruSecurityParam = 20
+
+-- | A @tip.adopt@ line as Amaru logs it.
+tipAdoptLine :: Int -> Text
+tipAdoptLine height =
+    "2026-10-12T19:48:02.003728Z  INFO amaru::consensus: tip.adopt slot=3776 header_hash=\"69e77aad\" block_height="
+        <> T.pack (show height)
+        <> " max_block_height="
+        <> T.pack (show height)
+        <> " suppressed=0"

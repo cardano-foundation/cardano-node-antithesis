@@ -430,6 +430,9 @@ services:
     environment:
       POOLS: "3"
       CHAINPOINT_FILEPATH: "/opt/cardano-tracer/chainPoints.log"
+      # securityParam of testnet.yaml: the tracer-sidecar default is the
+      # master testnet k = 432.
+      SECURITY_PARAM: "20"
       AMARU_CONSUMER_HOST: amaru-consumer.example
       AMARU_LOG_DIR: /opt/amaru-logs
     volumes:

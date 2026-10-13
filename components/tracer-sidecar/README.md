@@ -17,7 +17,8 @@ pipeline. Files created after the watcher starts are discovered automatically.
 
 | Variable | Required | Effect |
 |---|---|---|
-| `AMARU_LOG_DIR` | No | Enables Amaru ingestion when set to a directory path. When absent, neither Amaru-specific property is declared. |
+| `AMARU_LOG_DIR` | No | Enables Amaru ingestion when set to a directory path. When absent, none of the Amaru-specific properties is declared. |
+| `SECURITY_PARAM` | No | Praos `k` of the testnet (its `securityParam` in `testnet.yaml`). Defaults to 432, the master and adversary testnets. |
 
 ### Normalized event shape
 
@@ -30,14 +31,16 @@ Each ingested line becomes a `LogMessage` with:
 
 ### Scored properties
 
-When Amaru ingestion is enabled, two properties are declared:
+When Amaru ingestion is enabled, three properties are declared:
 
 - **`amaru stdout observed`** (Sometimes, required) — hit on the first
   normalized Amaru stdout event. Proves the route is alive; a disconnected
   route cannot appear green.
 - **`no fatal amaru consensus logs`** (AlwaysOrUnreachable) — fails once when
-  either exact case-sensitive signature is observed:
+  any exact case-sensitive signature is observed:
   - `Consensus died`
+  - `lifecycle.consensus_died` (the line current Amaru logs when a consensus
+    stage exits)
   - `attempted roll back in the future`
 
   The failure payload carries the source, relay identity, and complete
@@ -48,3 +51,22 @@ When Amaru ingestion is enabled, two properties are declared:
 The required `amaru stdout observed` property prevents the fatal-consensus
 invariant from passing vacuously: if no Amaru line ever reaches the scored
 stream, the run reports a missing required property rather than a green board.
+
+### Following the producers
+
+- **`amaru relays follow the producer tip`** (AlwaysOrUnreachable) — fails once
+  when an Amaru relay has stayed more than `k` blocks behind the longest tip of
+  the producers `p1..pN` for 300 seconds. The relay's height is the latest
+  `block_height` of its `tip.adopt` lines; the failure payload names the relay,
+  both heights, when the lag began and `k`. A relay that is restarted by fault
+  injection starts from its stored tip and catches up within seconds, which the
+  window tolerates; a relay that rejects a block and stays at its tip does not.
+  A relay that never logs a `tip.adopt` line is not judged by this property.
+
+## Cluster fork depth
+
+`cluster fork depth < k` fails once a host would have to roll back `k` blocks or
+more to follow the longest tip. A host whose tip lies on the longest chain is
+behind, not forked, and needs no rollback, so a node that is catching up (such
+as a consumer syncing from Amaru) does not count. A host whose ancestry cannot
+be placed against the longest chain within the walk cap is not judged.
