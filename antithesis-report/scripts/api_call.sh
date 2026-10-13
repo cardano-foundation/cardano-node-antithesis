@@ -2,10 +2,14 @@
 #
 # Antithesis run-health prefetch
 #
-# Fetches every run in a time window from the v1 API, classifies incomplete
+# Fetches every run in a time window from the v1 API classifies incomplete
 # runs via failure_reason (no report opening), prefetches failing properties
 # for completed runs, and emits ONE compact JSON file grouped by project
 # (org/repo/dir) plus a human summary table on stdout.
+#
+# Every API call is retried 3 times (2 s apart) on transient errors. A run whose
+# detail or properties still cannot be fetched is marked class FETCH_FAILED and
+# listed under fetch_failed_ids — never counted as clean.
 #
 # Usage:
 #   ./api_call.sh [--days N] [--from ISO --to ISO] [--out FILE] [--jobs N]
@@ -38,7 +42,8 @@ done
 [[ -z "$FROM" ]] && FROM="$(date -u -d "-${DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
 [[ -z "$TO"   ]] && TO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-fetch() { curl -sS -m 60 -x "${ANTITHESIS_PROXY:-http://localhost:3000}" \
+fetch() { curl -sS -m 60 --retry 3 --retry-delay 2 --retry-connrefused \
+                 -x "${ANTITHESIS_PROXY:http://localhost:3000}" \
                  -H "Authorization: Bearer ${ANTITHESIS_API_KEY:-proxied}" "$@"; }
 
 TMP="$(mktemp -d)"
@@ -81,7 +86,8 @@ process_run() {
 
   if [[ "$status" == "incomplete" ]]; then
     local detail reason ih vt report cls evidence
-    detail="$(fetch "$BASE/api/v1/runs/$id")" || { echo '{"error":"detail fetch failed"}' > "$out"; return; }
+    detail="$(fetch "$BASE/api/v1/runs/$id")" && jq -e 'type=="object"' >/dev/null 2>&1 <<<"$detail" \
+      || { echo '{"class":"FETCH_FAILED","error":"detail fetch failed"}' > "$out"; return; }
     reason="$(jq -r '.failure_reason // ""' <<<"$detail")"
     ih="$(jq -r '.failure_moment.input_hash // ""' <<<"$detail")"
     vt="$(jq -r '.failure_moment.vtime // ""' <<<"$detail")"
@@ -118,26 +124,28 @@ process_run() {
         evidence: (if $evidence=="" then null else $evidence end) }' > "$out"
 
   elif [[ "$status" == "completed" ]]; then
-    local cursor="" page props="[]"
+    local cursor="" page pages=""
     while :; do
       page="$(fetch -G "$BASE/api/v1/runs/$id/properties" \
                 --data-urlencode "status=Failing" \
-                ${cursor:+--data-urlencode "after=$cursor"})" || break
-      jq -e '.data' >/dev/null 2>&1 <<<"$page" || break
-      props="$(jq -c --argjson acc "$props" '$acc + .data' <<<"$page")"
+                ${cursor:+--data-urlencode "after=$cursor"})" \
+        && jq -e '.data|type=="array"' >/dev/null 2>&1 <<<"$page" \
+        || { echo '{"class":"FETCH_FAILED","error":"properties fetch failed"}' > "$out"; return; }
+      pages+="$page"$'\n'                           # pages are glued as text, parsed once below
       cursor="$(jq -r '.next_cursor // empty' <<<"$page")"
       [[ -z "$cursor" ]] && break
     done
     # compact: name/group/counts + up to 3 counterexample moments (event props)
     # + a truncated first counterexample sample (non-event props)
-    jq -c '
-      { failing_count: length,
+    jq -sc '
+      [ .[].data[] ]
+      | { failing_count: length,
         failing: [ .[] | {
           name, group: (.group // null), is_event,
           counterexample_count: (.counterexample_count // null),
           moments: ([ (.counterexamples // [])[]? | objects | .moment? // empty ] | .[0:3]),
           sample: ((.counterexamples // [])[0]? | if . == null then null else (tostring | .[0:200]) end)
-        } ] }' <<<"$props" > "$out"
+        } ] }' <<<"$pages" > "$out"
   fi
 }
 export -f process_run fetch
@@ -171,7 +179,9 @@ jq -n --arg from "$FROM" --arg to "$TO" --arg base "$BASE" \
           in_progress_ids: [ .[] | select(.status=="in_progress") | .run_id ],
           cancelled_ids:   [ .[] | select(.status=="cancelled")   | .run_id ],
           clean_completed_ids: [ .[] | select(.status=="completed"
-                                       and (.detail.failing_count // 0)==0) | .run_id ],
+                                       and .detail.failing_count==0) | .run_id ],
+          fetch_failed_ids: [ .[] | select(.status=="completed"
+                                       and .detail.failing_count==null) | .run_id ],
           completed_failing: [ .[] | select(.status=="completed"
                                        and (.detail.failing_count // 0) > 0)
             | {run_id, created, failing: .detail.failing} ],
@@ -184,7 +194,7 @@ jq -n --arg from "$FROM" --arg to "$TO" --arg base "$BASE" \
 # ---------------------------------------------------------- 4. human summary
 echo
 jq -r '
-  ["PROJECT","OWNER","RUNS","CLEAN","FAILING","INCOMPLETE","INCOMPLETE CLASSES"],
+  ["PROJECT","OWNER","RUNS","CLEAN","FAILING","INCOMPLETE","FETCH FAILED","INCOMPLETE CLASSES"],
   ( .projects[] |
     [ "\(.org)/\(.repo):\(.dir)",
       (.requesters|join(",")),
@@ -192,6 +202,7 @@ jq -r '
       (.clean_completed_ids|length|tostring),
       (.completed_failing|length|tostring),
       ((.counts.incomplete // 0)|tostring),
+      ((.fetch_failed_ids|length) + ([.incomplete[] | select(.class=="FETCH_FAILED")]|length) | tostring),
       ( [.incomplete[].class] | group_by(.) | map("\(.[0]) x\(length)") | join(" ")
         | if .=="" then "-" else . end ) ] )
   | @tsv' "$OUT" | awk -F'\t' '

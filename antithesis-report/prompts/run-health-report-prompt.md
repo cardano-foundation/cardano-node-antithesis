@@ -27,6 +27,7 @@ The script pages through `/api/v1/runs` for the window, groups by **org / repo /
 
 - **every incomplete run pre-classified** from `failure_reason` (§2) — including the terminal build-logs `[STATUS]` line already captured as `evidence` where relevant;
 - **failing properties prefetched for every completed run** (name, group, counterexample counts, up to 3 counterexample moments, one truncated sample); clean completed runs appear only as `clean_completed_ids`.
+- **runs whose fetch failed after retries** appear as `fetch_failed_ids` (completed) or class `FETCH_FAILED` (incomplete). They carry no property data: list them in the project's detail as `⚠️ data unavailable (fetch failed)` with their run IDs, and count them as neither clean nor failing.
 
 Everything downstream reads `triage_prefetch.json` — do **NOT** re-list runs or re-fetch per-run details already in it. `in_progress` runs appear as `in_progress_ids` (ignore them). The stdout table is the at-a-glance check that the window and grouping look right; the JSON's `total_runs` is the true total.
 
