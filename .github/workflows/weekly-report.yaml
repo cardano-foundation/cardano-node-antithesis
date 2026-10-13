@@ -2,11 +2,6 @@ name: Weekly run-health report
 
 on:
   workflow_dispatch:
-    inputs:
-      publish:
-        description: "Push the report commit to the CF wiki (otherwise only an artifact is produced)"
-        type: boolean
-        default: false
   # Enable once manual runs look right:
   # schedule:
   #   - cron: "0 5 * * 4"   # Thursdays 05:00 UTC
@@ -31,14 +26,14 @@ jobs:
     env:
       ANTITHESIS_BASE_URL: https://amaru-cardano.antithesis.com
       ANTITHESIS_API_KEY: ${{ secrets.ANTITHESIS_API_KEY }}
-      ANTITHESIS_PROXY: ""          # no sandbox proxy on a runner: api_call.sh calls the API directly
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # from `claude setup-token` on a logged-in machine
-      WIKI_PUSH_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       REPORT_AUTHOR: ${{ vars.REPORT_AUTHOR || 'Asghar Musani (@asgharmusani-antithesis-dev)' }}
       REPORT_GIT_NAME: ${{ vars.REPORT_GIT_NAME || 'Asghar Musani' }}
       REPORT_GIT_EMAIL: ${{ vars.REPORT_GIT_EMAIL || 'asghar.musani@antithesis.com' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Clone / update project repos and the wiki
         run: scripts/sync_repos.sh repos.txt git
@@ -49,66 +44,23 @@ jobs:
       - name: Run the report prompt for last week
         run: |
           mkdir -p work
-          claude -p "Read prompts/run-health-report-prompt.md and run it for last week.
-
-          Environment notes — this is a non-interactive CI runner:
-          - The prefetch script is at scripts/api_call.sh (run it as: bash scripts/api_call.sh ...). It already reads ANTITHESIS_API_KEY and ANTITHESIS_PROXY from the environment.
-          - There is NO localhost proxy here. For on-demand API calls use: curl -sS -H \"Authorization: Bearer \$ANTITHESIS_API_KEY\" \"$ANTITHESIS_BASE_URL/api/v1/...\"
-          - Project source checkouts are under ./git/<repo> (see repos.txt), freshly updated with all remote branches fetched. Use them for the source-code correlation and Suggested-fix sections.
-          - The CF wiki checkout is ./git/cardano-node-antithesis.wiki . Write the report page, the index row and the sidebar bullet there.
-          - Commit locally with the uploader's message format, author string \"$REPORT_AUTHOR\" and git identity \"$REPORT_GIT_NAME <$REPORT_GIT_EMAIL>\". Do NOT push." \
-            --permission-mode bypassPermissions \
-            --output-format text \
-            2> work/claude_stderr.log | tee work/claude_output.md
-
-      - name: Collect the draft from the wiki checkout
-        if: always()
-        run: |
-          W=git/cardano-node-antithesis.wiki
-          git -C "$W" log -1 --format='%h %an %s' | tee work/wiki_head.txt
-          # the report commit, if Claude made one, as a patch you can apply locally
-          if ! git -C "$W" diff --quiet origin/master HEAD; then
-            git -C "$W" format-patch origin/master..HEAD -o "$PWD/work" >/dev/null
-            git -C "$W" diff --stat origin/master HEAD | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-          # only the pages touched by the new commit, not every report in the wiki
-          git -C "$W" diff --name-only origin/master HEAD -- 'Antithesis-Report-*.md' \
-            | while read -r f; do cp "$W/$f" work/; done
+          claude -p "Read prompts/run-health-report-prompt.md and run it for last week. This is a GitHub Actions job with no user present: execute the instructions without asking questions." \
+            --permission-mode bypassPermissions --output-format text | tee work/claude_output.md
 
       - name: Publish to the CF wiki
-        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}
         run: |
-          set -euo pipefail
-          W=git/cardano-node-antithesis.wiki
-          : "${WIKI_PUSH_TOKEN:?secret WIKI_PUSH_TOKEN is not set}"
+          git config --global user.name "$REPORT_GIT_NAME"
+          git config --global user.email "$REPORT_GIT_EMAIL"
+          gh auth setup-git
+          ../tools/antithesis-wiki-report/scripts/upload-report.sh publish --authors "$REPORT_AUTHOR" --status published \
+            "work/Antithesis-Report-$(date -ud '7 days ago' +%G-W%V).md"
 
-          # 1. there must be exactly one new commit on top of origin/master
-          n=$(git -C "$W" rev-list --count origin/master..HEAD)
-          [[ "$n" == "1" ]] || { echo "expected 1 new commit in the wiki checkout, found $n — not publishing"; exit 1; }
-          page=$(git -C "$W" diff --name-only origin/master HEAD -- 'Antithesis-Report-*.md' | head -1)
-          [[ -n "$page" ]] || { echo "the commit touches no report page — not publishing"; exit 1; }
-          echo "publishing $page"
-
-          # 2. public-safety check on the new page (same rules as the CF uploader)
-          if grep -nE 'antithesis\.com/report/[^ )]*\?|token=|Bearer |PASETO|sso_cookie|<antml|</invoke>|</content>' "$W/$page"; then
-            echo "public-safety check FAILED — not publishing"; exit 1
-          fi
-
-          # 3. never overwrite a page someone already published for this week
-          git -C "$W" fetch --quiet origin master
-          if git -C "$W" cat-file -e "origin/master:$page" 2>/dev/null; then
-            echo "$page already exists on origin/master — not publishing (edit it by hand instead)"; exit 1
-          fi
-
-          # 4. rebase onto whatever landed meanwhile, then push over HTTPS with the PAT
-          git -C "$W" -c user.name="$REPORT_GIT_NAME" -c user.email="$REPORT_GIT_EMAIL" rebase --quiet origin/master
-          git -C "$W" push "https://x-access-token:${WIKI_PUSH_TOKEN}@github.com/cardano-foundation/cardano-node-antithesis.wiki.git" HEAD:master
-          echo "pushed: https://github.com/cardano-foundation/cardano-node-antithesis/wiki/${page%.md}" | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload draft and logs
+      - name: Upload the report and Claude's output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: weekly-report-${{ github.run_id }}
-          path: work/
+          path: antithesis-report/work/
           retention-days: 30
