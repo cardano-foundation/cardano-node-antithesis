@@ -1858,6 +1858,17 @@ issue_225_allowed_paths=(
   scripts/head-candidate-cluster.sh
   tests/test-head-candidate-cluster.sh
   .gitignore
+  components/tracer-sidecar/README.md
+  components/tracer-sidecar/src/App.hs
+  components/tracer-sidecar/src/Cardano/Antithesis/ForkTree.hs
+  components/tracer-sidecar/src/Cardano/Antithesis/Sidecar.hs
+  components/tracer-sidecar/test/ForkTreeSpec.hs
+  components/tracer-sidecar/test/RunEvidence.hs
+  components/tracer-sidecar/test/Spec.hs
+  components/tracer-sidecar/test/data/amaru-relay-lines-run-84894c33.tsv
+  components/tracer-sidecar/test/data/chain-adoptions-run-84894c33.tsv
+  components/tracer-sidecar/tracer-sidecar.cabal
+  testnets/cardano_amaru/docker-compose.yaml
 )
 
 register_223_mutant() {
