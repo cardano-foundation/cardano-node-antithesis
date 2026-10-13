@@ -13,7 +13,7 @@ Generate a **project-first run-health report** for the last **7 days** of Antith
 
 ## 0. Preflight
 
-- All data comes from the tenant's **v1 REST API** via `scripts/api_call.sh`. Auth: `ANTITHESIS_API_KEY` is sent as a bearer token — `curl -H "Authorization: Bearer $ANTITHESIS_API_KEY"`; `ANTITHESIS_PROXY=""` calls the API directly. `$BASE` below = `https://<tenant>.antithesis.com` (script default: `amaru-cardano`; override with `ANTITHESIS_BASE_URL`).
+- All data comes from the tenant's **v1 REST API** via `scripts/api_call.sh`. Auth: `ANTITHESIS_API_KEY` is sent as a bearer token — `curl -H "Authorization: Bearer $ANTITHESIS_API_KEY"`. `$BASE` below = `https://<tenant>.antithesis.com` (script default: `amaru-cardano`; override with `ANTITHESIS_BASE_URL`).
 - Require `curl` + `jq`. Probe once before fanning out: `curl -sS -H "Authorization: Bearer $ANTITHESIS_API_KEY" "$BASE/api/v1/runs?limit=1"` must return JSON with `.data`.
 
 ## 1. Prefetch — run the script (one call, all the data)
@@ -33,7 +33,7 @@ Everything downstream reads `triage_prefetch.json` — do **NOT** re-list runs o
 
 ## 2. Triage each project (fan out — one agent per project)
 
-Spawn parallel agents (general-purpose). Give each agent its project's slice of `triage_prefetch.json` and these rules. Agents make **on-demand API calls only for moment logs / event searches** — never re-fetch what the prefetch already holds, and **never open a triage report** (the WASM SPA doesn't render headless, and nothing below needs it — `failure_reason` already carries what the report's Error panel would say).
+Spawn parallel agents (general-purpose). Give each agent its project's slice of `triage_prefetch.json` and these rules. Agents make **on-demand API calls only for moment logs / event searches** — never re-fetch what the prefetch already holds, and **never open a triage report** — nothing below needs it; `failure_reason` already carries what the report's Error panel would say.
 
 On-demand fetches (same auth as the script — `curl -sS -H "Authorization: Bearer $ANTITHESIS_API_KEY" …`):
 

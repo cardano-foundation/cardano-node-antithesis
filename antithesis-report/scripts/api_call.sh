@@ -19,10 +19,7 @@
 #   --out FILE   Output JSON (default: triage_prefetch.json).
 #   --jobs N     Parallel per-run fetches (default: 8).
 #
-# Requires: curl, jq.
-# Auth: ANTITHESIS_API_KEY is sent as a bearer token. ANTITHESIS_PROXY (default
-# http://localhost:3000) names an HTTP proxy to route through; set it to "" to
-# call the tenant API directly, which is what the GitHub workflow does.
+# Requires: curl, jq. Auth: ANTITHESIS_API_KEY, sent as a bearer token.
 set -euo pipefail
 
 BASE="${ANTITHESIS_BASE_URL:-https://amaru-cardano.antithesis.com}"
@@ -42,9 +39,9 @@ done
 [[ -z "$FROM" ]] && FROM="$(date -u -d "-${DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
 [[ -z "$TO"   ]] && TO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+[[ -n "${ANTITHESIS_API_KEY:-}" ]] || { echo "ANTITHESIS_API_KEY is not set" >&2; exit 1; }
 fetch() { curl -sS -m 60 --retry 3 --retry-delay 2 --retry-connrefused \
-                 -x "${ANTITHESIS_PROXY:http://localhost:3000}" \
-                 -H "Authorization: Bearer ${ANTITHESIS_API_KEY:-proxied}" "$@"; }
+                 -H "Authorization: Bearer $ANTITHESIS_API_KEY" "$@"; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
