@@ -7,6 +7,7 @@ write=false
 log_file=${DAILY_AMARU_BOUNDARY_RESOLVER_LOG:-}
 selected=${DAILY_AMARU_BOUNDARY_SELECTED_CONFIGS_REV:-4444444444444444444444444444444444444444}
 fail_mode=${DAILY_AMARU_BOUNDARY_RESOLVER_FAIL:-}
+resolved_at=${DAILY_AMARU_BOUNDARY_RESOLVED_AT:-2026-01-01T00:00:00Z}
 
 fail() {
   echo "peer-snapshot resolution failed: $*" >&2
@@ -49,11 +50,12 @@ if $write; then
   jq -n \
     --arg amaru_rev "$amaru_rev" \
     --arg configs_rev "$selected" \
+    --arg resolved_at "$resolved_at" \
     '{
       amaru_rev: $amaru_rev,
       amaru_committer_date_utc: "2026-01-01T00:00:00Z",
       configs_rev: $configs_rev,
-      resolved_at_utc: "2026-01-01T00:00:00Z",
+      resolved_at_utc: $resolved_at,
       query_url: "https://example.invalid/commits",
       snapshots: {
         mainnet: {sha256: "aa"},

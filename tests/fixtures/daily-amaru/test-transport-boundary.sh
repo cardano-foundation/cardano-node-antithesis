@@ -254,14 +254,15 @@ write_resolution() {
 
 create_remote() {
   local label=$1
+  local main_amaru=${2:-$old_sha} main_configs=${3:-$old_configs_sha}
   local seed="$tmp_root/$label-seed"
   local remote="$tmp_root/$label.git"
   git init --quiet --initial-branch=main "$seed"
   git -C "$seed" config user.name boundary
   git -C "$seed" config user.email boundary@example.invalid
-  write_lock "$seed/flake.lock" "$old_sha" "$old_configs_sha"
+  write_lock "$seed/flake.lock" "$main_amaru" "$main_configs"
   write_resolution "$seed/nix/peer-snapshots/resolution.json" \
-    "$old_sha" "$old_configs_sha"
+    "$main_amaru" "$main_configs"
   mkdir -p "$seed/scripts"
   cp "$fixture_root/boundary-resolver.sh" "$seed/scripts/resolve-peer-snapshots"
   chmod +x "$seed/scripts/resolve-peer-snapshots"
@@ -1361,10 +1362,51 @@ assert_token_drop_mutant() {
     'resolver failure receipt was not named'
 }
 
+# Bootstrap main already pins the requested Amaru and the selected
+# configurations: the override leaves flake.lock untouched and the only change
+# the resolver makes is the resolution timestamp. A real bump of this kind was
+# refused by the two-path census on 2026-10-13 (run 38347443858).
+assert_pinned_fresh() {
+  local remote output remote_head changed commits
+  remote=$(create_remote pinned-fresh "$upstream_sha" "$selected_configs_sha")
+  export DAILY_AMARU_BOUNDARY_RESOLVED_AT=2026-10-13T04:39:37Z
+  run_transport pinned-fresh "$remote"
+  unset DAILY_AMARU_BOUNDARY_RESOLVED_AT
+  output=$(cat "$stdout")
+  [ "$transport_rc" -eq 0 ] ||
+    fail "already-pinned proposal failed: $(tr '\n' ' ' <"$stderr")"
+  [[ "$output" =~ ^[0-9a-f]{40}$ ]] ||
+    fail "already-pinned proposal emitted malformed head: $output"
+  remote_head=$(git --git-dir="$remote" rev-parse "refs/heads/$branch")
+  [ "$output" = "$remote_head" ] || fail 'already-pinned output differs from pushed head'
+  changed=$(git --git-dir="$remote" diff --name-only main "$branch" | sort)
+  [ "$changed" = nix/peer-snapshots/resolution.json ] ||
+    fail "already-pinned proposal changed: $changed"
+  commits=$(git --git-dir="$remote" rev-list --count "main..$branch")
+  [ "$commits" -eq 1 ] || fail "already-pinned proposal commits=$commits, want 1"
+  grep -Fq 'gh pr create' "$effects" || fail 'already-pinned proposal did not create its PR'
+  pinned_remote=$remote
+}
+
+assert_pinned_adopt() {
+  local before after output
+  before=$(git --git-dir="$pinned_remote" rev-parse "refs/heads/$branch")
+  run_transport pinned-adopt "$pinned_remote"
+  output=$(cat "$stdout")
+  after=$(git --git-dir="$pinned_remote" rev-parse "refs/heads/$branch")
+  [ "$transport_rc" -eq 0 ] ||
+    fail "already-pinned branch was not adopted: $(tr '\n' ' ' <"$stderr")"
+  [ "$output" = "$before" ] || fail "already-pinned adopt emitted '$output', expected $before"
+  [ "$after" = "$before" ] || fail 'already-pinned adopt changed the remote ref'
+  ! grep -Fq 'gh pr create' "$effects" || fail 'already-pinned adopt attempted to create a PR'
+}
+
 assert_atomic_peer_snapshot() {
   local field kind
   launches=0
   assert_atomic_fresh
+  assert_pinned_fresh
+  assert_pinned_adopt
   assert_resolver_token
   assert_atomic_adopt
   assert_pr86_foreign
@@ -1672,6 +1714,10 @@ case "$scenario" in
     ;;
   atomic-fresh)
     assert_atomic_fresh
+    ;;
+  atomic-pinned)
+    assert_pinned_fresh
+    assert_pinned_adopt
     ;;
   atomic-resolver-fail)
     assert_named_resolver_failure network

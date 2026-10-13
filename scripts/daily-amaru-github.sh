@@ -608,17 +608,20 @@ find_pr() {
     --json url --jq .url
 }
 
+# A proposal changes the resolution record and, unless bootstrap main already
+# pins the requested revisions, flake.lock. Nothing else, each path once.
 atomic_path_census() {
-  local expected_lock=0 expected_record=0 path
-  [ "$#" -eq 2 ] || return 1
+  local seen_lock=0 seen_record=0 path
+  [ "$#" -ge 1 ] && [ "$#" -le 2 ] || return 1
   for path in "$@"; do
     case "$path" in
-      flake.lock) expected_lock=1 ;;
-      nix/peer-snapshots/resolution.json) expected_record=1 ;;
+      flake.lock) [ "$seen_lock" -eq 0 ] || return 1; seen_lock=1 ;;
+      nix/peer-snapshots/resolution.json)
+        [ "$seen_record" -eq 0 ] || return 1; seen_record=1 ;;
       *) return 1 ;;
     esac
   done
-  [ "$expected_lock" -eq 1 ] && [ "$expected_record" -eq 1 ]
+  [ "$seen_record" -eq 1 ]
 }
 
 lock_node_by_origin() {
