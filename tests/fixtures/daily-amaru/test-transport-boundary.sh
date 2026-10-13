@@ -1098,6 +1098,7 @@ assert_unchanged_head_no_op() {
   # ROW C — self-falsification. Reverting the fix (the guard assumes failure
   # again) must redden the row-A night 2 against the same durable record.
   mutant="$tmp_root/no-op-guard-mutant.sh"
+  # shellcheck disable=SC2016 # the sed pattern matches the literal "$kind" text
   sed 's/if ! attempt_completed "\$kind" "\$value" "\$head" "\$census"; then/if ! false; then # mutant: guard assumes failure again/' \
     "$transport" >"$mutant"
   grep -Fq '# mutant: guard assumes failure again' "$mutant" ||
@@ -1125,8 +1126,9 @@ assert_unchanged_head_no_op() {
     fail 'asymmetry night 1 published no failed receipt'
   [ "$(receipt_field stage)" = bootstrap-proposal ] ||
     fail "asymmetry night 1 failed at an unexpected stage: stage=$(receipt_field stage) error=$(receipt_field error): $(tr '\n' ' ' <"$no_op_stderr" | tail -c 240)"
-  grep -Fq -- "- upstream_sha=$observed" "$comments" &&
-    grep -Fq -- "- workflow_head=$workflow_head" "$comments" ||
+  grep -Fq -- "- upstream_sha=$observed" "$comments" ||
+    fail 'asymmetry night 1 failed receipt lost its attempt identity'
+  grep -Fq -- "- workflow_head=$workflow_head" "$comments" ||
     fail 'asymmetry night 1 failed receipt lost its attempt identity'
   no_op_night no-op-red-n2 "$comments" "$day_red_2" "$tmp_root/no-op-red-n2-state" OPEN
   [ "$no_op_rc" -ne 0 ] ||
