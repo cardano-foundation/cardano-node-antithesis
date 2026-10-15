@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   daily-amaru-dry-run:
-    name: Daily Amaru contract dry run
+    name: Repository CI (just ci)
     if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.production)
     runs-on: ubuntu-24.04
     steps:

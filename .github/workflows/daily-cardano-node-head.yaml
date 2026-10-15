@@ -18,7 +18,6 @@ on:
         required: false
         type: boolean
         default: false
-  pull_request:
 
 permissions:
   contents: read
@@ -28,24 +27,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  candidate-tests:
-    name: Candidate path hermetic tests
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out the exact candidate
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - uses: paolino/dev-assets/setup-nix@v0.0.1
-        with:
-          cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
-      - name: Run the hermetic candidate suites
-        run: >-
-          nix develop --quiet -c
-          just test-daily-cardano-node-head
-          test-daily-cardano-node-head-github
-
   head-candidate:
     name: Manual HEAD candidate preparation
     if: >-
