@@ -111,6 +111,10 @@ check-shell:
 test-workflow-validation:
     ./tests/test-workflow-validation.sh
 
+# the wiki upload refuses pages carrying bug findings
+test-wiki-report-check:
+    ./tests/test-wiki-report-check.sh
+
 # focused proof for the Daily Amaru controller
 test-daily-amaru:
     ./tests/test-daily-amaru.sh
@@ -178,4 +182,4 @@ check-image-provenance:
     inspect_component tx-generator
 
 # complete local CI: no Docker, no network, no credentials
-ci: check-workflows check-shell format-check test-workflow-validation test-daily-amaru check-image-provenance test-daily-cardano-node-head test-daily-cardano-node-head-github test-head-candidate-cluster
+ci: check-workflows check-shell format-check test-workflow-validation test-wiki-report-check test-daily-amaru check-image-provenance test-daily-cardano-node-head test-daily-cardano-node-head-github test-head-candidate-cluster

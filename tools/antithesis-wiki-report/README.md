@@ -24,8 +24,18 @@ Prints a single wiki URL on success.
 
 ## Safety
 
-The script refuses bodies that look like authenticated Antithesis report
-URLs or session material. Use **run IDs** only. Structure is left unchanged.
+The wiki is public, so it carries the **summary only**: project table, run
+counts and Antithesis platform failures. Findings about a system under test
+(real or potential bugs, their evidence, pointers to owners, suggested fixes)
+may be undisclosed bugs: they go privately to each project's owner, and
+anything touching consensus or the ledger goes through that project's
+security disclosure process.
+
+The script refuses bodies carrying a real or potential bug finding (🟥, 🟨),
+an owner pointer or a suggested fix, and bodies that look like authenticated
+Antithesis report URLs or session material. Use **run IDs** only. Structure is
+otherwise left unchanged. The marker check is a tripwire for the agreed
+format, not a classifier: a finding written without the markers passes it.
 
 ## Skill
 
