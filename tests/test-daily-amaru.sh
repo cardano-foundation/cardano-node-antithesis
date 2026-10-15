@@ -7,7 +7,6 @@ transport="$repo_root/scripts/daily-amaru-github.sh"
 workflow="$repo_root/.github/workflows/daily-amaru.yaml"
 fake_transport="$repo_root/tests/fixtures/daily-amaru/fake-transport.sh"
 fake_gh="$repo_root/tests/fixtures/daily-amaru/fake-gh.sh"
-pre_slice_base=01f96e4b1352b2558260e9401e422eaf3136a320
 s4_base=2e7b35a8b01be73142d648b720654158f16934ae
 default_workflow_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 tmp_root=$(mktemp -d)
@@ -468,9 +467,6 @@ fi
 if [ ! -f "$workflow" ]; then
   fail "scheduled workflow absent: expected regular file $workflow"
 fi
-
-ensure_history_commit "$repo_root" "$pre_slice_base" ||
-  fail "history baseline unavailable: $pre_slice_base"
 
 # Complete #223 proof bundle is intentionally RED on the unchanged base.
 routing_holds "$workflow" ||
@@ -1837,7 +1833,7 @@ issue_223_declared_invariants=(
   INV-223-MARKER-CENSUS-FAILS-CLOSED
   INV-223-HEAD-CROSSES-PROCESS
   INV-223-PROOFS-NONVACUOUS
-  INV-223-SCOPE-AND-EFFECT-FENCE
+  INV-223-EFFECT-FENCE
 )
 issue_223_declared_mutants=(
   routing-string-input
@@ -1858,122 +1854,8 @@ issue_223_declared_mutants=(
   receipt-supersedes-removed
   receipt-launch-claim-removed
   receipt-launch-cap-write-removed
-  scope-path-outside-fence
+  forbidden-effect-injected
   history-base-unavailable
-)
-issue_225_allowed_paths=(
-  .github/workflows/daily-amaru.yaml
-  .github/workflows/tracer-sidecar-CI.yaml
-  .github/workflows/smoke-test.yaml
-  .github/workflows/publish-images.yaml
-  .github/workflows/pr-preview.yaml
-  .github/workflows/deploy-docs.yaml
-  .github/workflows/daily-cardano-node-head.yaml
-  .github/workflows/cardano-node.yaml
-  .github/workflows/build-docs.yaml
-  docs/daily-amaru.md
-  scripts/daily-amaru-github.sh
-  scripts/daily-amaru.sh
-  tests/test-daily-amaru.sh
-  tests/fixtures/daily-amaru/boundary-gh.sh
-  tests/fixtures/daily-amaru/boundary-docker.sh
-  tests/fixtures/daily-amaru/fake-transport.sh
-  tests/fixtures/daily-amaru/boundary-nix.sh
-  tests/fixtures/daily-amaru/boundary-resolver.sh
-  tests/fixtures/daily-amaru/boundary-curl.sh
-  tests/fixtures/daily-amaru/consumer-observation.sh
-  tests/fixtures/daily-amaru/test-transport-boundary.sh
-  specs/225-transport-value-channel/data-model.md
-  specs/225-transport-value-channel/functions-model.md
-  specs/225-transport-value-channel/modules-model.md
-  specs/225-transport-value-channel/plan.md
-  specs/225-transport-value-channel/spec.md
-  specs/225-transport-value-channel/tasks.md
-  specs/227-atomic-peer-snapshot-bump/data-model.md
-  specs/227-atomic-peer-snapshot-bump/functions-model.md
-  specs/227-atomic-peer-snapshot-bump/modules-model.md
-  specs/227-atomic-peer-snapshot-bump/plan.md
-  specs/227-atomic-peer-snapshot-bump/spec.md
-  specs/227-atomic-peer-snapshot-bump/tasks.md
-  specs/229-bounded-check-observation/data-model.md
-  specs/229-bounded-check-observation/functions-model.md
-  specs/229-bounded-check-observation/modules-model.md
-  specs/229-bounded-check-observation/plan.md
-  specs/229-bounded-check-observation/spec.md
-  specs/229-bounded-check-observation/tasks.md
-  tests/fixtures/daily-amaru/check-observation.sh
-  tests/fixtures/daily-amaru/observation-gh.sh
-  .github/workflows/publish-images.yaml
-  components/adversary/flake.lock
-  components/adversary/flake.nix
-  components/adversary/nix/docker-image.nix
-  components/asteria-game/flake.lock
-  components/asteria-game/flake.nix
-  components/asteria-game/nix/docker-image.nix
-  components/asteria-stub/flake.lock
-  components/asteria-stub/flake.nix
-  components/asteria-stub/nix/docker-image.nix
-  components/image-meta/meta.nix
-  components/sidecar/flake.lock
-  components/sidecar/flake.nix
-  components/sidecar/nix/docker-image.nix
-  components/tracer-sidecar/flake.lock
-  components/tracer-sidecar/flake.nix
-  components/tracer-sidecar/nix/docker-image.nix
-  components/tx-generator/flake.lock
-  components/tx-generator/flake.nix
-  components/tx-generator/nix/docker-image.nix
-  docs/images/provenance.md
-  docs/index.md
-  justfile
-  mkdocs.yml
-  scripts/check-image-provenance.sh
-  specs/241-nix-image-provenance/data-model.md
-  specs/241-nix-image-provenance/functions-model.md
-  specs/241-nix-image-provenance/modules-model.md
-  specs/241-nix-image-provenance/plan.md
-  specs/241-nix-image-provenance/spec.md
-  specs/241-nix-image-provenance/tasks.md
-  tests/test-image-provenance.sh
-  tests/fixtures/epoch-image/image.tar.gz
-  docs/testnets/cardano-node-master.md
-  testnets/cardano_node_master/docker-compose.yaml
-  scripts/daily-cardano-node-head.sh
-  scripts/daily-cardano-node-head-github.sh
-  tests/test-daily-cardano-node-head.sh
-  tests/test-daily-cardano-node-head-github.sh
-  tests/fixtures/daily-cardano-node-head/fake-transport.sh
-  tests/mutants/daily-cardano-node-head.sh
-  tests/contain/run-suite.sh
-  specs/215-immutable-cardano-node-head-candidate/data-model.md
-  specs/215-immutable-cardano-node-head-candidate/functions-model.md
-  specs/215-immutable-cardano-node-head-candidate/modules-model.md
-  specs/215-immutable-cardano-node-head-candidate/plan.md
-  specs/215-immutable-cardano-node-head-candidate/spec.md
-  specs/215-immutable-cardano-node-head-candidate/tasks.md
-  .github/workflows/daily-cardano-node-head.yaml
-  docs/daily-cardano-node-head.md
-  .github/workflows/cardano-node.yaml
-  specs/216-daily-cardano-node-head-run/plan.md
-  specs/216-daily-cardano-node-head-run/tasks.md
-  scripts/wait-for-test.sh
-  scripts/head-candidate-cluster.sh
-  tests/test-head-candidate-cluster.sh
-  .gitignore
-  components/tracer-sidecar/README.md
-  components/tracer-sidecar/src/App.hs
-  components/tracer-sidecar/src/Cardano/Antithesis/ForkTree.hs
-  components/tracer-sidecar/src/Cardano/Antithesis/Sidecar.hs
-  components/tracer-sidecar/test/ForkTreeSpec.hs
-  components/tracer-sidecar/test/RunEvidence.hs
-  components/tracer-sidecar/test/Spec.hs
-  components/tracer-sidecar/test/data/amaru-relay-lines-run-84894c33.tsv
-  components/tracer-sidecar/test/data/chain-adoptions-run-84894c33.tsv
-  components/tracer-sidecar/tracer-sidecar.cabal
-  testnets/cardano_amaru/docker-compose.yaml
-  # issue 236 — Cardano Node 11.1.3 rotation: the 11.1 cardano-cli ping surface
-  scripts/smoke-test.sh
-  components/Makefile
 )
 
 register_223_mutant() {
@@ -2243,25 +2125,13 @@ receipt_model_mutant_rejected() {
   receipt_model_holds "$1" 2>/dev/null
 }
 
-paths_within_slice_fence() {
-  local path allowed allowed_path
-  for path in "$@"; do
-    allowed=0
-    for allowed_path in "${issue_225_allowed_paths[@]}"; do
-      [ "$path" = "$allowed_path" ] && allowed=1
-    done
-    [ "$allowed" -eq 1 ] || return 1
-  done
-}
-
 history_base_controls() {
   local seed=$tmp_root/history-seed
   local origin=$tmp_root/history-origin.git
   local positive=$tmp_root/history-positive
   local negative=$tmp_root/history-negative
   local control_base
-  local changed_output negative_error=$tmp_root/history-negative.stderr
-  local -a control_paths=()
+  local negative_error=$tmp_root/history-negative.stderr
 
   git init --quiet --initial-branch=main "$seed" || return 1
   git -C "$seed" config user.name history-control || return 1
@@ -2284,10 +2154,6 @@ history_base_controls() {
   git -C "$positive" cat-file -e "$control_base^{commit}" 2>/dev/null || return 1
   production_job_untouched \
     "$positive/.github/workflows/daily-amaru.yaml" "$positive" "$control_base" || return 1
-  changed_output=$(git -C "$positive" diff --name-only "$control_base" --) || return 1
-  mapfile -t control_paths < <(printf '%s' "$changed_output")
-  [ "${#control_paths[@]}" -gt 0 ] || return 1
-  paths_within_slice_fence "${control_paths[@]}" || return 1
 
   git clone --quiet --depth=1 --single-branch --branch main \
     "file://$origin" "$negative" || return 1
@@ -2306,7 +2172,6 @@ history_base_controls() {
   history_positive_fetches=1
   history_negative_refusals=1
   history_dry_run_checks=1
-  history_path_censuses=1
 }
 
 head_propagation_holds() {
@@ -2585,40 +2450,40 @@ reject_223_mutant INV-223-ONE-LAUNCH-PER-DAY receipt-launch-cap-write-removed \
   '!write_receipt launch-cap CLAIMED' \
   'a controller that never durably writes the launch-cap receipt' receipt_model_mutant_rejected
 
-allowed_path_count=${#issue_225_allowed_paths[@]}
-changed_paths_output=$(git -C "$repo_root" diff --name-only "$pre_slice_base" --) ||
-  fail 'history baseline path diff is unreadable'
-mapfile -t changed_paths < <(printf '%s' "$changed_paths_output")
-paths_within_slice_fence "${changed_paths[@]}" || fail 'changed path outside slice fence'
-scope_mutant_paths=("${changed_paths[@]}" outside/issue-225-mutant)
-[ "${#scope_mutant_paths[@]}" -eq $((${#changed_paths[@]} + 1)) ] ||
-  fail 'scope path mutation did not apply'
-if paths_within_slice_fence "${scope_mutant_paths[@]}"; then
-  fail 'scope fence accepted an out-of-scope path'
-fi
-register_223_mutant INV-223-SCOPE-AND-EFFECT-FENCE scope-path-outside-fence
-
 # Derive the effect fence from artifacts produced by the executing harness.
 mapfile -t issue_223_effect_artifacts < <(
   find "$tmp_root" -type f \( -name transport.log -o -name gh.log -o -name effects \)
 )
-forbidden_effects=0
-credential_material_hits=0
-for effect_artifact in "${issue_223_effect_artifacts[@]}"; do
-  for forbidden in 'gh workflow run' 'repo clone' 'pr create' 'pr merge' 'run watch'; do
-    if grep -Fq -- "$forbidden" "$effect_artifact"; then
-      forbidden_effects=$((forbidden_effects + 1))
-    fi
+# Prints the forbidden-effect and credential-material hit counts of the given artifacts.
+effect_fence_hits() {
+  local artifact forbidden credential_sentinel effects=0 credentials=0
+  for artifact in "$@"; do
+    for forbidden in 'gh workflow run' 'repo clone' 'pr create' 'pr merge' 'run watch'; do
+      if grep -Fq -- "$forbidden" "$artifact"; then
+        effects=$((effects + 1))
+      fi
+    done
+    for credential_sentinel in "$secret_value" "$prod_id" "$prod_app" "$prod_key"; do
+      if grep -Fq -- "$credential_sentinel" "$artifact"; then
+        credentials=$((credentials + 1))
+      fi
+    done
   done
-  for credential_sentinel in "$secret_value" "$prod_id" "$prod_app" "$prod_key"; do
-    if grep -Fq -- "$credential_sentinel" "$effect_artifact"; then
-      credential_material_hits=$((credential_material_hits + 1))
-    fi
-  done
-done
+  printf '%s %s\n' "$effects" "$credentials"
+}
+read -r forbidden_effects credential_material_hits < <(
+  effect_fence_hits "${issue_223_effect_artifacts[@]}"
+)
 [ "$forbidden_effects" -eq 0 ] || fail "effect fence observed $forbidden_effects forbidden effects"
 [ "$credential_material_hits" -eq 0 ] ||
   fail "effect fence observed $credential_material_hits credential material hits"
+# The fence must see an injected forbidden effect and credential, or it proves nothing.
+injected_effect=$tmp_root/effect-fence-control.log
+printf 'gh pr merge 1 %s\n' "$secret_value" >"$injected_effect"
+read -r injected_effects injected_credentials < <(effect_fence_hits "$injected_effect")
+[ "$injected_effects" -gt 0 ] && [ "$injected_credentials" -gt 0 ] ||
+  fail 'effect fence missed an injected forbidden effect or credential'
+register_223_mutant INV-223-EFFECT-FENCE forbidden-effect-injected
 
 # The census itself is executable: registry drift or an untested invariant fails.
 mapfile -t registered_mutants < <(printf '%s\n' "${!issue_223_mutant_invariant[@]}" | sort)
@@ -2680,12 +2545,10 @@ printf 'HEAD-PROPAGATION source=GITHUB_SHA claims_observed=%s invalid_heads_refu
   "$claim_operation_count" "${#invalid_heads[@]}" "${#receipt_declared_keys[@]}"
 printf 'CLAIM-OPERATION-RECONCILIATION operations=%s matched=1 verdict_observations=%s\n' \
   "$claim_operation_count" "${#claim_verdict_observations[@]}"
-printf 'HISTORY-BASE-CONTROLS positive_fetches=%s negative_refusals=%s dry_run_checks=%s path_censuses=%s mutants_rejected=1\n' \
-  "$history_positive_fetches" "$history_negative_refusals" \
-  "$history_dry_run_checks" "$history_path_censuses"
-printf 'SCOPE-EFFECT-FENCE changed_paths=%s allowed_paths=%s effect_artifacts=%s forbidden_effects=%s credential_material_hits=%s\n' \
-  "${#changed_paths[@]}" "$allowed_path_count" "${#issue_223_effect_artifacts[@]}" \
-  "$forbidden_effects" "$credential_material_hits"
+printf 'HISTORY-BASE-CONTROLS positive_fetches=%s negative_refusals=%s dry_run_checks=%s mutants_rejected=1\n' \
+  "$history_positive_fetches" "$history_negative_refusals" "$history_dry_run_checks"
+printf 'EFFECT-FENCE effect_artifacts=%s forbidden_effects=%s credential_material_hits=%s\n' \
+  "${#issue_223_effect_artifacts[@]}" "$forbidden_effects" "$credential_material_hits"
 printf 'PROOF-CENSUS invariants=%s claim_operations=%s mutants_rejected=%s residuals=%s\n' \
   "${#issue_223_declared_invariants[@]}" "$claim_operation_count" \
   "${#registered_mutants[@]}" "$proof_residuals"

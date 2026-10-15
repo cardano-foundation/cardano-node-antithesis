@@ -1344,9 +1344,6 @@ done
 if job_grants "$daily_workflow" head-candidate actions write; then
   fail 'the fake manual candidate job grants actions: write'
 fi
-if job_grants "$daily_workflow" candidate-tests actions write; then
-  fail 'the hermetic PR job grants actions: write'
-fi
 # Self-check: a seeded actions: read must fail the assertion, so the value
 # is really compared and not just the key's presence.
 permission_selfcheck=$tmp_root/daily-workflow-perm-selfcheck.yaml

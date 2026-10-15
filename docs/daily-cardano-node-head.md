@@ -64,7 +64,9 @@ entrypoints:
 The hosted runs use the real transport against GHCR
 (`ghcr.io/cardano-foundation/cardano-node-antithesis/cardano-node-head`)
 using the run's own token, and upload the receipt as a run artifact. Pull
-requests run only the hermetic candidate suites.
+requests do not trigger this workflow: its hermetic candidate suites are part
+of `just ci`, which the "Repository CI (just ci)" job runs on every pull
+request.
 
 Because the tag is the full upstream SHA, re-running the manual candidate
 preparation is idempotent for an unchanged `master`.
