@@ -80,8 +80,16 @@ check_content() {
     info "forbidden: URL token= parameter"
     bad=1
   fi
+  # The wiki is public: findings about a system under test may be undisclosed
+  # bugs. They go privately to the project's owner; the wiki gets the summary.
+  if grep -niE '🟥|🟨|pointer for|suggested fix' "$file" >/dev/null 2>&1; then
+    info "forbidden: bug finding (real or potential bug, owner pointer, suggested fix)"
+    info "send findings privately to the project's owner; publish the summary only"
+    grep -niE '🟥|🟨|pointer for|suggested fix' "$file" >&2 || true
+    bad=1
+  fi
   if (( bad )); then
-    die "report fails public-safety checks — use run IDs only, no report tokens"
+    die "report fails public-safety checks — run IDs and summary only, no report tokens, no bug findings"
   fi
   info "check: ok ($file)"
 }

@@ -53,6 +53,11 @@ ln -sfn "$(pwd)/tools/antithesis-wiki-report" ~/.claude/skills/antithesis-wiki-r
 1. **No authenticated Antithesis report URLs** (no query-string report links).
 2. **No SSO cookies / PASETO / Bearer tokens.**
 3. Use **run IDs** only; CF opens reports in the tenant UI.
+4. **Summary only, no bug findings.** No 🟥 real or 🟨 potential bug findings,
+   no owner pointers, no suggested fixes. They may be undisclosed bugs: send
+   them privately to the project's owner (security disclosure for consensus
+   or ledger issues). The public page keeps the project table, run counts and
+   Antithesis platform failures.
 
 `upload-report.sh check REPORT.md` validates before push; `publish` always checks.
 
