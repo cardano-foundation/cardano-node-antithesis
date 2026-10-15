@@ -47,7 +47,6 @@ jobs:
   run-cardano-node:
     runs-on: ubuntu-24.04
     env:
-      MOOG_GITHUB_PAT: ${{ secrets.MOOG_GITHUB_PAT }}
       MOOG_WALLET_FILE: wallet.json
       MOOG_MPFS_HOST: ${{ vars.MOOG_MPFS_HOST }}
       MOOG_TOKEN_ID: ${{ vars.MOOG_TOKEN_ID }}
@@ -56,13 +55,11 @@ jobs:
 
     timeout-minutes: 600
 
-    # required permissions to be able to push to registry, plus
-    # issues:write so a failed scheduled run can open/append an alert.
+    # Read-only registry access plus issues:write so a failed scheduled run
+    # can open or append to its tracking alert.
     permissions:
-      packages: write
+      packages: read
       contents: read
-      attestations: write
-      id-token: write
       issues: write
 
 
@@ -73,16 +70,7 @@ jobs:
     - name: 📥 Checkout repository
       uses: actions/checkout@v6
 
-    - name: 🔑 Login Docker Registry
-      uses: docker/login-action@v3
-      with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
     - name: Install moog
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         set -euo pipefail
         # Pinned moog release. The production MPFS/agent/oracle stack runs the
@@ -96,14 +84,28 @@ jobs:
         # tarball (the old `*-linux64.tar.gz` asset was dropped at the 0.5.x
         # packaging change).
         TAG=v0.5.1.5
+        TARBALL="moog-${TAG#v}-x86_64-linux-musl.tar.gz"
+        # This digest is pinned from GitHub's independently computed release
+        # asset metadata, not the SHA256SUMS file published alongside Moog.
+        MOOG_SHA256=b8b5e60dcf1a71cee6471bc08a958da21ff5b5fe82796453883c11dcc0098ef3
         echo "moog release: $TAG"
-        gh release download "$TAG" -R cardano-foundation/moog \
-          -p 'moog-*-x86_64-linux-musl.tar.gz' --clobber
-        TARBALL=$(ls moog-*-x86_64-linux-musl.tar.gz | grep -vE 'moog-(agent|oracle)-' | head -1)
-        echo "using $TARBALL"
+        curl --fail --location --silent --show-error --retry 3 \
+          "https://github.com/cardano-foundation/moog/releases/download/$TAG/$TARBALL" \
+          --output "$TARBALL"
+        if ! printf '%s  %s\n' "$MOOG_SHA256" "$TARBALL" | sha256sum --check --status; then
+          echo "Moog release archive checksum verification failed" >&2
+          exit 1
+        fi
         tar xzf "$TARBALL"
         sudo install -m 0755 moog /usr/local/bin/moog
         moog --version
+
+    - name: 🔑 Login Docker Registry
+      uses: docker/login-action@v3
+      with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Configure moog wallet
       env:
@@ -113,6 +115,7 @@ jobs:
     - name: Submit test
       id: request
       env:
+        MOOG_GITHUB_PAT: ${{ secrets.MOOG_GITHUB_PAT }}
         RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
         set -euo pipefail
