@@ -1,0 +1,3 @@
+# Resume M2 desk
+
+Operator calls this seat "the amaru test M1 owner"; it is cardano-node-antithesis milestone #2 (M1 closed 2026-07-29). Load orchestrator-contract, milestone-orchestrator, worker-protocol, tmux-orchestrator, context-compiler. Read ledger.md, state.md, registry.md, then the desk journal tail /tmp/ms-cardano-node-antithesis-2/STATUS.md. Desk is asks, answers and sweeps only; the operator rejects desk-side investigation, so dispatch diagnosis to a lane. Next: read the scheduled Daily Amaru run of 2026-10-13 (~04:30 UTC, workflow daily-amaru.yaml). If it fails, propose a lane to the operator; if it launches, follow the Antithesis result. No live lane.
