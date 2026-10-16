@@ -11,7 +11,7 @@ permissions:
 
 # Secrets (repository or environment scope):
 #   ANTITHESIS_API_KEY       Antithesis tenant API key
-#   CLAUDE_CODE_OAUTH_TOKEN  ANTHROPIC_API_KEY
+#   ANTHROPIC_API_KEY        Claude API key
 #   WIKI_PUSH_TOKEN          PAT (classic or if fine-grained works)
 # Variables (optional): REPORT_AUTHOR, REPORT_GIT_NAME, REPORT_GIT_EMAIL — who the report and its commit are attributed to.
 
@@ -26,7 +26,7 @@ jobs:
     env:
       ANTITHESIS_BASE_URL: https://amaru-cardano.antithesis.com
       ANTITHESIS_API_KEY: ${{ secrets.ANTITHESIS_API_KEY }}
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       REPORT_AUTHOR: ${{ vars.REPORT_AUTHOR || 'Asghar Musani (@asgharmusani-antithesis-dev)' }}
       REPORT_GIT_NAME: ${{ vars.REPORT_GIT_NAME || 'Asghar Musani' }}
       REPORT_GIT_EMAIL: ${{ vars.REPORT_GIT_EMAIL || 'asghar.musani@antithesis.com' }}
