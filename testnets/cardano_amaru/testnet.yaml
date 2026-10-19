@@ -15,7 +15,10 @@ protocolConsts:
 
 --- # Optional Shelley Genesis Overide
 slotLength: 0.5
-epochLength: 400
+# cardano-node starts the reward calculation 4k/f = 400 slots into an epoch.
+# The epoch must be longer than that, or the node never pays rewards while
+# Amaru does, and the two disagree on the leader stake.
+epochLength: 500
 securityParam: 20
 activeSlotsCoeff: 0.2
 maxLovelaceSupply: 45000000000000000
