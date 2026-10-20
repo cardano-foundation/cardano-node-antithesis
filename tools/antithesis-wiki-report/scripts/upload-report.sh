@@ -169,36 +169,21 @@ EOF
   fi
 
   if grep -qE "^- ${WEEK_YEAR}\$" "$sidebar"; then
-    # Insert week bullet after the year line (or after existing weeks for that year).
+    # Insert the week bullet right under the year line (the list is newest first),
+    # only in the **Antithesis reports** section.
     awk -v year="$WEEK_YEAR" -v num="$(printf '%02d' "$WEEK_NUM")" -v page="$page" '
-      BEGIN { in_year=0; done=0 }
+      BEGIN { done=0; in_reports=0 }
       {
-        if ($0 ~ ("^- " year "$")) {
-          print
-          in_year=1
-          next
-        }
-        if (in_year && $0 ~ /^  - \[W/) {
-          print
-          next
-        }
-        if (in_year && !done) {
+        if ($0 ~ /^\*\*/) in_reports = ($0 == "**Antithesis reports**")
+        print
+        if (!done && in_reports && $0 ~ ("^- " year "$")) {
           printf "  - [W%s](%s)\n", num, page
           done=1
-          in_year=0
         }
-        if ($0 ~ /^\*\*/ || $0 ~ /^- [0-9]{4}$/) {
-          if (in_year && !done) {
-            printf "  - [W%s](%s)\n", num, page
-            done=1
-            in_year=0
-          }
-        }
-        print
       }
       END {
-        if (in_year && !done) {
-          printf "  - [W%s](%s)\n", num, page
+        if (!done) {   # year line exists elsewhere (Logbook) but not in the reports section
+          printf "- %s\n  - [W%s](%s)\n", year, num, page
         }
       }
     ' "$sidebar" >"${sidebar}.tmp"
@@ -233,7 +218,7 @@ publish() {
 
   local tmp page
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
+  trap "rm -rf '$tmp'" EXIT   # expand now: $tmp is local and gone when the trap fires
 
   clone_wiki "$tmp/wiki"
   page=$(page_name)
