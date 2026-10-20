@@ -1,0 +1,66 @@
+name: Weekly run-health report
+
+on:
+  workflow_dispatch:
+  # Enable once manual runs look right:
+  # schedule:
+  #   - cron: "0 5 * * 4"   # Thursdays 05:00 UTC
+
+permissions:
+  contents: read
+
+# Secrets (repository or environment scope):
+#   ANTITHESIS_API_KEY       Antithesis tenant API key
+#   ANTHROPIC_API_KEY        Claude API key
+#   WIKI_PUSH_TOKEN          PAT (classic or if fine-grained works)
+# Variables (optional): REPORT_AUTHOR, REPORT_GIT_NAME, REPORT_GIT_EMAIL — who the report and its commit are attributed to.
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: weekly-report
+    defaults:
+      run:
+        working-directory: antithesis-report
+    env:
+      ANTITHESIS_BASE_URL: https://amaru-cardano.antithesis.com
+      ANTITHESIS_API_KEY: ${{ secrets.ANTITHESIS_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      REPORT_AUTHOR: ${{ vars.REPORT_AUTHOR || 'Asghar Musani (@asgharmusani-antithesis-dev)' }}
+      REPORT_GIT_NAME: ${{ vars.REPORT_GIT_NAME || 'Asghar Musani' }}
+      REPORT_GIT_EMAIL: ${{ vars.REPORT_GIT_EMAIL || 'asghar.musani@antithesis.com' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Clone / update project repos and the wiki
+        run: scripts/sync_repos.sh repos.txt git
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run the report prompt for last week
+        run: |
+          mkdir -p work
+          claude -p "Read prompts/run-health-report-prompt.md and run it for last week. This is a GitHub Actions job with no user present: execute the instructions without asking questions." \
+            --permission-mode bypassPermissions --output-format text | tee work/claude_output.md
+
+      - name: Publish to the CF wiki
+        env:
+          GH_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}
+        run: |
+          git config --global user.name "$REPORT_GIT_NAME"
+          git config --global user.email "$REPORT_GIT_EMAIL"
+          gh auth setup-git
+          ../tools/antithesis-wiki-report/scripts/upload-report.sh publish --authors "$REPORT_AUTHOR" --status published \
+            "work/Antithesis-Report-$(date -ud '7 days ago' +%G-W%V).md"
+
+      - name: Upload the report and Claude's output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report-${{ github.run_id }}
+          path: antithesis-report/work/
+          retention-days: 30
