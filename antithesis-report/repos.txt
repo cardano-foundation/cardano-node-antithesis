@@ -1,0 +1,6 @@
+# Repos to clone/update before the analysis — one per line, org/repo.
+cardano-foundation/cardano-node-antithesis
+cardano-foundation/cardano-node-antithesis.wiki
+input-output-hk/ouroboros-leios
+input-output-hk/cardano-node-tests-antithesis
+blinklabs-io/dingo
