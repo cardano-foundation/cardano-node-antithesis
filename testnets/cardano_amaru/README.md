@@ -20,9 +20,10 @@ This testnet uses a fast bootstrap profile:
 
 ```yaml
 protocolConsts:
-  k: 10
-epochLength: 120
-securityParam: 10
+  k: 20
+slotLength: 0.5
+epochLength: 500
+securityParam: 20
 activeSlotsCoeff: 0.2
 TestConwayHardForkAtEpoch: 0
 ```
@@ -33,6 +34,13 @@ changing the cardano-node release target or giving Amaru producer
 credentials. Dense block production is part of the profile because the
 producer reads immutable chunks only; sparse block production can leave
 the immutable tip at genesis for too long.
+
+The epoch must be longer than 4k/f = 400 slots. cardano-node starts the
+reward calculation that many slots into an epoch, so a 400-slot epoch
+never reaches it and the node pays no rewards. Amaru pays them, its pool
+stakes drift from the node's, and the Amaru relays reject valid blocks
+with "Insufficient leader stake". Amaru derives the epoch as
+`k × 1/f × scale`, so the compose sets the scale factor to 5.
 
 The Amaru relay containers are intentionally quiet for Antithesis log
 ingestion: compose sets `AMARU_LOG=warn`, `AMARU_TRACE=warn`, and
