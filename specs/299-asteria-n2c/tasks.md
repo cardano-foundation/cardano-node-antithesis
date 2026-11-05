@@ -6,6 +6,6 @@
 - [x] Add the readiness/progress smoke to the existing compose smoke path and demonstrate its failure on the old image.
 - [x] Update operator documentation, build it strictly and inspect its rendered diagram on desktop/phone in light/dark.
 - [x] Pin published clients and tools revisions with matching Cabal hashes and Nix locks.
-- [ ] Commit and publish the image-producing revision, then pin all Asteria consumers to the new image digest.
+- [x] Commit and publish the image-producing revision, then pin all Asteria consumers to the new image digest.
 - [x] Run the shipped composer commands, required local checks and exact-image smoke.
 - [ ] Obtain hosted CI and one-hour HEAD/release Antithesis findings comparisons before acceptance.

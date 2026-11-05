@@ -1,0 +1,24 @@
+{
+  "evidence_class": "published artifact provenance and local live smoke; hosted Antithesis acceptance pending",
+  "image": "ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:c7efd38@sha256:f0933730060c2e7593a9518b17e8f5e1ea174bf83905719fcd1cff1153175db6",
+  "registry_manifest_digest": "sha256:f0933730060c2e7593a9518b17e8f5e1ea174bf83905719fcd1cff1153175db6",
+  "image_config_digest": "sha256:acf1ad9f6a343c6d2231c22d945ebfaec931dd71cdc9e0be343e93051d90714e",
+  "uncompressed_layer_diff_id": "sha256:65df69e8f8467375d92f85129cde764622dcfdf97c0e499f686e675cc21a0f80",
+  "labels": {
+    "org.opencontainers.image.created": "2026-11-05T16:52:50Z",
+    "org.opencontainers.image.revision": "c7efd3820c712ece864427c09624def5bb05823e",
+    "org.opencontainers.image.source": "https://github.com/cardano-foundation/cardano-node-antithesis",
+    "org.opencontainers.image.version": "c7efd38"
+  },
+  "executable_sha256": {
+    "/bin/asteria-bootstrap": "ecb17ee079fa93c083d27209bb6650830295a89805b2905a7396c79fc3a7c4de",
+    "/bin/asteria-game": "d40b3b5e24c69d6430992e82005fa3afaa9932f1c3912cf270e4c65858a7b388",
+    "/bin/asteria-invariant": "0c63ae32474ddf74d60c0ba6f172ccd77772f662cbabf08baa47239201900d27",
+    "/bin/utxo-indexer": "0b0dbd6cb4922335fad61e1b8ba02e3044f1228e5b45e87af1d2b69e7abcf277"
+  },
+  "publication_workflow_run": 42071870257,
+  "publication_job": 127414621677,
+  "hosted_pr_merge_revision": "009b560198cf229261cdec5c5399d4309e8ee51a",
+  "producer_revision": "c7efd3820c712ece864427c09624def5bb05823e",
+  "local_and_hosted_executables_identical": false
+}

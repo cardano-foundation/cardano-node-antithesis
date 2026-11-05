@@ -1,6 +1,5 @@
 {
   "producer_revision": "c7efd3820c712ece864427c09624def5bb05823e",
-  "image_config_id": "sha256:fe8bb68253417d2d54a5fdb17f4ea98bbdc385da62f7bdb13142d344b4a68507",
   "container": "asteria-n2c-head-asteria-game",
   "initial_ship_counter": 0,
   "final_ship_counter": 1,
@@ -8,5 +7,7 @@
   "admin_singleton": 1,
   "composer_commands": 6,
   "sdk_failure_count": 0,
-  "readiness_and_progress": true
+  "readiness_and_progress": true,
+  "docker_image_id": "sha256:fe8bb68253417d2d54a5fdb17f4ea98bbdc385da62f7bdb13142d344b4a68507",
+  "local_tar_config_digest": "sha256:0294cbd577954ea5acd2d5d69459faf7fad24be622ea2e8c91dab1a0e6816ab5"
 }
