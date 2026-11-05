@@ -21,7 +21,17 @@
           let
             mkdocs-pkgs = mkdocs.packages.${system};
             asciinema-pkgs = asciinema.packages.${system};
+            check-asteria-ready = pkgs.writeShellApplication {
+              name = "check-asteria-ready";
+              runtimeInputs = [ pkgs.docker-client pkgs.jq pkgs.coreutils ];
+              text = builtins.readFile ./scripts/check-asteria-ready.sh;
+            };
           in {
+            packages = { inherit check-asteria-ready; };
+            apps.check-asteria-ready = {
+              type = "app";
+              program = "${check-asteria-ready}/bin/check-asteria-ready";
+            };
             devShells.default = pkgs.mkShell {
               buildInputs = [
                 pkgs.just
@@ -46,7 +56,7 @@
           };
       };
     in {
-      inherit (parts) devShells;
+      inherit (parts) devShells apps packages;
       inherit version;
     };
 }
