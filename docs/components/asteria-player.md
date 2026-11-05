@@ -1,7 +1,7 @@
 # Asteria Game
 
-Single workload container that plays the [asteria][asteria] game inside
-the cardano-node-antithesis cluster. It drives realistic transaction
+As a testnet operator, add this workload to play the [asteria][asteria] game
+inside the cluster and observe whether real game transactions succeed. It drives realistic transaction
 traffic - script spends, minting policies, reference scripts, validity
 bounds, inline datums - so Antithesis can explore node behavior under
 real ledger pressure instead of only empty-block production.
@@ -22,10 +22,11 @@ for the rationale.
 
 The host testnet must already have:
 
-- A relay that block producers connect to, e.g. `relay1`, with a
+- A relay supporting node-to-client protocol v23, such as `relay2`
+  (cardano-node 10.7.1) in the mixed-version release network, with a
   named volume mounted at `/state` so the asteria-game container
-  can read its node socket. The master testnet uses
-  `relay1-state:/state`.
+  can read its node socket. The release testnet uses
+  `relay2-state:/state`.
 - A `utxo-keys` named volume populated by the configurator with
   the genesis wallet skeys (the bootstrap binary needs them to
   sign the deploy tx).
@@ -47,14 +48,14 @@ Add this service block under `services:` at the bottom of your
       CARDANO_NODE_SOCKET_PATH: /state/node.socket
       NETWORK_MAGIC: "42"
     volumes:
-      - relay1-state:/state:ro            # read-only N2C socket
+      - relay2-state:/state:ro            # read-only N2C socket
       - utxo-keys:/utxo-keys:ro           # genesis skeys for bootstrap
       - asteria-game-db:/idx-db           # RocksDB persistence
       - asteria-deploy:/asteria-deploy    # per-deploy seed TxIn
     tmpfs:
       - /tmp                              # holds /tmp/idx.sock
     depends_on:
-      relay1:
+      relay2:
         condition: service_started
 ```
 
@@ -96,22 +97,37 @@ that consume + replace the asteria UTxO. The cluster needs:
 - At least one block producer that accepts valid Plutus v3
   transactions (the asteria validators are Aiken-compiled to
   PlutusV3).
-- A relay reachable via `relay1.example:3001` (N2N) and
-  `relay1-state:/state/node.socket` (N2C). Aliasing it under a
-  different name requires editing
-  `components/asteria-game/composer/asteria-game/parallel_driver_asteria_player.sh`.
-- Genesis funds in `utxo-keys/genesis.1.skey` sufficient for the
+- A relay serving N2C v23 through `relay2-state:/state/node.socket`.
+  The game and indexer use this shared Unix socket; peer-to-peer topology
+  remains the node network's responsibility.
+- Genesis funds in `utxo-keys/genesis.3.skey` sufficient for the
   one-time bootstrap deploy plus a few thousand `spawnShip`
   transactions over a 3h run.
 
-The master testnet meets all three by construction. New testnets
+The release testnet meets all three by construction. New testnets
 that change the topology, network magic, or genesis layout will
 need to mirror those choices.
+
+The clients and builder use the dependency set resolved by cardano-node
+11.2.0. Both indexer ChainSync and game queries/submission offer N2C v23.
+The release network retains its older nodes; Asteria uses the compatible
+relay2 socket. A v20-only socket cannot make this image ready.
+
+```mermaid
+flowchart TB
+  Game["Game binaries"] -->|"N2C v23"| Relay["relay2"]
+  Relay -->|"ChainSync v23"| Indexer["Indexer"]
+  Indexer -->|"snapshots"| Game
+  Relay <-->|"N2N"| Nodes["Mixed nodes"]
+```
+
+The game submits through relay2 and observes indexed snapshots. Relay2
+connects that workload to the rest of the node network.
 
 ## What it does
 
 The container entrypoint is a long-lived `utxo-indexer` connected to
-`relay1` via N2C. The image also ships three short-lived binaries that
+`relay2` via N2C. The image also ships three short-lived binaries that
 the Antithesis composer fires as commands:
 
 - **`asteria-bootstrap`** - serial, idempotent deploy. Picks or reuses
@@ -171,7 +187,16 @@ docker tag \
     ghcr.io/cardano-foundation/cardano-node-antithesis/asteria-game:dev
 ```
 
-`just load-docker-image` wraps the same steps.
+`just load-docker-image` wraps the same steps. To build all game binaries
+through the component's development shell, run:
+
+```bash
+nix develop .#ci -c cabal build all -O0
+```
+
+The default shell adds the editor server; the CI shell uses the same
+application dependencies and native linters without that optional tool.
+The image publication workflow also checks this Cabal build.
 
 ## Run locally
 
@@ -184,7 +209,15 @@ The compose file declares one `asteria-game` service. Its main process
 is the indexer; the Antithesis composer invokes the baked-in scripts
 inside that container during a test run.
 
-For a local container smoke:
+For a local container smoke, first require a ready indexer whose processed
+slot advances. This fails when the socket handshake or chain following is
+broken, even if the container remains running:
+
+```bash
+nix run .#check-asteria-ready -- asteria-game 120
+```
+
+Then exercise the game:
 
 ```bash
 just logs asteria-game
@@ -193,6 +226,15 @@ docker compose -f testnets/cardano-node-releases/docker-compose.yaml \
 docker compose -f testnets/cardano-node-releases/docker-compose.yaml \
     exec asteria-game /bin/asteria-game
 ```
+
+Inspect the emitted SDK JSON in `/tmp/sdk.jsonl`: bootstrap must report
+`asteria_bootstrap_asteria_created` or `asteria_bootstrap_already_deployed`;
+player 1 must report `asteria_player_ship_spawned_1`. The player event means
+the node accepted submission. Confirm inclusion separately with the
+consistency checker after a block is forged: its `ship_counter` and
+`ship_token_count` must both increase, and the admin singleton must stay one.
+A zero process exit can also mean deferred work; it is insufficient evidence.
+All three game executables use the threaded runtime required by N2C timers.
 
 ## See Also
 

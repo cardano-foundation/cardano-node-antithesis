@@ -1,0 +1,11 @@
+- [x] Reproduce the old image handshake mismatch and null indexer readiness against exact HEAD.
+- [x] Align the ecosystem with node 11.2.0 and migrate Asteria to the public Cardano.Tx.Build library.
+- [x] Build bootstrap, player, invariants and indexer with a consistent dependency set; enable the required threaded runtime.
+- [x] Prove ready snapshots and advancing processed slots with the actual image on HEAD and release relay2.
+- [x] Execute bootstrap, player submission and settled singleton/ship-state reads on both networks.
+- [x] Add the readiness/progress smoke to the existing compose smoke path and demonstrate its failure on the old image.
+- [x] Update operator documentation, build it strictly and inspect its rendered diagram on desktop/phone in light/dark.
+- [x] Pin published clients and tools revisions with matching Cabal hashes and Nix locks.
+- [ ] Commit and publish the image-producing revision, then pin all Asteria consumers to the new image digest.
+- [ ] Run the shipped composer commands, required local checks and exact-image smoke.
+- [ ] Obtain hosted CI and one-hour HEAD/release Antithesis findings comparisons before acceptance.

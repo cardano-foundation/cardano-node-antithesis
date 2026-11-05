@@ -80,13 +80,14 @@ import Cardano.Node.Client.Submitter (
     SubmitResult (..),
     Submitter (..),
  )
-import Cardano.Node.Client.TxBuild (
+import Cardano.Tx.Build (
     InterpretIO (..),
     TxBuild,
     attachScript,
     build,
     collateral,
     mint,
+    mkPParamsBound,
     payTo',
     spend,
  )
@@ -284,7 +285,7 @@ createAsteria provider submitter wk scripts asteriaAddr seed@(seedIn, _) = do
                 (evaluateTx provider tx)
         interpret :: InterpretIO NoQ
         interpret = InterpretIO $ \case {}
-    built <- build pp interpret eval [seed] [] (walletAddr wk) prog
+    built <- build (mkPParamsBound pp) interpret eval [seed] [] (walletAddr wk) prog
     case built of
         Left err -> error ("build: " <> show err)
         Right tx -> do

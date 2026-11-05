@@ -40,7 +40,8 @@ import Cardano.Ledger.Mary.Value (
     PolicyID (..),
  )
 import Cardano.Ledger.TxIn (TxIn)
-import Cardano.Node.Client.TxBuild (
+import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Build (
     TxBuild,
     attachScript,
     collateral,
@@ -51,7 +52,6 @@ import Cardano.Node.Client.TxBuild (
     spendScript,
     validTo,
  )
-import Cardano.Slotting.Slot (SlotNo (..))
 import PlutusTx.Builtins.Internal (BuiltinByteString (..))
 
 import Asteria.Datums (

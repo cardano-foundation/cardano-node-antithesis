@@ -67,8 +67,8 @@ import Cardano.Node.Client.Submitter (
     SubmitResult (..),
     Submitter (..),
  )
-import Cardano.Node.Client.TxBuild (InterpretIO (..), build)
 import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Build (InterpretIO (..), build, mkPParamsBound)
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Short qualified as SBS
 import Data.Set qualified as Set
@@ -258,7 +258,7 @@ attemptSpawn provider submitter wk (aIn, aOut) datum playerId scripts = do
         interpret = InterpretIO $ \case {}
     built <-
         build
-            pp
+            (mkPParamsBound pp)
             interpret
             eval
             [(aIn, aOut), fundingSeed]
