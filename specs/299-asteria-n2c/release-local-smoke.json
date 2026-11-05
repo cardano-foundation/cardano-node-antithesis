@@ -1,0 +1,12 @@
+{
+  "producer_revision": "c7efd3820c712ece864427c09624def5bb05823e",
+  "image_config_id": "sha256:fe8bb68253417d2d54a5fdb17f4ea98bbdc385da62f7bdb13142d344b4a68507",
+  "container": "asteria-n2c-release-asteria-game",
+  "initial_ship_counter": 1,
+  "final_ship_counter": 2,
+  "ship_token_count": 2,
+  "admin_singleton": 1,
+  "composer_commands": 6,
+  "sdk_failure_count": 0,
+  "readiness_and_progress": true
+}
