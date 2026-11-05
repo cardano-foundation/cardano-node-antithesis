@@ -8,6 +8,8 @@ This repository contains material to test a cardano network of cardano nodes on 
 
 It is maintained by the Cardano Foundation as part of the [Moog project][Moog].
 
+For live test runs and service status, open the [Moog dashboard][Dashboard].
+
 Documentation available at [Documentation][Docs]
 
 
@@ -25,3 +27,4 @@ Documentation available at [Documentation][Docs]
 [HAL]: https://github.com/cardano-foundation/hal
 [CF]: https://github.com/cardano-foundation
 [Cardano]: https://cardano.org/
+[Dashboard]: https://lambdasistemi.github.io/moog-antithesis-dashboard/
