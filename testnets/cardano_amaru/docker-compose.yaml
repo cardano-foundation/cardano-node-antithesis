@@ -44,7 +44,7 @@ x-cardano-relay-10-7-1: &cardano-relay-10-7-1
 x-amaru: &amaru
   # Amaru is relay-only in this testnet. It receives no stake pool keys,
   # no KES/VRF/opcert material, and no block-producing command.
-  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:f5c57caa216cfe946bbbee954d676d5c2b750784@sha256:f5a6e696e98723bed198d6c40a5d091b9ca1b75410a0037b2b9151683f8244fc
+  image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:8922a9b4ba969d0368a1da7bb9160f7790c82415@sha256:e09335027ce475f3136d5fa4714acd168bc5f1fa9fedb20aa84a819d9207d93a
   entrypoint:
     - /bin/sh
   environment:
@@ -155,7 +155,7 @@ services:
       - tracer:/tracer
 
   bootstrap-producer:
-    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:f5c57caa216cfe946bbbee954d676d5c2b750784@sha256:f5a6e696e98723bed198d6c40a5d091b9ca1b75410a0037b2b9151683f8244fc
+    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:8922a9b4ba969d0368a1da7bb9160f7790c82415@sha256:e09335027ce475f3136d5fa4714acd168bc5f1fa9fedb20aa84a819d9207d93a
     container_name: bootstrap-producer
     labels: *fault-exclude
     hostname: bootstrap-producer.example
@@ -249,7 +249,7 @@ services:
     restart: on-failure
 
   amaru-consumer-seed:
-    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:f5c57caa216cfe946bbbee954d676d5c2b750784@sha256:f5a6e696e98723bed198d6c40a5d091b9ca1b75410a0037b2b9151683f8244fc
+    image: ghcr.io/lambdasistemi/amaru-bootstrap-producer:8922a9b4ba969d0368a1da7bb9160f7790c82415@sha256:e09335027ce475f3136d5fa4714acd168bc5f1fa9fedb20aa84a819d9207d93a
     container_name: amaru-consumer-seed
     labels: *fault-exclude
     entrypoint: [/bin/sh, -ec]
