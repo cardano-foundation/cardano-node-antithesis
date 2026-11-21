@@ -8,6 +8,9 @@ workflow="$repo_root/.github/workflows/daily-amaru.yaml"
 fake_transport="$repo_root/tests/fixtures/daily-amaru/fake-transport.sh"
 fake_gh="$repo_root/tests/fixtures/daily-amaru/fake-gh.sh"
 pre_slice_base=01f96e4b1352b2558260e9401e422eaf3136a320
+# The accepted scope audit is historical. Later features must not extend
+# this closed slice or require additions to its path whitelist.
+scope_snapshot=9acb23cc952c5f6af24c30af2ed3dec521441556
 s4_base=2e7b35a8b01be73142d648b720654158f16934ae
 default_workflow_head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 tmp_root=$(mktemp -d)
@@ -2609,7 +2612,9 @@ reject_223_mutant INV-223-ONE-LAUNCH-PER-DAY receipt-launch-cap-write-removed \
   'a controller that never durably writes the launch-cap receipt' receipt_model_mutant_rejected
 
 allowed_path_count=${#issue_225_allowed_paths[@]}
-changed_paths_output=$(git -C "$repo_root" diff --name-only "$pre_slice_base" --) ||
+ensure_history_commit "$repo_root" "$scope_snapshot" ||
+  fail "scope snapshot unavailable: $scope_snapshot"
+changed_paths_output=$(git -C "$repo_root" diff --name-only "$pre_slice_base" "$scope_snapshot" --) ||
   fail 'history baseline path diff is unreadable'
 mapfile -t changed_paths < <(printf '%s' "$changed_paths_output")
 paths_within_slice_fence "${changed_paths[@]}" || fail 'changed path outside slice fence'

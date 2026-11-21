@@ -15,6 +15,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  asteria-dev-shell:
+    name: Asteria development shell
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: paolino/dev-assets/setup-nix@v0.0.1
+        with:
+          cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Build through the component's development shell
+        working-directory: components/asteria-game
+        run: >-
+          nix develop --quiet .#ci -c bash -c
+          'cabal update && cabal build all -O0'
+
   check-image-provenance:
     name: Check image provenance (daemon-free)
     runs-on: ubuntu-24.04

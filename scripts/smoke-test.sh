@@ -74,6 +74,12 @@ for i in $(seq 1 "$POOLS"); do
   done
 done
 
+# A responding node does not prove the workload's client can follow it.
+if docker compose -f "$COMPOSE_FILE" config --services | grep -qx asteria-game; then
+  ASTERIA_CONTAINER="$(docker compose -f "$COMPOSE_FILE" ps -q asteria-game)"
+  scripts/check-asteria-ready.sh "$ASTERIA_CONTAINER" "$TIMEOUT"
+fi
+
 # Convergence is now measured continuously by tracer-sidecar's
 # fork-tree probe (#119) — no shell-level eventually_converged.sh
 # check needed here.  The cardano-cli ping above already proves

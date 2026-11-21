@@ -1,0 +1,14 @@
+{
+  "producer_revision": "c7efd3820c712ece864427c09624def5bb05823e",
+  "docker_image_id": "sha256:f0933730060c2e7593a9518b17e8f5e1ea174bf83905719fcd1cff1153175db6",
+  "registry_manifest_digest": "sha256:f0933730060c2e7593a9518b17e8f5e1ea174bf83905719fcd1cff1153175db6",
+  "image_config_digest": "sha256:acf1ad9f6a343c6d2231c22d945ebfaec931dd71cdc9e0be343e93051d90714e",
+  "container": "asteria-pub-head-asteria-game",
+  "initial_ship_counter": 0,
+  "final_ship_counter": 1,
+  "ship_token_count": 1,
+  "admin_singleton": 1,
+  "composer_commands": 6,
+  "sdk_failure_count": 0,
+  "readiness_and_progress": true
+}
