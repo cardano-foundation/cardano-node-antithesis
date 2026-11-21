@@ -1997,6 +1997,8 @@ issue_225_allowed_paths=(
   testnets/cardano-node-releases/relay-topology.json
   testnets/cardano-node-releases/testnet.yaml
   testnets/cardano-node-releases/tracer-config.yaml
+  # Amaru epochs longer than the node's reward window (4k/f)
+  testnets/cardano_amaru/testnet.yaml
 )
 
 register_223_mutant() {
